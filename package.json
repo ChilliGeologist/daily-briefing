@@ -1,0 +1,18 @@
+{
+  "name": "daily-briefing",
+  "version": "2.0.0",
+  "description": "Local news aggregator with Ollama-powered curation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3",
+    "rss-parser": "^3.13.0",
+    "web-push": "^3.6.7",
+    "uuid": "^9.0.0"
+  }
+}
