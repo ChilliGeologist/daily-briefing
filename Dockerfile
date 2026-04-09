@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/ChilliGeologist/daily-briefing"
+LABEL org.opencontainers.image.description="Self-hosted news aggregator with Ollama-powered LLM curation"
+
 RUN apk add --no-cache tzdata python3 make g++
 
 WORKDIR /app
