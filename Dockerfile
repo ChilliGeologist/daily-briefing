@@ -8,7 +8,7 @@ RUN apk add --no-cache tzdata python3 make g++
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --production && apk del python3 make g++
+RUN npm install --production --build-from-source && apk del python3 make g++
 
 COPY . .
 
