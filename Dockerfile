@@ -1,15 +1,22 @@
+FROM node:22-alpine AS builder
+
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm_config_build_from_source=true npm install --production
+
 FROM node:22-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/ChilliGeologist/daily-briefing"
 LABEL org.opencontainers.image.description="Self-hosted news aggregator with Ollama-powered LLM curation"
 
-RUN apk add --no-cache tzdata python3 make g++
+RUN apk add --no-cache tzdata
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --production --build-from-source && apk del python3 make g++
-
+COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
 RUN mkdir -p /app/data
