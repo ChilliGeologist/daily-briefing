@@ -1,11 +1,11 @@
 FROM node:22-alpine
 
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache tzdata python3 make g++
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --production
+RUN npm install --production && apk del python3 make g++
 
 COPY . .
 
