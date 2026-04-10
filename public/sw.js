@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daily-briefing-v1';
+const CACHE_NAME = 'daily-briefing-v2';
 const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -17,6 +17,14 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // Network-only for API calls
   if (url.pathname.startsWith('/api/')) return;
+  // SPA fallback: any navigation request returns the cached root index.html
+  // so /settings, /archive, /pipeline all boot the shell even offline.
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      caches.match('/').then(r => r || fetch('/'))
+    );
+    return;
+  }
   // Cache-first for static assets
   e.respondWith(
     caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
