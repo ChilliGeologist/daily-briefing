@@ -140,13 +140,18 @@ function applyTheme(mode) {
 
 applyTheme(getStoredTheme());
 
-$$('.theme-option').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var mode = btn.dataset.theme;
-    localStorage.setItem('theme', mode);
-    applyTheme(mode);
+function bindThemeSwitcher() {
+  $$('.theme-option').forEach(function(btn) {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function() {
+      var mode = btn.dataset.theme;
+      localStorage.setItem('theme', mode);
+      applyTheme(mode);
+    });
   });
-});
+}
+bindThemeSwitcher();
 
 // ============================================================
 // 4. Read Tracking
@@ -469,6 +474,7 @@ function switchSettingsTab(tabName) {
   if (!tabLoadedState[tabName]) {
     tabLoadedState[tabName] = true;
     var loaders = {
+      general: loadGeneralTab,
       sources: loadSourcesTab,
       categories: loadCategoriesTab,
       preferences: loadPreferencesTab,
@@ -480,6 +486,20 @@ function switchSettingsTab(tabName) {
     };
     if (loaders[tabName]) loaders[tabName](container);
   }
+}
+
+// --- Tab: General ---
+function loadGeneralTab(container) {
+  var tpl = document.getElementById('tpl-general-tab');
+  container.appendChild(tpl.content.cloneNode(true));
+  // Re-bind interactive controls now that they exist in the DOM
+  bindThemeSwitcher();
+  bindNotifToggle();
+  bindInstallButton();
+  // Reflect current state onto the newly rendered controls
+  applyTheme(getStoredTheme());
+  updateNotifUI();
+  updateInstallUI();
 }
 
 // --- Tab: Sources ---
@@ -1610,7 +1630,7 @@ var notifVapidKey = null;
 async function updateNotifUI() {
   var btn = $('#btn-notif-toggle');
   var status = $('#notif-status');
-  if (!btn) return;
+  if (!btn || !status) return;
 
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     btn.disabled = true;
@@ -1650,41 +1670,47 @@ async function updateNotifUI() {
   }
 }
 
-$('#btn-notif-toggle').addEventListener('click', async function() {
+function bindNotifToggle() {
   var btn = $('#btn-notif-toggle');
-  var status = $('#notif-status');
-  btn.disabled = true;
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async function() {
+    var btn = $('#btn-notif-toggle');
+    var status = $('#notif-status');
+    btn.disabled = true;
 
-  try {
-    var reg = await navigator.serviceWorker.ready;
-    var existing = await reg.pushManager.getSubscription();
-    if (existing) {
-      await existing.unsubscribe();
-      await fetch('/api/push/unsubscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: existing.endpoint })
-      });
-    } else {
-      var sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(notifVapidKey)
-      });
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sub.toJSON())
-      });
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      var existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await existing.unsubscribe();
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: existing.endpoint })
+        });
+      } else {
+        var sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(notifVapidKey)
+        });
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub.toJSON())
+        });
+      }
+    } catch (e) {
+      if (Notification.permission === 'denied') {
+        status.textContent = 'Blocked by browser';
+      } else {
+        status.textContent = 'Failed: ' + e.message;
+      }
     }
-  } catch (e) {
-    if (Notification.permission === 'denied') {
-      status.textContent = 'Blocked by browser';
-    } else {
-      status.textContent = 'Failed: ' + e.message;
-    }
-  }
-  await updateNotifUI();
-});
+    await updateNotifUI();
+  });
+}
+bindNotifToggle();
 
 function urlBase64ToUint8Array(base64String) {
   var padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -1732,13 +1758,19 @@ function updateInstallUI() {
   }
 }
 
-$('#btn-install').addEventListener('click', async function() {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  var result = await deferredInstallPrompt.userChoice;
-  if (result.outcome === 'accepted') deferredInstallPrompt = null;
-  updateInstallUI();
-});
+function bindInstallButton() {
+  var btn = $('#btn-install');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async function() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    var result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') deferredInstallPrompt = null;
+    updateInstallUI();
+  });
+}
+bindInstallButton();
 
 updateInstallUI();
 
