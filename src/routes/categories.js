@@ -2,6 +2,10 @@
 
 const router = require('express').Router();
 
+function slugify(name) {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
 module.exports = function (db) {
   // --- Static routes MUST come before /:id ---
 
@@ -49,7 +53,7 @@ module.exports = function (db) {
       if (!suggestion) return res.status(404).json({ error: 'Suggestion not found or already dismissed' });
 
       const name = suggestion.suggestion;
-      const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const slug = slugify(name);
 
       // Find max sort_order
       const categories = db.getCategories();
@@ -82,12 +86,18 @@ module.exports = function (db) {
 
   router.post('/categories', (req, res) => {
     try {
-      const { slug, name, description, icon, sort_order } = req.body;
-      if (!slug || !name) {
-        return res.status(400).json({ error: 'slug and name are required' });
+      const { name, description, icon, sort_order } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'name is required' });
       }
-      const id = db.addCategory({ slug, name, description, icon, sort_order });
-      res.status(201).json({ id, slug, name });
+      const trimmed = name.trim();
+      const existing = db.getCategories();
+      if (existing.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+        return res.status(409).json({ error: 'A category with that name already exists' });
+      }
+      const slug = slugify(trimmed);
+      const id = db.addCategory({ slug, name: trimmed, description, icon, sort_order });
+      res.status(201).json({ id, slug, name: trimmed });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

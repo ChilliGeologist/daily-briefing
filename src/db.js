@@ -88,7 +88,9 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_sources_enabled ON sources(enabled);
 `;
 
-const DEFAULT_CATEGORIES = [];
+const DEFAULT_CATEGORIES = [
+  { slug: 'top-stories', name: 'Top Stories', description: 'The most important stories of the day', icon: 'star', sort_order: 0 },
+];
 
 const DEFAULT_SETTINGS = {
   app_title: 'Daily Briefing',

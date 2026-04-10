@@ -484,25 +484,30 @@ async function loadSourcesTab(container) {
   container.textContent = 'Loading sources...';
   container.prepend(el('span', { className: 'mini-spinner' }));
   try {
-    var results = await Promise.all([fetch('/api/sources'), fetch('/api/categories')]);
-    var sourcesJson = await results[0].json();
-    var catsJson = await results[1].json();
+    var res = await fetch('/api/sources');
+    var sourcesJson = await res.json();
     var sources = sourcesJson.sources;
-    var categories = catsJson.categories;
     container.replaceChildren();
+
+    var key = el('div', { className: 'source-key' }, [
+      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status success' }), el('span', { textContent: 'OK' })]),
+      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status error' }), el('span', { textContent: 'Error' })]),
+      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status never' }), el('span', { textContent: 'Not fetched' })])
+    ]);
+    container.appendChild(key);
 
     var list = el('div', { className: 'source-list' });
     sources.forEach(function(s) {
-      list.appendChild(renderSourceItem(s, categories));
+      list.appendChild(renderSourceItem(s));
     });
     container.appendChild(list);
-    container.appendChild(renderAddSourceForm(categories));
+    container.appendChild(renderAddSourceForm());
   } catch (err) {
     container.replaceChildren(el('p', { className: 'status-msg error', textContent: 'Failed to load sources' }));
   }
 }
 
-function renderSourceItem(source, categories) {
+function renderSourceItem(source) {
   var statusClass = source.last_fetch_status === 'ok' ? 'success' : source.last_fetch_status === 'never' ? 'never' : source.last_fetch_status ? 'error' : 'never';
 
   var toggleLabel = el('label', { className: 'toggle' });
@@ -544,15 +549,12 @@ function renderSourceItem(source, categories) {
   return item;
 }
 
-function renderAddSourceForm(categories) {
+function renderAddSourceForm() {
   var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
   var nameInput = el('input', { className: 'form-input', placeholder: 'Source name' });
   var typeSelect = el('select', { className: 'form-select' });
   ['rss', 'reddit', 'api'].forEach(function(t) { typeSelect.appendChild(el('option', { value: t, textContent: t.toUpperCase() })); });
   var urlInput = el('input', { className: 'form-input', placeholder: 'Feed URL' });
-  var catSelect = el('select', { className: 'form-select' });
-  catSelect.appendChild(el('option', { value: '', textContent: '(no default category)' }));
-  (categories || []).forEach(function(c) { catSelect.appendChild(el('option', { value: c.slug, textContent: c.name })); });
 
   var statusEl = el('div', { className: 'status-msg hidden' });
 
@@ -565,8 +567,7 @@ function renderAddSourceForm(categories) {
         body: JSON.stringify({
           name: nameInput.value.trim(),
           type: typeSelect.value,
-          url: urlInput.value.trim(),
-          default_category: catSelect.value || null
+          url: urlInput.value.trim()
         })
       });
       if (res.ok) {
@@ -589,10 +590,7 @@ function renderAddSourceForm(categories) {
       el('div', { className: 'form-group' }, [nameInput]),
       el('div', { className: 'form-group', style: { maxWidth: '100px' } }, [typeSelect])
     ]),
-    el('div', { className: 'form-row', style: { marginBottom: '8px' } }, [
-      el('div', { className: 'form-group' }, [urlInput]),
-      el('div', { className: 'form-group', style: { maxWidth: '160px' } }, [catSelect])
-    ]),
+    el('div', { style: { marginBottom: '8px' } }, [urlInput]),
     addBtn,
     statusEl
   );
@@ -686,38 +684,32 @@ function setupCategoryDragDrop(list) {
 
 function renderAddCategoryForm() {
   var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
-  var slugInput = el('input', { className: 'form-input', placeholder: 'slug (e.g. tech-news)' });
-  var nameInput = el('input', { className: 'form-input', placeholder: 'Display name' });
+  var nameInput = el('input', { className: 'form-input', placeholder: 'Name' });
   var descInput = el('input', { className: 'form-input', placeholder: 'Description (optional)' });
-  var iconInput = el('input', { className: 'form-input', placeholder: 'Icon name (e.g. globe)' });
-  iconInput.value = 'tag';
 
   var addBtn = el('button', { className: 'btn btn-primary', textContent: 'Add Category', onclick: async function() {
-    if (!slugInput.value.trim() || !nameInput.value.trim()) return;
+    if (!nameInput.value.trim()) return;
     var res = await fetch('/api/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        slug: slugInput.value.trim(),
         name: nameInput.value.trim(),
-        description: descInput.value.trim() || null,
-        icon: iconInput.value.trim() || 'tag'
+        description: descInput.value.trim() || null
       })
     });
     if (res.ok) {
       switchSettingsTab('categories');
+    } else {
+      var err = await res.json().catch(function() { return {}; });
+      if (err.error) alert(err.error);
     }
   }});
 
   form.append(
     el('div', { className: 'form-label', textContent: 'Add New Category' }),
     el('div', { className: 'form-row', style: { marginBottom: '8px' } }, [
-      el('div', { className: 'form-group' }, [slugInput]),
-      el('div', { className: 'form-group' }, [nameInput])
-    ]),
-    el('div', { className: 'form-row', style: { marginBottom: '8px' } }, [
-      el('div', { className: 'form-group' }, [descInput]),
-      el('div', { className: 'form-group', style: { maxWidth: '120px' } }, [iconInput])
+      el('div', { className: 'form-group' }, [nameInput]),
+      el('div', { className: 'form-group' }, [descInput])
     ]),
     addBtn
   );
@@ -927,7 +919,7 @@ async function loadScheduleTab(container) {
 
     var saveTzBtn = el('button', { className: 'btn btn-secondary', textContent: 'Save Timezone', onclick: saveSchedule });
 
-    var statusText = status.running ? 'Pipeline is currently running' : status.lastRun ? 'Last run: ' + (status.lastRun.status || 'unknown') + ' at ' + (status.lastRun.started_at || '') : 'No runs yet';
+    var statusText = status.running ? 'Currently running' : status.lastRun ? 'Last run: ' + (status.lastRun.status || 'unknown') + ' at ' + (status.lastRun.started_at || '') : 'No runs yet';
 
     var runNowBtn = el('button', {
       className: 'btn btn-primary',
@@ -960,7 +952,7 @@ async function loadScheduleTab(container) {
         el('div', { style: { marginTop: '6px' } }, [saveTzBtn])
       ]),
       el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } }, [
-        el('div', { className: 'form-label', textContent: 'Pipeline' }),
+        el('div', { className: 'form-label', textContent: 'Collection' }),
         el('div', { textContent: statusText, style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' } }),
         runNowBtn
       ])
@@ -1349,7 +1341,7 @@ function renderPipelineContent() {
 
   // Idle area
   container.appendChild(el('div', { className: 'pipeline-idle', id: 'pipeline-idle' }, [
-    el('div', { textContent: 'Pipeline idle' }),
+    el('div', { textContent: 'Idle' }),
     el('div', { className: 'pipeline-last-run', id: 'pipeline-last-run' }),
     el('button', {
       className: 'btn btn-primary',
@@ -1749,7 +1741,7 @@ var router = (function() {
     '/':         { viewId: 'sections-container', btnId: null,           title: 'Daily Briefing' },
     '/settings': { viewId: 'settings-panel',     btnId: 'btn-settings', title: 'Daily Briefing — Settings' },
     '/archive':  { viewId: 'archive-panel',      btnId: 'btn-archive',  title: 'Daily Briefing — Archive' },
-    '/pipeline': { viewId: 'pipeline-panel',     btnId: 'btn-pipeline', title: 'Daily Briefing — Pipeline' },
+    '/pipeline': { viewId: 'pipeline-panel',     btnId: 'btn-pipeline', title: 'Daily Briefing — Status' },
   };
   var currentPath = null;
 

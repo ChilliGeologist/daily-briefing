@@ -176,14 +176,21 @@ header h1 {
   background: var(--bg-card);
 }
 
-/* Pipeline status dot */
+/* Pipeline status dot (overlay on icon) */
 .pipeline-dot {
-  width: 10px;
-  height: 10px;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-dim);
-  display: block;
+  display: none;
 }
+
+.pipeline-dot.running,
+.pipeline-dot.success,
+.pipeline-dot.error { display: block; }
 
 .pipeline-dot.idle { background: var(--text-dim); }
 .pipeline-dot.running { background: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
@@ -215,6 +222,7 @@ header h1 {
 
 .suggestion-banner-content {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
@@ -227,9 +235,9 @@ header h1 {
 
 .suggestion-banner-content .suggestion-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
-  flex-shrink: 0;
 }
 
 .suggestion-banner-content button {
@@ -1007,6 +1015,20 @@ main {
 .source-type-badge.rss { background: rgba(108, 156, 252, 0.15); color: var(--medium); }
 .source-type-badge.reddit { background: rgba(245, 166, 35, 0.15); color: var(--high); }
 .source-type-badge.api { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+
+.source-key {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.source-key-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 
 .source-status {
   width: 8px;
