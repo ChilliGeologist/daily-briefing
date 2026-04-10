@@ -92,6 +92,13 @@ app.use('/api', require('./src/routes/push')(db));
 app.use('/api', require('./src/routes/updates')(updater));
 app.use('/api', require('./src/routes/backup')(db, DB_PATH));
 
+// SPA fallback: any non-API, non-static path returns index.html so the
+// client-side router can handle /settings, /archive, /pipeline, etc.
+// Must be registered AFTER all /api routes and express.static middleware.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Start server
 const server = app.listen(PORT, () => {
   log.info('server', `daily-briefing v${getVersion()} listening on port ${PORT}`);
