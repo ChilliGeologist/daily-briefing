@@ -434,9 +434,6 @@ $('#btn-close-archive').addEventListener('click', function() {
 // 7. Settings Panel
 // ============================================================
 
-var tabLoadedState = {};
-
-
 $('#btn-settings').addEventListener('click', function() {
   router.toggle('/settings');
 });
@@ -454,21 +451,18 @@ function switchSettingsTab(tabName) {
   var container = $('#settings-tab-content');
   container.replaceChildren();
 
-  if (!tabLoadedState[tabName]) {
-    tabLoadedState[tabName] = true;
-    var loaders = {
-      general: loadGeneralTab,
-      sources: loadSourcesTab,
-      categories: loadCategoriesTab,
-      preferences: loadPreferencesTab,
-      schedule: loadScheduleTab,
-      ollama: loadOllamaTab,
-      updates: loadUpdatesTab,
-      backup: loadBackupTab,
-      log: loadLogTab,
-    };
-    if (loaders[tabName]) loaders[tabName](container);
-  }
+  var loaders = {
+    general: loadGeneralTab,
+    sources: loadSourcesTab,
+    categories: loadCategoriesTab,
+    preferences: loadPreferencesTab,
+    schedule: loadScheduleTab,
+    ollama: loadOllamaTab,
+    updates: loadUpdatesTab,
+    backup: loadBackupTab,
+    log: loadLogTab,
+  };
+  if (loaders[tabName]) loaders[tabName](container);
 }
 
 // --- Tab: General ---
@@ -577,7 +571,6 @@ function renderAddSourceForm(categories) {
       });
       if (res.ok) {
         nameInput.value = ''; urlInput.value = '';
-        tabLoadedState.sources = false;
         switchSettingsTab('sources');
       } else {
         var errData = await res.json();
@@ -712,7 +705,6 @@ function renderAddCategoryForm() {
       })
     });
     if (res.ok) {
-      tabLoadedState.categories = false;
       switchSettingsTab('categories');
     }
   }});
@@ -1767,8 +1759,6 @@ var router = (function() {
 
   function onEnter(path) {
     if (path === '/settings') {
-      // Reset per-tab cache and re-render the active tab (default: general)
-      Object.keys(tabLoadedState).forEach(function(k) { tabLoadedState[k] = false; });
       var activeTab = $('.settings-tab.active');
       switchSettingsTab(activeTab ? activeTab.dataset.tab : 'general');
     } else if (path === '/archive') {
