@@ -170,6 +170,12 @@ header h1 {
   background: var(--bg-card);
 }
 
+.btn-icon.btn-icon--active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--bg-card);
+}
+
 /* Pipeline status dot */
 .pipeline-dot {
   width: 10px;
@@ -247,27 +253,20 @@ header h1 {
   color: var(--text-dim);
 }
 
-/* Panels (archive, settings, pipeline) */
-.panel {
+/* Views (one is active at a time; router manages .view--active) */
+.view {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 0 20px;
-  overflow: hidden;
-  transition: max-height 0.3s ease;
+  padding: 16px 20px;
 }
 
-.panel.hidden {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+.view:not(.view--active) {
+  display: none;
 }
 
-.panel:not(.hidden) {
-  max-height: 80vh;
-  padding-top: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-  overflow-y: auto;
+/* Panels (archive, settings, pipeline) — visual styling, no layout */
+.panel {
+  /* .view handles width/padding; .panel is now just a semantic hook */
 }
 
 .panel-header {
@@ -628,15 +627,6 @@ main {
 }
 
 /* Settings panel */
-.settings-theme {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
 .settings-theme-label {
   font-size: 13px;
   font-weight: 600;

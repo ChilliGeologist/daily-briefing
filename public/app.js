@@ -423,15 +423,11 @@ function renderArchivePage() {
 }
 
 $('#btn-archive').addEventListener('click', function() {
-  var panel = $('#archive-panel');
-  closeAllPanels('archive-panel');
-  var isHidden = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden');
-  if (isHidden) loadArchive();
+  router.toggle('/archive');
 });
 
 $('#btn-close-archive').addEventListener('click', function() {
-  $('#archive-panel').classList.add('hidden');
+  router.navigate('/');
 });
 
 // ============================================================
@@ -440,26 +436,13 @@ $('#btn-close-archive').addEventListener('click', function() {
 
 var tabLoadedState = {};
 
-function closeAllPanels(except) {
-  ['archive-panel', 'settings-panel', 'pipeline-panel'].forEach(function(id) {
-    if (id !== except) $('#' + id).classList.add('hidden');
-  });
-}
 
 $('#btn-settings').addEventListener('click', function() {
-  var panel = $('#settings-panel');
-  closeAllPanels('settings-panel');
-  var isHidden = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden');
-  if (isHidden) {
-    Object.keys(tabLoadedState).forEach(function(k) { tabLoadedState[k] = false; });
-    var activeTab = $('.settings-tab.active');
-    switchSettingsTab(activeTab ? activeTab.dataset.tab : 'sources');
-  }
+  router.toggle('/settings');
 });
 
 $('#btn-close-settings').addEventListener('click', function() {
-  $('#settings-panel').classList.add('hidden');
+  router.navigate('/');
 });
 
 $$('.settings-tab').forEach(function(tab) {
@@ -1330,20 +1313,11 @@ var pipelineSSE = null;
 var pipelineStatusInterval = null;
 
 $('#btn-pipeline').addEventListener('click', function() {
-  var panel = $('#pipeline-panel');
-  closeAllPanels('pipeline-panel');
-  var isHidden = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden');
-  if (isHidden) {
-    openPipelinePanel();
-  } else {
-    closePipelinePanel();
-  }
+  router.toggle('/pipeline');
 });
 
 $('#btn-close-pipeline').addEventListener('click', function() {
-  $('#pipeline-panel').classList.add('hidden');
-  closePipelinePanel();
+  router.navigate('/');
 });
 
 function openPipelinePanel() {
@@ -1775,13 +1749,90 @@ bindInstallButton();
 updateInstallUI();
 
 // ============================================================
+// 14b. Router
+// ============================================================
+
+var router = (function() {
+  var ROUTES = {
+    '/':         { viewId: 'sections-container', btnId: null,           title: 'Daily Briefing' },
+    '/settings': { viewId: 'settings-panel',     btnId: 'btn-settings', title: 'Daily Briefing — Settings' },
+    '/archive':  { viewId: 'archive-panel',      btnId: 'btn-archive',  title: 'Daily Briefing — Archive' },
+    '/pipeline': { viewId: 'pipeline-panel',     btnId: 'btn-pipeline', title: 'Daily Briefing — Pipeline' },
+  };
+  var currentPath = null;
+
+  function normalize(path) {
+    return ROUTES[path] ? path : '/';
+  }
+
+  function onEnter(path) {
+    if (path === '/settings') {
+      // Reset per-tab cache and re-render the active tab (default: general)
+      Object.keys(tabLoadedState).forEach(function(k) { tabLoadedState[k] = false; });
+      var activeTab = $('.settings-tab.active');
+      switchSettingsTab(activeTab ? activeTab.dataset.tab : 'general');
+    } else if (path === '/archive') {
+      loadArchive();
+    } else if (path === '/pipeline') {
+      openPipelinePanel();
+    }
+  }
+
+  function onLeave(path) {
+    if (path === '/pipeline') {
+      closePipelinePanel();
+    }
+  }
+
+  function render(rawPath) {
+    var path = normalize(rawPath);
+    if (currentPath && currentPath !== path) onLeave(currentPath);
+
+    // Toggle view visibility
+    Object.keys(ROUTES).forEach(function(p) {
+      var v = document.getElementById(ROUTES[p].viewId);
+      if (v) v.classList.toggle('view--active', p === path);
+    });
+
+    // Toggle header button active state
+    ['btn-settings', 'btn-archive', 'btn-pipeline'].forEach(function(id) {
+      var b = document.getElementById(id);
+      if (b) b.classList.toggle('btn-icon--active', ROUTES[path].btnId === id);
+    });
+
+    // Update document title
+    document.title = ROUTES[path].title;
+
+    if (currentPath !== path) onEnter(path);
+    currentPath = path;
+  }
+
+  function navigate(path) {
+    var target = normalize(path);
+    if (target === currentPath) return;
+    history.pushState({}, '', target);
+    render(target);
+  }
+
+  function toggle(path) {
+    navigate(currentPath === path ? '/' : path);
+  }
+
+  function init() {
+    window.addEventListener('popstate', function() { render(location.pathname); });
+    render(location.pathname);
+  }
+
+  return { init: init, navigate: navigate, toggle: toggle };
+})();
+
+// ============================================================
 // 14. Keyboard shortcuts
 // ============================================================
 
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    closeAllPanels();
-    closePipelinePanel();
+    router.navigate('/');
   }
 });
 
@@ -1816,3 +1867,7 @@ if ('serviceWorker' in navigator) {
 
 // Poll pipeline status every 30s
 setInterval(updatePipelineStatus, 30000);
+
+// Initialize the router last so it can read the current URL and activate
+// the matching view after all bindings are in place.
+router.init();
