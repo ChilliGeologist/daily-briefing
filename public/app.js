@@ -86,6 +86,18 @@ function el(tag, attrs, children) {
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 
+// Close any currently-open inline edit form (source or category).
+// Removes the .editing class from the row and detaches the form node.
+function closeOpenEditForm() {
+  var open = document.querySelector('.source-item.editing, .category-item.editing');
+  if (!open) return;
+  open.classList.remove('editing');
+  var btn = open.querySelector('.btn-icon-edit');
+  if (btn) btn.textContent = '✎';
+  var form = open.querySelector('.source-edit-form, .category-edit-form');
+  if (form) form.remove();
+}
+
 // Insert trusted SVG markup into an element. Only call with static SVG
 // strings defined in the ICONS object below -- never with user data.
 function setTrustedSVG(element, svgString) {
@@ -528,48 +540,22 @@ function renderSourceItem(source) {
   toggleInput.checked = !!source.enabled;
   toggleLabel.append(toggleInput, el('span', { className: 'toggle-slider' }));
 
-  var nameEl = el('div', { className: 'source-name', textContent: source.name, title: 'Click to rename' });
-  nameEl.addEventListener('click', function() {
-    var input = el('input', { className: 'form-input source-name-edit', value: source.name });
-    var committed = false;
-    function commit() {
-      if (committed) return;
-      committed = true;
-      var newName = input.value.trim();
-      if (!newName || newName === source.name) {
-        input.replaceWith(nameEl);
-        return;
-      }
-      fetch('/api/sources/' + source.id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName })
-      }).then(function(r) {
-        if (r.ok) {
-          source.name = newName;
-          nameEl.textContent = newName;
-        }
-        input.replaceWith(nameEl);
-      }).catch(function() { input.replaceWith(nameEl); });
-    }
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); commit(); }
-      else if (e.key === 'Escape') { committed = true; input.replaceWith(nameEl); }
-    });
-    input.addEventListener('blur', commit);
-    nameEl.replaceWith(input);
-    input.focus();
-    input.select();
+  var nameEl = el('div', { className: 'source-name', textContent: source.name });
+  var urlEl = el('div', { className: 'source-url', textContent: source.type === 'reddit' ? 'https://www.reddit.com/r/' + source.url : source.url });
+  var typeBadge = el('span', { className: 'source-type-badge ' + source.type, textContent: source.type });
+
+  var editBtn = el('button', {
+    className: 'btn-icon-edit',
+    textContent: '\u270e',
+    title: 'Edit source'
   });
 
   var item = el('div', { className: 'source-item' + (source.enabled ? '' : ' disabled') }, [
     el('div', { className: 'source-status ' + statusClass, title: source.last_fetch_status || 'never' }),
-    el('div', { className: 'source-info' }, [
-      nameEl,
-      el('div', { className: 'source-url', textContent: source.type === 'reddit' ? 'https://www.reddit.com/r/' + source.url : source.url })
-    ]),
-    el('span', { className: 'source-type-badge ' + source.type, textContent: source.type }),
+    el('div', { className: 'source-info' }, [nameEl, urlEl]),
+    typeBadge,
     el('div', { className: 'source-controls' }, [
+      editBtn,
       toggleLabel,
       el('button', {
         className: 'btn btn-danger btn-sm',
@@ -584,6 +570,18 @@ function renderSourceItem(source) {
     ])
   ]);
 
+  editBtn.addEventListener('click', function() {
+    if (item.classList.contains('editing')) {
+      closeOpenEditForm();
+      return;
+    }
+    closeOpenEditForm();
+    var form = renderSourceEditForm(source, { nameEl: nameEl, urlEl: urlEl, typeBadge: typeBadge });
+    item.appendChild(form);
+    item.classList.add('editing');
+    editBtn.textContent = '✕';
+  });
+
   toggleInput.addEventListener('change', async function() {
     await fetch('/api/sources/' + source.id, {
       method: 'PUT',
@@ -594,6 +592,101 @@ function renderSourceItem(source) {
   });
 
   return item;
+}
+
+function renderSourceEditForm(source, refs) {
+  var form = el('div', { className: 'source-edit-form' });
+
+  var nameInput = el('input', { className: 'form-input', value: source.name, placeholder: 'Name' });
+  var urlInput = el('input', { className: 'form-input', value: source.url, placeholder: 'Feed URL or subreddit name' });
+
+  var typeSelect = el('select', { className: 'form-select' });
+  ['rss', 'reddit', 'api'].forEach(function(t) {
+    var opt = el('option', { value: t, textContent: t.toUpperCase() });
+    if (t === source.type) opt.selected = true;
+    typeSelect.appendChild(opt);
+  });
+
+  var defaultSelect = el('select', { className: 'form-select' });
+  defaultSelect.appendChild(el('option', { value: '', textContent: '— none —' }));
+  fetch('/api/categories').then(function(r) { return r.json(); }).then(function(data) {
+    if (!form.isConnected) return;
+    (data.categories || []).forEach(function(c) {
+      var opt = el('option', { value: c.slug, textContent: c.name });
+      if (c.slug === source.default_category) opt.selected = true;
+      defaultSelect.appendChild(opt);
+    });
+  }).catch(function() { /* dropdown stays at 'none' if fetch fails */ });
+
+  var errorEl = el('div', { className: 'status-msg error hidden' });
+
+  var cancelBtn = el('button', {
+    className: 'btn btn-secondary btn-sm',
+    textContent: 'Cancel',
+    onclick: function() { closeOpenEditForm(); }
+  });
+
+  var saveBtn = el('button', {
+    className: 'btn btn-primary btn-sm',
+    textContent: 'Save'
+  });
+
+  function save() {
+    var name = nameInput.value.trim();
+    var url = urlInput.value.trim();
+    if (!name || !url) {
+      errorEl.textContent = 'Name and URL are required';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    var payload = {
+      name: name,
+      url: url,
+      type: typeSelect.value,
+      default_category: defaultSelect.value || null
+    };
+    saveBtn.disabled = true;
+    errorEl.classList.add('hidden');
+    fetch('/api/sources/' + source.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Save failed'); });
+      source.name = name;
+      source.url = url;
+      source.type = payload.type;
+      source.default_category = payload.default_category;
+      refs.nameEl.textContent = name;
+      refs.urlEl.textContent = source.type === 'reddit' ? 'https://www.reddit.com/r/' + url : url;
+      refs.typeBadge.textContent = source.type;
+      refs.typeBadge.className = 'source-type-badge ' + source.type;
+      closeOpenEditForm();
+    }).catch(function(err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+    });
+  }
+
+  saveBtn.addEventListener('click', save);
+
+  form.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeOpenEditForm(); }
+    else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); save(); }
+  });
+
+  form.append(
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Name' }), nameInput]),
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'URL' }), urlInput]),
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Type' }), typeSelect]),
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Default category' }), defaultSelect]),
+    errorEl,
+    el('div', { className: 'form-actions' }, [cancelBtn, saveBtn])
+  );
+
+  setTimeout(function() { nameInput.focus(); nameInput.select(); }, 0);
+  return form;
 }
 
 function renderAddSourceForm() {
@@ -715,16 +808,23 @@ async function loadCategoriesTab(container) {
 }
 
 function renderCategoryItem(cat) {
+  var nameEl = el('div', { className: 'category-name', textContent: cat.name });
+  var slugEl = el('div', { className: 'category-slug', textContent: cat.description || '' });
+
+  var editBtn = el('button', {
+    className: 'btn-icon-edit',
+    textContent: '\u270e',
+    title: 'Edit category'
+  });
+
   var item = el('div', {
     className: 'category-item',
     draggable: 'true',
     'data-id': String(cat.id)
   }, [
     el('span', { className: 'category-drag-handle', textContent: ICONS.grip }),
-    el('div', { className: 'category-info' }, [
-      el('div', { className: 'category-name', textContent: cat.name }),
-      el('div', { className: 'category-slug', textContent: cat.slug + (cat.description ? ' \u2014 ' + cat.description : '') })
-    ]),
+    el('div', { className: 'category-info' }, [nameEl, slugEl]),
+    editBtn,
     el('button', {
       className: 'btn btn-danger btn-sm',
       textContent: '\u00d7',
@@ -737,7 +837,86 @@ function renderCategoryItem(cat) {
       }
     })
   ]);
+
+  editBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (item.classList.contains('editing')) {
+      closeOpenEditForm();
+      return;
+    }
+    closeOpenEditForm();
+    var form = renderCategoryEditForm(cat, { nameEl: nameEl, slugEl: slugEl });
+    item.appendChild(form);
+    item.classList.add('editing');
+    editBtn.textContent = '✕';
+  });
+
   return item;
+}
+
+function renderCategoryEditForm(cat, refs) {
+  var form = el('div', { className: 'category-edit-form' });
+
+  var nameInput = el('input', { className: 'form-input', value: cat.name, placeholder: 'Name' });
+  var descInput = el('input', { className: 'form-input', value: cat.description || '', placeholder: 'Description (optional)' });
+
+  var errorEl = el('div', { className: 'status-msg error hidden' });
+
+  var cancelBtn = el('button', {
+    className: 'btn btn-secondary btn-sm',
+    textContent: 'Cancel',
+    onclick: function() { closeOpenEditForm(); }
+  });
+
+  var saveBtn = el('button', {
+    className: 'btn btn-primary btn-sm',
+    textContent: 'Save'
+  });
+
+  function save() {
+    var name = nameInput.value.trim();
+    if (!name) {
+      errorEl.textContent = 'Name is required';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    var payload = { name: name, description: descInput.value.trim() || null };
+    saveBtn.disabled = true;
+    errorEl.classList.add('hidden');
+    fetch('/api/categories/' + cat.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Save failed'); });
+      cat.name = name;
+      cat.description = payload.description;
+      refs.nameEl.textContent = name;
+      refs.slugEl.textContent = cat.description || '';
+      closeOpenEditForm();
+    }).catch(function(err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+    });
+  }
+
+  saveBtn.addEventListener('click', save);
+
+  form.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeOpenEditForm(); }
+    else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); save(); }
+  });
+
+  form.append(
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Name' }), nameInput]),
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Description' }), descInput]),
+    errorEl,
+    el('div', { className: 'form-actions' }, [cancelBtn, saveBtn])
+  );
+
+  setTimeout(function() { nameInput.focus(); nameInput.select(); }, 0);
+  return form;
 }
 
 function setupCategoryDragDrop(list) {

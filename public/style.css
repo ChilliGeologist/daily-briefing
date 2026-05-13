@@ -1007,15 +1007,6 @@ main {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  cursor: pointer;
-}
-
-.source-name-edit {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 2px 6px;
-  width: 100%;
-  max-width: 260px;
 }
 
 .source-url {
@@ -1530,4 +1521,69 @@ main {
   .stage-label { font-size: 8px; letter-spacing: 0.2px; }
   .stage-stat { font-size: 9px; }
   .form-row { flex-direction: column; }
+}
+
+/* Inline edit form for sources & categories */
+.source-item.editing,
+.category-item.editing {
+  flex-wrap: wrap;
+}
+
+.source-edit-form,
+.category-edit-form {
+  display: none;
+  flex-basis: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-alt, rgba(0,0,0,0.02));
+  border-radius: 6px;
+}
+
+.source-item.editing .source-edit-form,
+.category-item.editing .category-edit-form {
+  display: block;
+}
+
+.source-edit-form .form-row,
+.category-edit-form .form-row {
+  margin-bottom: 8px;
+}
+
+.source-edit-form .form-row > label,
+.category-edit-form .form-row > label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  margin-bottom: 3px;
+}
+
+.source-edit-form .form-actions,
+.category-edit-form .form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.btn-icon-edit {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted, #888);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.btn-icon-edit:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+.source-item.editing .btn-icon-edit,
+.category-item.editing .btn-icon-edit {
+  background: var(--text-muted, #888);
+  color: var(--bg);
 }
