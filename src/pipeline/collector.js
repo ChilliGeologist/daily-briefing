@@ -10,7 +10,7 @@ const FETCHERS = {
   api: fetchAPI,
 };
 
-async function collect(db, log) {
+async function collect(db, log, emitProgress) {
   const start = Date.now();
   const sources = db.getEnabledSources();
 
@@ -31,18 +31,22 @@ async function collect(db, log) {
     return { items: [], stats };
   }
 
-  // Launch all fetchers in parallel
+  // Launch all fetchers in parallel, emit progress as each completes
+  let completed = 0;
+  const total = sources.length;
+  if (emitProgress) emitProgress('collect', 0, total);
+
   const promises = sources.map(source => {
     const fetcher = FETCHERS[source.type];
     if (!fetcher) {
       return Promise.resolve({
         source,
         result: { items: [], error: `Unknown source type: ${source.type}` },
-      });
+      }).then(r => { completed++; if (emitProgress) emitProgress('collect', completed, total); return r; });
     }
     return fetcher(source, log).then(
-      result => ({ source, result }),
-      err => ({ source, result: { items: [], error: err.message } })
+      result => { completed++; if (emitProgress) emitProgress('collect', completed, total); return { source, result }; },
+      err => { completed++; if (emitProgress) emitProgress('collect', completed, total); return { source, result: { items: [], error: err.message } }; }
     );
   });
 

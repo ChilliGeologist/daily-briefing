@@ -14,7 +14,7 @@ function assemble(items, categories, log) {
   for (const item of items) {
     const primary = (item.categories && item.categories.length > 0)
       ? item.categories[0]
-      : 'top-stories';
+      : 'other';
     if (!grouped.has(primary)) grouped.set(primary, []);
     grouped.get(primary).push(item);
   }

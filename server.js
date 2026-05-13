@@ -15,11 +15,14 @@ const PORT = process.env.PORT || 3100;
 const DB_PATH = path.join(__dirname, 'data', 'briefings.db');
 
 function getVersion() {
-  return (process.env.DAILY_BRIEFING_VERSION || 'dev').substring(0, 7);
+  return updater.getCurrentVersion().display;
 }
 
 // Init database
 const db = initDB(DB_PATH);
+
+// Clean up orphaned runs (still "running" from before a restart)
+db.cleanupOrphanedRuns();
 
 // Init logger (with DB for persistence)
 const log = createLogger(db);
@@ -72,8 +75,9 @@ app.get('/manifest.json', (req, res) => {
   }
 });
 
-// Serve static files from public/
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files from public/ with no caching for dev agility
+// index.html is excluded — served separately with cache-busted asset URLs
+app.use(express.static(path.join(__dirname, 'public'), { index: false, etag: false, lastModified: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-store') }));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -92,11 +96,18 @@ app.use('/api', require('./src/routes/push')(db));
 app.use('/api', require('./src/routes/updates')(updater));
 app.use('/api', require('./src/routes/backup')(db, DB_PATH));
 
-// SPA fallback: any non-API, non-static path returns index.html so the
+// SPA fallback: serve index.html with cache-busted asset URLs so the
 // client-side router can handle /settings, /archive, /pipeline, etc.
 // Must be registered AFTER all /api routes and express.static middleware.
+const indexTemplate = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+const cacheBust = updater.getCurrentVersion().version + '-' + Date.now();
+const indexHtml = indexTemplate
+  .replace('/style.css', '/style.css?v=' + cacheBust)
+  .replace('/app.js', '/app.js?v=' + cacheBust);
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'text/html');
+  res.send(indexHtml);
 });
 
 // Start server

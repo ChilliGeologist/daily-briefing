@@ -7,21 +7,19 @@ module.exports = function (db) {
     try {
       const briefing = db.getLatestBriefing();
       if (!briefing) return res.status(404).json({ error: 'No briefings found' });
-      res.json({ date: briefing.date, headline: briefing.headline, data: briefing.data });
+      res.json({ id: briefing.id, date: briefing.date, headline: briefing.headline, data: briefing.data });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  router.get('/briefing/:date', (req, res) => {
+  router.get('/briefing/:id', (req, res) => {
     try {
-      const { date } = req.params;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
-      }
-      const briefing = db.getBriefing(date);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: 'Invalid briefing id' });
+      const briefing = db.getBriefingById(id);
       if (!briefing) return res.status(404).json({ error: 'Briefing not found' });
-      res.json({ date: briefing.date, headline: briefing.headline, data: briefing.data });
+      res.json({ id: briefing.id, date: briefing.date, headline: briefing.headline, data: briefing.data });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

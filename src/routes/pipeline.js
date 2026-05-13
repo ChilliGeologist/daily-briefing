@@ -22,6 +22,18 @@ module.exports = function (db, pipeline, ollama, settings, log, sseManager) {
     }
   });
 
+  router.post('/pipeline/cancel', (req, res) => {
+    try {
+      if (!pipeline.isRunning()) {
+        return res.status(409).json({ error: 'No pipeline run in progress' });
+      }
+      pipeline.requestCancel();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/pipeline/status', (req, res) => {
     try {
       const runs = db.listRuns(1);
@@ -49,6 +61,17 @@ module.exports = function (db, pipeline, ollama, settings, log, sseManager) {
       const run = db.getRun(req.params.id);
       if (!run) return res.status(404).json({ error: 'Run not found' });
       res.json(run);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/pipeline/runs/:id/log', (req, res) => {
+    try {
+      const run = db.getRun(req.params.id);
+      if (!run) return res.status(404).json({ error: 'Run not found' });
+      const entries = db.getRunLog(req.params.id);
+      res.json({ run, entries });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

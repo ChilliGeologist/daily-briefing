@@ -1,5 +1,24 @@
 'use strict';
 
+function normalizeUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const u = new URL(url);
+    u.search = '';
+    u.hash = '';
+    u.hostname = u.hostname.toLowerCase();
+    let s = u.toString();
+    if (s.endsWith('/')) s = s.slice(0, -1);
+    return s;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getDedupUrl(item) {
+  return normalizeUrl(item.canonical_url) || normalizeUrl(item.external_url);
+}
+
 function diceSimilarity(a, b) {
   const bigrams = (s) => {
     const clean = s.toLowerCase().replace(/[^a-z0-9 ]/g, '');
@@ -93,20 +112,52 @@ function mergeCluster(cluster) {
   };
 }
 
-async function dedup(items, ollamaClient, settings, log) {
+async function dedup(items, ollamaClient, settings, log, emitProgress) {
   const total = items.length;
 
   if (total === 0) {
     log.info('dedup', 'Dedup: 0 candidate clusters from 0 items, 0 confirmed merges, 0 items after dedup');
-    return { items: [], stats: { total: 0, candidates: 0, confirmed: 0, final: 0 } };
+    return { items: [], stats: { total: 0, candidates: 0, confirmed: 0, final: 0, url_matches: 0 } };
   }
 
-  // Pass 1: Dice similarity clustering via union-find
-  const uf = makeUnionFind(total);
+  // Pass 0: URL pre-pass — group items sharing the same canonical/external URL.
+  // These are instant duplicate clusters; merge them and pass the survivors plus
+  // items without a URL into the Dice+LLM pipeline.
+  const urlGroups = new Map();
+  const itemsForDice = [];
+  let url_matches = 0;
 
-  for (let i = 0; i < total; i++) {
-    for (let j = i + 1; j < total; j++) {
-      if (diceSimilarity(items[i].title, items[j].title) > 0.6) {
+  for (const item of items) {
+    const key = getDedupUrl(item);
+    if (!key) {
+      itemsForDice.push(item);
+      continue;
+    }
+    if (!urlGroups.has(key)) urlGroups.set(key, []);
+    urlGroups.get(key).push(item);
+  }
+
+  const urlMergedItems = [];
+  for (const group of urlGroups.values()) {
+    if (group.length === 1) {
+      // Single item with a URL — still needs to flow through Dice pass
+      itemsForDice.push(group[0]);
+    } else {
+      // Instant duplicate cluster — merge using existing merge logic
+      url_matches += group.length - 1;
+      urlMergedItems.push(mergeCluster(group));
+    }
+  }
+
+  const dicePool = itemsForDice;
+  const dicePoolLen = dicePool.length;
+
+  // Pass 1: Dice similarity clustering via union-find
+  const uf = makeUnionFind(dicePoolLen);
+
+  for (let i = 0; i < dicePoolLen; i++) {
+    for (let j = i + 1; j < dicePoolLen; j++) {
+      if (diceSimilarity(dicePool[i].title, dicePool[j].title) > 0.6) {
         uf.union(i, j);
       }
     }
@@ -114,18 +165,21 @@ async function dedup(items, ollamaClient, settings, log) {
 
   // Group items by cluster root
   const clusters = new Map();
-  for (let i = 0; i < total; i++) {
+  for (let i = 0; i < dicePoolLen; i++) {
     const root = uf.find(i);
     if (!clusters.has(root)) clusters.set(root, []);
-    clusters.get(root).push(items[i]);
+    clusters.get(root).push(dicePool[i]);
   }
 
   // Pass 2: LLM confirmation for multi-item clusters
   let candidates = 0;
   let confirmed = 0;
-  const result = [];
+  const result = [...urlMergedItems];
+  const clusterArr = [...clusters.values()];
+  if (emitProgress) emitProgress('dedup', 0, clusterArr.length);
+  let clusterIdx = 0;
 
-  for (const cluster of clusters.values()) {
+  for (const cluster of clusterArr) {
     if (cluster.length === 1) {
       // Single item: wrap in merged format
       const item = cluster[0];
@@ -134,35 +188,36 @@ async function dedup(items, ollamaClient, settings, log) {
         sources: [{ name: item.source_name, url: item.url }],
         merged_descriptions: [item.description].filter(Boolean),
       });
-      continue;
-    }
-
-    candidates++;
-
-    const shouldMerge = ollamaClient
-      ? await confirmCluster(cluster, ollamaClient, settings, log)
-      : true;
-
-    if (shouldMerge) {
-      confirmed++;
-      result.push(mergeCluster(cluster));
     } else {
-      // Not confirmed: treat each item individually
-      for (const item of cluster) {
-        result.push({
-          ...item,
-          sources: [{ name: item.source_name, url: item.url }],
-          merged_descriptions: [item.description].filter(Boolean),
-        });
+      candidates++;
+
+      const shouldMerge = ollamaClient
+        ? await confirmCluster(cluster, ollamaClient, settings, log)
+        : true;
+
+      if (shouldMerge) {
+        confirmed++;
+        result.push(mergeCluster(cluster));
+      } else {
+        // Not confirmed: treat each item individually
+        for (const item of cluster) {
+          result.push({
+            ...item,
+            sources: [{ name: item.source_name, url: item.url }],
+            merged_descriptions: [item.description].filter(Boolean),
+          });
+        }
       }
     }
+    clusterIdx++;
+    if (emitProgress) emitProgress('dedup', clusterIdx, clusterArr.length);
   }
 
-  const stats = { total, candidates, confirmed, final: result.length };
+  const stats = { total, candidates, confirmed, final: result.length, url_matches };
 
-  log.info('dedup', `Dedup: ${candidates} candidate clusters from ${total} items, ${confirmed} confirmed merges, ${result.length} items after dedup`);
+  log.info('dedup', `Dedup: ${url_matches} url-pass duplicates removed, ${candidates} candidate clusters from ${total} items, ${confirmed} confirmed merges, ${result.length} items after dedup`);
 
   return { items: result, stats };
 }
 
-module.exports = { dedup, diceSimilarity, confirmCluster };
+module.exports = { dedup, diceSimilarity, confirmCluster, normalizeUrl };

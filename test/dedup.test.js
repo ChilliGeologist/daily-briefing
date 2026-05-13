@@ -130,6 +130,71 @@ describe('Dedup', () => {
       assert.ok(Array.isArray(result[0].merged_descriptions), 'Should have merged_descriptions array');
     });
 
+    it('should merge items sharing canonical_url via URL pre-pass without LLM', async () => {
+      const items = [
+        makeScoredItem({
+          title: 'Totally different title one',
+          source_name: 'Source A',
+          url: 'https://a.com/x',
+          canonical_url: 'https://canonical.example.com/article/123',
+          relevance_score: 40,
+        }),
+        makeScoredItem({
+          title: 'Completely unrelated headline two',
+          source_name: 'Source B',
+          url: 'https://b.com/y',
+          canonical_url: 'https://canonical.example.com/article/123',
+          relevance_score: 70,
+        }),
+        makeScoredItem({
+          title: 'Some other story entirely',
+          source_name: 'Source C',
+          url: 'https://c.com/z',
+          relevance_score: 50,
+        }),
+      ];
+
+      const { items: result, stats } = await dedup(items, null, mockSettings, log);
+      assert.strictEqual(stats.url_matches, 1, 'one duplicate removed by URL pass');
+      assert.strictEqual(result.length, 2, 'three items collapse to two');
+      const merged = result.find(r => r.sources && r.sources.length === 2);
+      assert.ok(merged, 'should have a merged item with 2 sources');
+      assert.strictEqual(merged.url, 'https://b.com/y', 'highest-scored item wins');
+    });
+
+    it('should fall back to external_url when canonical_url is missing, normalize query/trailing slash', async () => {
+      const items = [
+        makeScoredItem({
+          title: 'Title alpha',
+          source_name: 'Source A',
+          url: 'https://a.com/x',
+          external_url: 'https://Example.COM/path/?utm_source=foo',
+          relevance_score: 40,
+        }),
+        makeScoredItem({
+          title: 'Title beta',
+          source_name: 'Source B',
+          url: 'https://b.com/y',
+          external_url: 'https://example.com/path?ref=bar',
+          relevance_score: 60,
+        }),
+      ];
+
+      const { items: result, stats } = await dedup(items, null, mockSettings, log);
+      assert.strictEqual(stats.url_matches, 1);
+      assert.strictEqual(result.length, 1);
+    });
+
+    it('should not crash on null/undefined/invalid URLs', async () => {
+      const items = [
+        makeScoredItem({ title: 'Apple releases new iPhone', source_name: 'A', url: 'https://a.com/1', canonical_url: undefined, external_url: null }),
+        makeScoredItem({ title: 'Russia launches space mission', source_name: 'B', url: 'https://b.com/1', canonical_url: 'not a url' }),
+      ];
+      const { items: result, stats } = await dedup(items, null, mockSettings, log);
+      assert.strictEqual(stats.url_matches, 0);
+      assert.strictEqual(result.length, 2);
+    });
+
     it('should handle transitive clustering (A~B, B~C -> all one cluster)', async () => {
       // A and C may not be directly similar, but both are similar to B
       const items = [

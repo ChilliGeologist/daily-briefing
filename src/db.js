@@ -6,7 +6,7 @@ const path = require('path');
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS briefings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT UNIQUE NOT NULL,
+    date TEXT NOT NULL,
     headline TEXT,
     data TEXT,
     item_count INTEGER DEFAULT 0,
@@ -88,8 +88,10 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_sources_enabled ON sources(enabled);
 `;
 
+const SYSTEM_CATEGORY_SLUG = 'other';
+
 const DEFAULT_CATEGORIES = [
-  { slug: 'top-stories', name: 'Top Stories', description: 'The most important stories of the day', icon: 'star', sort_order: 0 },
+  { slug: SYSTEM_CATEGORY_SLUG, name: 'Other', description: 'Items that do not fit any other category', icon: 'archive', sort_order: 9999 },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -109,6 +111,28 @@ const DEFAULT_SETTINGS = {
   log_retention_days: 30,
 };
 
+function migrateDropBriefingDateUnique(sqlite) {
+  // Check if the UNIQUE constraint still exists on briefings.date
+  const tableInfo = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='briefings'").get();
+  if (!tableInfo || !tableInfo.sql.includes('UNIQUE')) return;
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS briefings_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      headline TEXT,
+      data TEXT,
+      item_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    INSERT INTO briefings_new (id, date, headline, data, item_count, created_at)
+      SELECT id, date, headline, data, item_count, created_at FROM briefings;
+    DROP TABLE briefings;
+    ALTER TABLE briefings_new RENAME TO briefings;
+    CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);
+  `);
+}
+
 function initDB(dbPath) {
   const fs = require('fs');
   const dir = path.dirname(dbPath);
@@ -121,6 +145,9 @@ function initDB(dbPath) {
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(SCHEMA);
 
+  // Migration: drop UNIQUE constraint on briefings.date (allow multiple per day)
+  migrateDropBriefingDateUnique(sqlite);
+
   // Seed defaults
   seedCategories(sqlite);
   seedSettings(sqlite);
@@ -132,7 +159,7 @@ function initDB(dbPath) {
     raw: sqlite,
 
     // --- Briefings ---
-    upsertBriefing(date, briefingData) {
+    insertBriefing(date, briefingData) {
       const dataStr = JSON.stringify(briefingData);
       let itemCount = 0;
       if (briefingData && Array.isArray(briefingData.sections)) {
@@ -143,11 +170,11 @@ function initDB(dbPath) {
         }
       }
       const headline = briefingData.headline || null;
-      stmts.upsertBriefing.run(date, headline, dataStr, itemCount);
+      stmts.insertBriefing.run(date, headline, dataStr, itemCount);
     },
 
-    getBriefing(date) {
-      const row = stmts.getBriefing.get(date);
+    getBriefingById(id) {
+      const row = stmts.getBriefingById.get(id);
       if (!row) return null;
       return { ...row, data: JSON.parse(row.data) };
     },
@@ -279,6 +306,12 @@ function initDB(dbPath) {
     },
 
     // --- Run Log ---
+    cleanupOrphanedRuns() {
+      sqlite.prepare(
+        "UPDATE run_log SET status = 'error', error_summary = 'Interrupted by server restart', finished_at = datetime('now') WHERE status = 'running'"
+      ).run();
+    },
+
     createRun(runId, trigger) {
       sqlite.prepare(
         'INSERT INTO run_log (run_id, trigger) VALUES (?, ?)'
@@ -362,6 +395,10 @@ function initDB(dbPath) {
       sqlite.prepare('UPDATE category_suggestions SET dismissed = 1 WHERE id = ?').run(id);
     },
 
+    dismissAllSuggestions() {
+      sqlite.prepare('UPDATE category_suggestions SET dismissed = 1 WHERE dismissed = 0').run();
+    },
+
     // --- Push Subscriptions ---
     addPushSubscription(endpoint, keys) {
       sqlite.prepare(
@@ -387,18 +424,14 @@ function initDB(dbPath) {
 }
 
 function seedCategories(sqlite) {
-  const count = sqlite.prepare('SELECT COUNT(*) as cnt FROM categories').get().cnt;
-  if (count > 0) return;
-
-  const stmt = sqlite.prepare(
-    'INSERT INTO categories (slug, name, description, icon, sort_order) VALUES (?, ?, ?, ?, ?)'
-  );
-  const tx = sqlite.transaction((cats) => {
-    for (const c of cats) {
-      stmt.run(c.slug, c.name, c.description, c.icon, c.sort_order);
-    }
-  });
-  tx(DEFAULT_CATEGORIES);
+  // Ensure the system "Other" category always exists
+  const other = sqlite.prepare('SELECT id FROM categories WHERE slug = ?').get(SYSTEM_CATEGORY_SLUG);
+  if (!other) {
+    const c = DEFAULT_CATEGORIES[0];
+    sqlite.prepare(
+      'INSERT INTO categories (slug, name, description, icon, sort_order) VALUES (?, ?, ?, ?, ?)'
+    ).run(c.slug, c.name, c.description, c.icon, c.sort_order);
+  }
 }
 
 function seedSettings(sqlite) {
@@ -416,14 +449,12 @@ function seedSettings(sqlite) {
 
 function prepareStatements(sqlite) {
   return {
-    upsertBriefing: sqlite.prepare(
-      `INSERT INTO briefings (date, headline, data, item_count)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(date) DO UPDATE SET headline = excluded.headline, data = excluded.data, item_count = excluded.item_count`
+    insertBriefing: sqlite.prepare(
+      'INSERT INTO briefings (date, headline, data, item_count) VALUES (?, ?, ?, ?)'
     ),
-    getBriefing: sqlite.prepare('SELECT * FROM briefings WHERE date = ?'),
-    getLatestBriefing: sqlite.prepare('SELECT * FROM briefings ORDER BY date DESC LIMIT 1'),
-    listBriefings: sqlite.prepare('SELECT date, headline, item_count, created_at FROM briefings ORDER BY date DESC LIMIT ?'),
+    getBriefingById: sqlite.prepare('SELECT * FROM briefings WHERE id = ?'),
+    getLatestBriefing: sqlite.prepare('SELECT * FROM briefings ORDER BY created_at DESC LIMIT 1'),
+    listBriefings: sqlite.prepare('SELECT id, date, headline, item_count, created_at FROM briefings ORDER BY created_at DESC LIMIT ?'),
     insertLogEntry: sqlite.prepare(
       'INSERT INTO log_entries (run_id, timestamp, level, component, message, metadata) VALUES (?, ?, ?, ?, ?, ?)'
     ),

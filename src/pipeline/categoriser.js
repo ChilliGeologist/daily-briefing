@@ -85,7 +85,7 @@ function parseResponse(responseText, batchSize, validSlugs, categoryNames) {
   return { assignments, suggestions };
 }
 
-async function categorise(items, db, ollama, settings, log) {
+async function categorise(items, db, ollama, settings, log, emitProgress, checkCancelled) {
   const categories = db.getCategories();
   const validSlugs = new Set(categories.map(c => c.slug));
   const categoryNames = new Map(categories.map(c => [c.slug, c.name]));
@@ -95,7 +95,10 @@ async function categorise(items, db, ollama, settings, log) {
   const categoryCounts = {};
 
   // Process in batches
+  var totalBatches = Math.ceil(items.length / BATCH_SIZE);
+  if (emitProgress) emitProgress('categorise', 0, totalBatches);
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    if (checkCancelled) checkCancelled();
     const batch = items.slice(i, i + BATCH_SIZE);
     const prompt = buildPrompt(categories, batch);
 
@@ -123,7 +126,7 @@ async function categorise(items, db, ollama, settings, log) {
       for (const item of batch) {
         const fallbackCat = item.default_category && validSlugs.has(item.default_category)
           ? [item.default_category]
-          : ['top-stories'];
+          : ['other'];
         categorised.push({ ...item, categories: fallbackCat });
         for (const cat of fallbackCat) {
           categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
@@ -144,15 +147,15 @@ async function categorise(items, db, ollama, settings, log) {
           categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
         }
       } else {
-        // No valid categories assigned — try default_category fallback
-        if (item.default_category && validSlugs.has(item.default_category)) {
-          categorised.push({ ...item, categories: [item.default_category] });
-          categoryCounts[item.default_category] = (categoryCounts[item.default_category] || 0) + 1;
-        } else {
-          uncategorised.push(item);
-        }
+        // No valid categories assigned — fall back to default_category or "other"
+        const fallback = item.default_category && validSlugs.has(item.default_category)
+          ? item.default_category
+          : 'other';
+        categorised.push({ ...item, categories: [fallback] });
+        categoryCounts[fallback] = (categoryCounts[fallback] || 0) + 1;
       }
     }
+    if (emitProgress) emitProgress('categorise', Math.floor(i / BATCH_SIZE) + 1, totalBatches);
   }
 
   // Deduplicate suggestions (case-insensitive)
@@ -166,10 +169,13 @@ async function categorise(items, db, ollama, settings, log) {
     }
   }
 
-  // Store suggestions in DB if we have a runId from the logger
-  // The logger doesn't expose runId directly, so we pass suggestions back for the caller
-  // However, per spec we try to get runId — the logger stores it in closure but doesn't expose it.
-  // We'll just store via db.addSuggestion with null runId if needed.
+  // Dismiss old suggestions before storing new ones from this run
+  try {
+    db.dismissAllSuggestions();
+  } catch (err) {
+    log.warn('pipeline:categoriser', `Failed to dismiss old suggestions: ${err.message}`);
+  }
+
   for (const suggestion of uniqueSuggestions) {
     const count = allSuggestions.filter(s => s === suggestion).length;
     try {

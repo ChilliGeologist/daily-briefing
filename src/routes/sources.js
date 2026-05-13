@@ -1,6 +1,7 @@
 'use strict';
 
 const router = require('express').Router();
+const { detectSource } = require('../sourceDetect');
 
 const VALID_TYPES = ['rss', 'reddit', 'api'];
 
@@ -10,6 +11,17 @@ module.exports = function (db) {
       res.json({ sources: db.getSources() });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/sources/detect', async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: 'url is required' });
+      const detected = await detectSource(url);
+      res.json(detected);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
     }
   });
 

@@ -31,6 +31,15 @@ module.exports = function (db) {
     }
   });
 
+  router.post('/categories/suggestions/dismiss-all', (req, res) => {
+    try {
+      db.dismissAllSuggestions();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.post('/categories/suggestions/:id/dismiss', (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -78,7 +87,10 @@ module.exports = function (db) {
 
   router.get('/categories', (req, res) => {
     try {
-      res.json({ categories: db.getCategories() });
+      const all = db.getCategories();
+      // Hide system categories from the UI unless ?all=true (used internally by pipeline)
+      const categories = req.query.all === 'true' ? all : all.filter(c => c.slug !== 'other');
+      res.json({ categories });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -118,6 +130,12 @@ module.exports = function (db) {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+      // Protect system categories
+      const categories = db.getCategories();
+      const cat = categories.find(c => c.id === id);
+      if (cat && cat.slug === 'other') {
+        return res.status(403).json({ error: 'Cannot delete the system "Other" category' });
+      }
       db.deleteCategory(id);
       res.json({ ok: true });
     } catch (err) {

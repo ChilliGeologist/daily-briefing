@@ -158,6 +158,7 @@ bindThemeSwitcher();
 // ============================================================
 
 var currentDate = null;
+var currentBriefingId = null;
 
 function getReadItems() {
   if (!currentDate) return {};
@@ -196,8 +197,8 @@ function updateSectionCounts(sectionEl, sectionId) {
 // 5. Briefing Rendering
 // ============================================================
 
-async function loadBriefing(date) {
-  var url = date ? '/api/briefing/' + date : '/api/briefing';
+async function loadBriefing(id) {
+  var url = id ? '/api/briefing/' + id : '/api/briefing';
   var loading = $('#loading');
   var emptyState = $('#empty-state');
   var container = $('#sections-container');
@@ -219,6 +220,7 @@ async function loadBriefing(date) {
     }
 
     currentDate = json.date;
+    currentBriefingId = json.id;
     var briefing = json.data;
 
     $('#briefing-date').textContent = formatDate(json.date);
@@ -227,7 +229,7 @@ async function loadBriefing(date) {
 
     // Mark active archive item
     $$('.archive-item').forEach(function(el) {
-      el.classList.toggle('active', el.dataset.date === json.date);
+      el.classList.toggle('active', el.dataset.id === String(json.id));
     });
 
     // Render sections
@@ -383,14 +385,21 @@ async function loadArchive() {
     var json = await res.json();
     archiveBriefings = json.briefings || [];
     archivePage = 0;
-    if (currentDate) {
-      var idx = archiveBriefings.findIndex(function(b) { return b.date === currentDate; });
+    if (currentBriefingId) {
+      var idx = archiveBriefings.findIndex(function(b) { return b.id === currentBriefingId; });
       if (idx >= 0) archivePage = Math.floor(idx / ARCHIVE_PAGE_SIZE);
     }
     renderArchivePage();
   } catch (err) {
     console.error('Failed to load archive:', err);
   }
+}
+
+function formatArchiveTime(createdAt) {
+  if (!createdAt) return '';
+  // created_at is like "2026-04-11 09:36:36" — extract time portion
+  var timePart = (createdAt.includes('T') ? createdAt.split('T')[1] : createdAt.split(' ')[1]) || '';
+  return timePart.slice(0, 5);
 }
 
 function renderArchivePage() {
@@ -402,12 +411,13 @@ function renderArchivePage() {
   var page = archiveBriefings.slice(start, start + ARCHIVE_PAGE_SIZE);
 
   page.forEach(function(b) {
+    var timeStr = formatArchiveTime(b.created_at);
     var item = el('div', {
-      className: 'archive-item' + (b.date === currentDate ? ' active' : ''),
-      'data-date': b.date,
-      onclick: function() { loadBriefing(b.date); }
+      className: 'archive-item' + (b.id === currentBriefingId ? ' active' : ''),
+      'data-id': b.id,
+      onclick: function() { loadBriefing(b.id); }
     }, [
-      el('span', { className: 'archive-date', textContent: formatDateShort(b.date) }),
+      el('span', { className: 'archive-date', textContent: formatDateShort(b.date) + (timeStr ? ' ' + timeStr : '') }),
       el('span', { className: 'archive-headline', textContent: b.headline || 'No headline' }),
       el('span', { className: 'archive-count', textContent: (b.item_count || 0) + ' items' })
     ]);
@@ -421,6 +431,10 @@ function renderArchivePage() {
     list.appendChild(el('div', { className: 'archive-pagination' }, [btnNewer, info, btnOlder]));
   }
 }
+
+$('#app-title').addEventListener('click', function() {
+  router.navigate('/');
+});
 
 $('#btn-archive').addEventListener('click', function() {
   router.toggle('/archive');
@@ -458,7 +472,6 @@ function switchSettingsTab(tabName) {
     preferences: loadPreferencesTab,
     schedule: loadScheduleTab,
     ollama: loadOllamaTab,
-    updates: loadUpdatesTab,
     backup: loadBackupTab,
     log: loadLogTab,
   };
@@ -515,11 +528,45 @@ function renderSourceItem(source) {
   toggleInput.checked = !!source.enabled;
   toggleLabel.append(toggleInput, el('span', { className: 'toggle-slider' }));
 
+  var nameEl = el('div', { className: 'source-name', textContent: source.name, title: 'Click to rename' });
+  nameEl.addEventListener('click', function() {
+    var input = el('input', { className: 'form-input source-name-edit', value: source.name });
+    var committed = false;
+    function commit() {
+      if (committed) return;
+      committed = true;
+      var newName = input.value.trim();
+      if (!newName || newName === source.name) {
+        input.replaceWith(nameEl);
+        return;
+      }
+      fetch('/api/sources/' + source.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      }).then(function(r) {
+        if (r.ok) {
+          source.name = newName;
+          nameEl.textContent = newName;
+        }
+        input.replaceWith(nameEl);
+      }).catch(function() { input.replaceWith(nameEl); });
+    }
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { committed = true; input.replaceWith(nameEl); }
+    });
+    input.addEventListener('blur', commit);
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+  });
+
   var item = el('div', { className: 'source-item' + (source.enabled ? '' : ' disabled') }, [
     el('div', { className: 'source-status ' + statusClass, title: source.last_fetch_status || 'never' }),
     el('div', { className: 'source-info' }, [
-      el('div', { className: 'source-name', textContent: source.name }),
-      el('div', { className: 'source-url', textContent: source.url })
+      nameEl,
+      el('div', { className: 'source-url', textContent: source.type === 'reddit' ? 'https://www.reddit.com/r/' + source.url : source.url })
     ]),
     el('span', { className: 'source-type-badge ' + source.type, textContent: source.type }),
     el('div', { className: 'source-controls' }, [
@@ -551,48 +598,98 @@ function renderSourceItem(source) {
 
 function renderAddSourceForm() {
   var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
+
+  var pasteInput = el('input', { className: 'form-input', placeholder: 'Paste RSS feed, Reddit link, or site URL' });
+  var statusEl = el('div', { className: 'status-msg hidden' });
+
+  var advancedWrap = el('div', { className: 'hidden', style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--border)' } });
   var nameInput = el('input', { className: 'form-input', placeholder: 'Source name' });
   var typeSelect = el('select', { className: 'form-select' });
   ['rss', 'reddit', 'api'].forEach(function(t) { typeSelect.appendChild(el('option', { value: t, textContent: t.toUpperCase() })); });
-  var urlInput = el('input', { className: 'form-input', placeholder: 'Feed URL' });
+  var urlInput = el('input', { className: 'form-input', placeholder: 'Feed URL or subreddit' });
 
-  var statusEl = el('div', { className: 'status-msg hidden' });
+  function showStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status-msg ' + cls;
+  }
+
+  async function createSource(payload) {
+    var res = await fetch('/api/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      pasteInput.value = '';
+      nameInput.value = '';
+      urlInput.value = '';
+      advancedWrap.classList.add('hidden');
+      switchSettingsTab('sources');
+    } else {
+      var errData = await res.json().catch(function() { return {}; });
+      showStatus(errData.error || 'Failed to add source', 'error');
+    }
+  }
 
   var addBtn = el('button', { className: 'btn btn-primary', textContent: 'Add Source', onclick: async function() {
-    if (!nameInput.value.trim() || !urlInput.value.trim()) return;
+    var url = pasteInput.value.trim();
+    if (!url) return;
+    showStatus('Detecting…', '');
+    addBtn.disabled = true;
     try {
-      var res = await fetch('/api/sources', {
+      var res = await fetch('/api/sources/detect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: nameInput.value.trim(),
-          type: typeSelect.value,
-          url: urlInput.value.trim()
-        })
+        body: JSON.stringify({ url: url })
       });
-      if (res.ok) {
-        nameInput.value = ''; urlInput.value = '';
-        switchSettingsTab('sources');
-      } else {
-        var errData = await res.json();
-        statusEl.textContent = errData.error || 'Failed';
-        statusEl.className = 'status-msg error';
+      var data = await res.json();
+      if (!res.ok) {
+        showStatus((data && data.error) || 'Detection failed. Use Advanced below.', 'error');
+        advancedWrap.classList.remove('hidden');
+        urlInput.value = url;
+        return;
       }
+      await createSource({ name: data.name, type: data.type, url: data.url, config: data.config });
     } catch (e) {
-      statusEl.textContent = 'Failed to add source';
-      statusEl.className = 'status-msg error';
+      showStatus('Detection failed: ' + e.message, 'error');
+      advancedWrap.classList.remove('hidden');
+      urlInput.value = url;
+    } finally {
+      addBtn.disabled = false;
     }
   }});
 
-  form.append(
-    el('div', { className: 'form-label', textContent: 'Add New Source' }),
+  var advancedToggle = el('button', {
+    className: 'btn btn-secondary btn-sm',
+    textContent: 'Advanced',
+    style: { marginLeft: '8px' },
+    onclick: function() { advancedWrap.classList.toggle('hidden'); }
+  });
+
+  var advancedAddBtn = el('button', { className: 'btn btn-primary', textContent: 'Add (manual)', onclick: async function() {
+    if (!nameInput.value.trim() || !urlInput.value.trim()) {
+      showStatus('Name and URL required', 'error');
+      return;
+    }
+    await createSource({ name: nameInput.value.trim(), type: typeSelect.value, url: urlInput.value.trim() });
+  }});
+
+  advancedWrap.append(
+    el('div', { className: 'form-label', textContent: 'Manual Entry' }),
     el('div', { className: 'form-row', style: { marginBottom: '8px' } }, [
       el('div', { className: 'form-group' }, [nameInput]),
       el('div', { className: 'form-group', style: { maxWidth: '100px' } }, [typeSelect])
     ]),
     el('div', { style: { marginBottom: '8px' } }, [urlInput]),
-    addBtn,
-    statusEl
+    advancedAddBtn
+  );
+
+  form.append(
+    el('div', { className: 'form-label', textContent: 'Add New Source' }),
+    el('div', { style: { marginBottom: '8px' } }, [pasteInput]),
+    el('div', {}, [addBtn, advancedToggle]),
+    statusEl,
+    advancedWrap
   );
   return form;
 }
@@ -1057,89 +1154,6 @@ async function loadOllamaTab(container) {
   }
 }
 
-// --- Tab: Updates ---
-async function loadUpdatesTab(container) {
-  container.textContent = 'Checking for updates...';
-  container.prepend(el('span', { className: 'mini-spinner' }));
-  try {
-    var statusRes = await fetch('/api/updates/status');
-    var status = await statusRes.json();
-    container.replaceChildren();
-
-    container.appendChild(el('div', { className: 'update-info' }, [
-      el('div', { className: 'update-version', textContent: 'Current version: ' + (status.current || 'unknown') })
-    ]));
-
-    var resultEl = el('div');
-    var checkBtn = el('button', { className: 'btn btn-secondary', textContent: 'Check for Updates', onclick: async function() {
-      checkBtn.disabled = true;
-      checkBtn.textContent = 'Checking...';
-      try {
-        var res = await fetch('/api/updates/check');
-        var data = await res.json();
-        resultEl.replaceChildren();
-        if (data.available) {
-          resultEl.appendChild(el('div', { className: 'update-available', textContent: 'Update available!' }));
-          if (data.changelog && data.changelog.length) {
-            var logText = data.changelog.map(function(c) { return c.hash.slice(0, 7) + ' ' + c.message; }).join('\n');
-            resultEl.appendChild(el('pre', { className: 'update-changelog', textContent: logText }));
-          }
-          var applyBtn = el('button', { className: 'btn btn-primary', textContent: 'Update Now', style: { marginTop: '8px' }, onclick: async function() {
-            applyBtn.disabled = true;
-            applyBtn.textContent = 'Updating...';
-            try {
-              await fetch('/api/updates/apply', { method: 'POST' });
-              resultEl.appendChild(el('div', { className: 'status-msg success', textContent: 'Update applied. Restarting...' }));
-            } catch (e) {
-              resultEl.appendChild(el('div', { className: 'status-msg error', textContent: 'Update failed: ' + e.message }));
-            }
-          }});
-          resultEl.appendChild(applyBtn);
-        } else {
-          resultEl.appendChild(el('div', { className: 'status-msg success', textContent: 'Already up to date' }));
-        }
-      } catch (e) {
-        resultEl.appendChild(el('div', { className: 'status-msg error', textContent: 'Check failed: ' + e.message }));
-      }
-      checkBtn.disabled = false;
-      checkBtn.textContent = 'Check for Updates';
-    }});
-
-    container.append(checkBtn, resultEl);
-
-    // Rollback section
-    try {
-      var historyRes = await fetch('/api/updates/history');
-      var historyData = await historyRes.json();
-      var history = historyData.history;
-      if (history && history.length > 0) {
-        var rollbackSection = el('div', { style: { marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
-        rollbackSection.appendChild(el('div', { className: 'form-label', textContent: 'Version History' }));
-        var rollbackList = el('div', { className: 'run-list' });
-        history.forEach(function(v) {
-          rollbackList.appendChild(el('div', { className: 'run-item', onclick: async function() {
-            if (!confirm('Rollback to ' + v.hash.slice(0, 7) + '?')) return;
-            await fetch('/api/updates/rollback', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ hash: v.hash })
-            });
-          }}, [
-            el('div', { className: 'run-info' }, [
-              el('div', { className: 'run-date', textContent: v.hash.slice(0, 7) + ' ' + (v.message || '') }),
-              el('div', { className: 'run-stats', textContent: v.date || '' })
-            ])
-          ]));
-        });
-        rollbackSection.appendChild(rollbackList);
-        container.appendChild(rollbackSection);
-      }
-    } catch (e) { /* no history available */ }
-  } catch (err) {
-    container.replaceChildren(el('p', { className: 'status-msg error', textContent: 'Failed to load update status' }));
-  }
-}
-
 // --- Tab: Backup ---
 function loadBackupTab(container) {
   container.replaceChildren();
@@ -1210,7 +1224,7 @@ async function loadLogTab(container) {
     var list = el('div', { className: 'run-list' });
 
     runs.forEach(function(run) {
-      var statusClass = run.status === 'complete' ? 'success' : run.status === 'running' ? 'running' : 'error';
+      var statusClass = (run.status === 'complete' || run.status === 'completed') ? 'success' : run.status === 'cancelled' ? 'cancelled' : run.status === 'running' ? 'running' : 'error';
       var stats = [
         run.items_collected ? run.items_collected + ' collected' : null,
         run.items_curated ? run.items_curated + ' curated' : null,
@@ -1292,9 +1306,112 @@ function renderLogEntries(viewer, entries, minLevel) {
 // 8. Pipeline Monitor
 // ============================================================
 
-var PIPELINE_STAGES = ['Collect', 'Score', 'Dedup', 'Categorise', 'Summarise', 'Assemble'];
+var PIPELINE_STAGES = ['Collect', 'Score', 'Extract', 'Dedup', 'Categorise', 'Summarise', 'Assemble'];
+var STAGE_DESCRIPTIONS = {
+  collect: 'Collecting items from configured sources',
+  score: 'Scoring items for relevance',
+  extract: 'Fetching article content and top Reddit comments',
+  dedup: 'Removing duplicate items',
+  categorise: 'Sorting items into categories',
+  summarise: 'Generating summaries',
+  assemble: 'Assembling the final briefing'
+};
 var pipelineSSE = null;
+var pipelineActiveStage = null;
+var pipelineStageProgress = {};
 var pipelineStatusInterval = null;
+
+// Circular progress ring
+var RING_RADIUS = 16;
+var RING_STROKE = 3;
+var RING_SIZE = (RING_RADIUS + RING_STROKE) * 2;
+var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function createStageRing(id) {
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', RING_SIZE);
+  svg.setAttribute('height', RING_SIZE);
+  svg.setAttribute('viewBox', '0 0 ' + RING_SIZE + ' ' + RING_SIZE);
+  svg.setAttribute('class', 'stage-ring');
+  svg.id = id;
+
+  var cx = RING_SIZE / 2;
+  var cy = RING_SIZE / 2;
+
+  // Background track
+  var bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  bg.setAttribute('cx', cx);
+  bg.setAttribute('cy', cy);
+  bg.setAttribute('r', RING_RADIUS);
+  bg.setAttribute('class', 'stage-ring-bg');
+  svg.appendChild(bg);
+
+  // Progress arc
+  var arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  arc.setAttribute('cx', cx);
+  arc.setAttribute('cy', cy);
+  arc.setAttribute('r', RING_RADIUS);
+  arc.setAttribute('class', 'stage-ring-progress');
+  arc.setAttribute('stroke-dasharray', RING_CIRCUMFERENCE);
+  arc.setAttribute('stroke-dashoffset', RING_CIRCUMFERENCE);
+  arc.setAttribute('transform', 'rotate(-90 ' + cx + ' ' + cy + ')');
+  svg.appendChild(arc);
+
+  // Centre icon container
+  var fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+  fo.setAttribute('x', cx - 8);
+  fo.setAttribute('y', cy - 8);
+  fo.setAttribute('width', 16);
+  fo.setAttribute('height', 16);
+  var iconDiv = document.createElement('div');
+  iconDiv.className = 'stage-ring-icon';
+  iconDiv.id = id + '-icon';
+  fo.appendChild(iconDiv);
+  svg.appendChild(fo);
+
+  return svg;
+}
+
+function setRingProgress(stageKey, fraction) {
+  var ring = $('#stage-' + stageKey);
+  if (!ring) return;
+  var arc = ring.querySelector('.stage-ring-progress');
+  if (!arc) return;
+  var offset = RING_CIRCUMFERENCE * (1 - Math.min(1, Math.max(0, fraction)));
+  arc.setAttribute('stroke-dashoffset', offset);
+}
+
+function resetAllRings() {
+  PIPELINE_STAGES.forEach(function(name) {
+    var key = name.toLowerCase();
+    var ring = $('#stage-' + key);
+    if (ring) ring.removeAttribute('data-state');
+    setRingProgress(key, 0);
+    var iconDiv = $('#stage-' + key + '-icon');
+    if (iconDiv) iconDiv.replaceChildren();
+    var statEl = $('#stage-stat-' + key);
+    if (statEl) statEl.textContent = '';
+  });
+  var bar = $('#pipeline-bar-fill');
+  if (bar) bar.style.width = '0%';
+  var logEl = $('#pipeline-log');
+  if (logEl) logEl.replaceChildren();
+}
+
+function setRingState(stageKey, state) {
+  var ring = $('#stage-' + stageKey);
+  if (!ring) return;
+  ring.setAttribute('data-state', state);
+  var iconDiv = $('#stage-' + stageKey + '-icon');
+  if (!iconDiv) return;
+  iconDiv.replaceChildren();
+  if (state === 'complete') {
+    setTrustedSVG(iconDiv, ICONS.check);
+    setRingProgress(stageKey, 1);
+  } else if (state === 'error') {
+    setTrustedSVG(iconDiv, ICONS.x);
+  }
+}
 
 $('#btn-pipeline').addEventListener('click', function() {
   router.toggle('/pipeline');
@@ -1306,14 +1423,125 @@ $('#btn-close-pipeline').addEventListener('click', function() {
 
 function openPipelinePanel() {
   renderPipelineContent();
-  connectPipelineSSE();
   pipelineStatusInterval = setInterval(pollPipelineStatus, 30000);
   pollPipelineStatus();
+  restorePipelineState();
 }
 
 function closePipelinePanel() {
-  if (pipelineSSE) { pipelineSSE.close(); pipelineSSE = null; }
   if (pipelineStatusInterval) { clearInterval(pipelineStatusInterval); pipelineStatusInterval = null; }
+}
+
+// Each stage logs a specific summary message when it completes.
+// We match these to determine which stages actually finished.
+var STAGE_COMPLETE_PATTERNS = {
+  collect: /^Collection complete:/,
+  score: /^Scored \d+ items:/,
+  extract: /^Extracted \d+ items/,
+  dedup: /^Dedup: /,
+  categorise: /^Categorised \d+ items/,
+  summarise: /^Summarised \d+ items in/,
+  assemble: /^Assembled briefing:/
+};
+var STAGE_COMPLETE_COMPONENTS = {
+  collect: 'collector',
+  score: 'scorer',
+  extract: 'pipeline:extract',
+  dedup: 'dedup',
+  categorise: 'pipeline:categoriser',
+  summarise: 'pipeline:summariser',
+  assemble: 'assembler'
+};
+
+function detectCompletedStages(entries) {
+  var completed = new Set();
+  entries.forEach(function(e) {
+    PIPELINE_STAGES.forEach(function(name) {
+      var key = name.toLowerCase();
+      var comp = STAGE_COMPLETE_COMPONENTS[key];
+      var pattern = STAGE_COMPLETE_PATTERNS[key];
+      if (e.component === comp && pattern && pattern.test(e.message)) {
+        completed.add(key);
+      }
+    });
+  });
+  return completed;
+}
+
+async function restorePipelineState() {
+  try {
+    var res = await fetch('/api/pipeline/status');
+    var status = await res.json();
+    var logEl = $('#pipeline-log');
+    var idleEl = $('#pipeline-idle');
+
+    if (status.running && status.currentRun) {
+      // Restore rings for completed stages
+      var currentStage = status.currentRun.stage;
+      var stageIdx = PIPELINE_STAGES.findIndex(function(s) { return s.toLowerCase() === currentStage; });
+      for (var i = 0; i < stageIdx; i++) {
+        setRingState(PIPELINE_STAGES[i].toLowerCase(), 'complete');
+      }
+      var ring = $('#stage-' + currentStage);
+      if (ring) ring.setAttribute('data-state', 'running');
+      // Restore progress for current and completed stages from tracked data
+      for (var si = 0; si <= stageIdx; si++) {
+        var sk = PIPELINE_STAGES[si].toLowerCase();
+        var prog = pipelineStageProgress[sk];
+        if (prog && prog.total > 0) {
+          setRingProgress(sk, prog.current / prog.total);
+          var se = $('#stage-stat-' + sk);
+          if (se) se.textContent = prog.current + '/' + prog.total;
+        }
+      }
+      var bar = $('#pipeline-bar-fill');
+      if (bar) bar.style.width = ((stageIdx + 0.5) / PIPELINE_STAGES.length * 100) + '%';
+
+      // Load log entries so far
+      if (idleEl) idleEl.classList.add('hidden');
+      showCancelButton(true);
+      if (logEl) {
+        logEl.classList.remove('hidden');
+        var logRes = await fetch('/api/pipeline/runs/' + status.currentRun.runId + '/log');
+        var logData = await logRes.json();
+        if (logData.entries && logData.entries.length) {
+          renderLogEntries(logEl, logData.entries, 'info');
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+      }
+    } else if (status.lastRun) {
+      // Load last run's log
+      var entries2 = [];
+      if (logEl) {
+        logEl.classList.remove('hidden');
+        var logRes2 = await fetch('/api/pipeline/runs/' + status.lastRun.run_id + '/log');
+        var logData2 = await logRes2.json();
+        entries2 = logData2.entries || [];
+        if (entries2.length) {
+          renderLogEntries(logEl, entries2, 'info');
+        }
+      }
+      // Detect which stages truly completed via their summary log messages
+      var completedStages = detectCompletedStages(entries2);
+      var isSuccess = status.lastRun.status === 'complete' || status.lastRun.status === 'completed';
+      var lastCompletedIdx = -1;
+      PIPELINE_STAGES.forEach(function(name, idx) {
+        var key = name.toLowerCase();
+        if (completedStages.has(key)) {
+          setRingState(key, 'complete');
+          lastCompletedIdx = idx;
+        }
+      });
+      // If the run failed, mark the next stage after the last completed one as error
+      if (!isSuccess && lastCompletedIdx < PIPELINE_STAGES.length - 1) {
+        var failedKey = PIPELINE_STAGES[lastCompletedIdx + 1].toLowerCase();
+        setRingState(failedKey, 'error');
+      }
+      var completedCount = lastCompletedIdx + 1 + (isSuccess ? 0 : 0.5);
+      var bar2 = $('#pipeline-bar-fill');
+      if (bar2) bar2.style.width = (completedCount / PIPELINE_STAGES.length * 100) + '%';
+    }
+  } catch (e) { /* ignore */ }
 }
 
 function renderPipelineContent() {
@@ -1323,11 +1551,12 @@ function renderPipelineContent() {
   // Stage indicators
   var stages = el('div', { className: 'pipeline-stages', id: 'pipeline-stages' });
   PIPELINE_STAGES.forEach(function(name) {
-    stages.appendChild(el('div', { className: 'pipeline-stage', 'data-stage': name.toLowerCase() }, [
-      el('div', { className: 'stage-dot pending', id: 'stage-' + name.toLowerCase() }),
-      el('div', { className: 'stage-label', textContent: name }),
-      el('div', { className: 'stage-stat', id: 'stage-stat-' + name.toLowerCase() })
-    ]));
+    var key = name.toLowerCase();
+    var stageEl = el('div', { className: 'pipeline-stage', 'data-stage': key, title: STAGE_DESCRIPTIONS[key] || name });
+    stageEl.appendChild(createStageRing('stage-' + key));
+    stageEl.appendChild(el('div', { className: 'stage-label', textContent: name }));
+    stageEl.appendChild(el('div', { className: 'stage-stat', id: 'stage-stat-' + name.toLowerCase() }));
+    stages.appendChild(stageEl);
   });
   container.appendChild(stages);
 
@@ -1343,11 +1572,14 @@ function renderPipelineContent() {
   container.appendChild(el('div', { className: 'pipeline-idle', id: 'pipeline-idle' }, [
     el('div', { textContent: 'Idle' }),
     el('div', { className: 'pipeline-last-run', id: 'pipeline-last-run' }),
+  ]));
+
+  // Action buttons (outside idle so they stay visible during runs)
+  container.appendChild(el('div', { className: 'pipeline-actions', id: 'pipeline-actions', style: { marginTop: '10px', textAlign: 'center' } }, [
     el('button', {
       className: 'btn btn-primary',
       id: 'pipeline-run-btn',
       textContent: 'Run Now',
-      style: { marginTop: '10px' },
       onclick: async function() {
         var btn = $('#pipeline-run-btn');
         btn.disabled = true;
@@ -1357,6 +1589,22 @@ function renderPipelineContent() {
         } catch (e) {
           btn.disabled = false;
           btn.textContent = 'Run Now';
+        }
+      }
+    }),
+    el('button', {
+      className: 'btn btn-danger hidden',
+      id: 'pipeline-cancel-btn',
+      textContent: 'Cancel Run',
+      onclick: async function() {
+        var btn = $('#pipeline-cancel-btn');
+        btn.disabled = true;
+        btn.textContent = 'Cancelling...';
+        try {
+          await fetch('/api/pipeline/cancel', { method: 'POST' });
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Cancel Run';
         }
       }
     })
@@ -1377,9 +1625,11 @@ async function pollPipelineStatus() {
       var logEl = $('#pipeline-log');
       if (idleEl) idleEl.classList.add('hidden');
       if (logEl) logEl.classList.remove('hidden');
+      showCancelButton(true);
     } else {
       var idleEl2 = $('#pipeline-idle');
       if (idleEl2) idleEl2.classList.remove('hidden');
+      showCancelButton(false);
       if (status.lastRun) {
         var lr = status.lastRun;
         var text = 'Last run: ' + (lr.status || '?') + ' at ' + (lr.started_at || '').replace('T', ' ').slice(0, 19);
@@ -1395,16 +1645,50 @@ async function pollPipelineStatus() {
     var historyEl = $('#pipeline-history');
     if (historyEl && runs && runs.length) {
       historyEl.replaceChildren(el('div', { className: 'form-label', textContent: 'Recent Runs' }));
+      var runKey = el('div', { className: 'source-key', style: { marginBottom: '8px' } }, [
+        el('span', { className: 'source-key-item' }, [el('span', { className: 'run-status-dot success' }), el('span', { textContent: 'Complete' })]),
+        el('span', { className: 'source-key-item' }, [el('span', { className: 'run-status-dot error' }), el('span', { textContent: 'Error' })]),
+        el('span', { className: 'source-key-item' }, [el('span', { className: 'run-status-dot cancelled' }), el('span', { textContent: 'Cancelled' })]),
+        el('span', { className: 'source-key-item' }, [el('span', { className: 'run-status-dot running' }), el('span', { textContent: 'Running' })])
+      ]);
+      historyEl.appendChild(runKey);
       var histList = el('div', { className: 'run-list' });
       runs.forEach(function(run) {
-        var statusClass = run.status === 'complete' ? 'success' : run.status === 'running' ? 'running' : 'error';
-        histList.appendChild(el('div', { className: 'run-item' }, [
+        var statusClass = (run.status === 'complete' || run.status === 'completed') ? 'success' : run.status === 'cancelled' ? 'cancelled' : run.status === 'running' ? 'running' : 'error';
+        var logPanel = el('div', { className: 'run-log-panel hidden' });
+        var loaded = false;
+        var runItem = el('div', { className: 'run-item', onclick: async function() {
+          // Collapse any other open panels
+          histList.querySelectorAll('.run-log-panel:not(.hidden)').forEach(function(p) {
+            if (p !== logPanel) p.classList.add('hidden');
+          });
+          logPanel.classList.toggle('hidden');
+          if (!loaded && !logPanel.classList.contains('hidden')) {
+            loaded = true;
+            logPanel.replaceChildren(el('span', { className: 'mini-spinner' }));
+            try {
+              var logRes = await fetch('/api/pipeline/runs/' + run.run_id + '/log');
+              var logData = await logRes.json();
+              logPanel.replaceChildren();
+              if (logData.entries && logData.entries.length) {
+                renderLogEntries(logPanel, logData.entries, 'info');
+              } else {
+                logPanel.appendChild(el('div', { textContent: 'No log entries', style: { color: 'var(--text-dim)', fontSize: '12px' } }));
+              }
+            } catch (e) {
+              logPanel.replaceChildren(el('div', { textContent: 'Failed to load log', style: { color: 'var(--red)', fontSize: '12px' } }));
+              loaded = false;
+            }
+          }
+        }}, [
           el('div', { className: 'run-status-dot ' + statusClass }),
           el('div', { className: 'run-info' }, [
             el('div', { className: 'run-date', textContent: (run.started_at || '').replace('T', ' ').slice(0, 19) }),
             el('div', { className: 'run-stats', textContent: (run.trigger || '') + (run.items_curated ? ' | ' + run.items_curated + ' curated' : '') })
           ])
-        ]));
+        ]);
+        histList.appendChild(runItem);
+        histList.appendChild(logPanel);
       });
       historyEl.appendChild(histList);
     }
@@ -1413,7 +1697,7 @@ async function pollPipelineStatus() {
   }
 }
 
-function connectPipelineSSE() {
+function connectGlobalSSE() {
   if (pipelineSSE) pipelineSSE.close();
   pipelineSSE = new EventSource('/api/pipeline/events');
 
@@ -1430,30 +1714,34 @@ function connectPipelineSSE() {
 }
 
 function handlePipelineEvent(data) {
-  // Update stage indicators
-  if (data.stage) {
+  // Progress events — update ring fill
+  if (data.type === 'progress' && data.stage && data.total > 0) {
+    pipelineStageProgress[data.stage] = { current: data.current, total: data.total };
+    setRingProgress(data.stage, data.current / data.total);
+    var statEl = $('#stage-stat-' + data.stage);
+    if (statEl) statEl.textContent = data.current + '/' + data.total;
+  }
+
+  // Stage events — update ring state
+  if (data.stage && data.status) {
     var stageIdx = PIPELINE_STAGES.findIndex(function(s) { return s.toLowerCase() === data.stage.toLowerCase(); });
     if (stageIdx >= 0) {
       // Mark previous stages complete
       for (var i = 0; i < stageIdx; i++) {
-        var prevDot = $('#stage-' + PIPELINE_STAGES[i].toLowerCase());
-        if (prevDot) { prevDot.className = 'stage-dot complete'; prevDot.replaceChildren(); setTrustedSVG(prevDot, ICONS.check); }
+        setRingState(PIPELINE_STAGES[i].toLowerCase(), 'complete');
       }
       // Mark current stage
-      var currentDot = $('#stage-' + PIPELINE_STAGES[stageIdx].toLowerCase());
-      if (currentDot) {
-        if (data.status === 'complete' || data.status === 'done') {
-          currentDot.className = 'stage-dot complete';
-          currentDot.replaceChildren();
-          setTrustedSVG(currentDot, ICONS.check);
-        } else if (data.status === 'error') {
-          currentDot.className = 'stage-dot error';
-          currentDot.replaceChildren();
-          setTrustedSVG(currentDot, ICONS.x);
-        } else {
-          currentDot.className = 'stage-dot running';
-          currentDot.replaceChildren();
-        }
+      var stageKey = PIPELINE_STAGES[stageIdx].toLowerCase();
+      if (data.status === 'running') {
+        pipelineActiveStage = stageKey;
+      }
+      if (data.status === 'complete' || data.status === 'done') {
+        setRingState(stageKey, 'complete');
+      } else if (data.status === 'error') {
+        setRingState(stageKey, 'error');
+      } else if (data.status === 'running') {
+        var ring = $('#stage-' + stageKey);
+        if (ring) ring.setAttribute('data-state', 'running');
       }
       // Update progress bar
       var progress = ((stageIdx + (data.status === 'complete' || data.status === 'done' ? 1 : 0.5)) / PIPELINE_STAGES.length) * 100;
@@ -1461,10 +1749,10 @@ function handlePipelineEvent(data) {
       if (bar) bar.style.width = progress + '%';
     }
 
-    // Stage stats
-    if (data.stats) {
-      var statEl = $('#stage-stat-' + data.stage.toLowerCase());
-      if (statEl) statEl.textContent = data.stats;
+    // Stage stats (from complete event)
+    if (data.stats && typeof data.stats === 'string') {
+      var statEl2 = $('#stage-stat-' + data.stage.toLowerCase());
+      if (statEl2) statEl2.textContent = data.stats;
     }
   }
 
@@ -1483,21 +1771,62 @@ function handlePipelineEvent(data) {
 
   // Pipeline complete
   if (data.type === 'complete' || data.status === 'pipeline_complete') {
-    updatePipelineStatus();
+    setTimeout(pollPipelineStatus, 500);
     setTimeout(function() { loadBriefing(); }, 2000);
   }
 
-  // Update header dot
+  // Pipeline error or cancelled
+  if (data.type === 'error' || data.type === 'cancelled') {
+    if (pipelineActiveStage) {
+      setRingState(pipelineActiveStage, 'error');
+      pipelineActiveStage = null;
+    }
+    showCancelButton(false);
+    setPipelineDotState(data.type === 'cancelled' ? 'cancelled' : 'error');
+    pollPipelineStatus();
+  }
+
+  // Update header dot and cancel button
   if (data.type === 'start') {
     setPipelineDotState('running');
+    showCancelButton(true);
+    resetAllRings();
+    pipelineActiveStage = null;
+    pipelineStageProgress = {};
+    // Hide idle, show log
+    var idleEl = $('#pipeline-idle');
+    var logEl = $('#pipeline-log');
+    if (idleEl) idleEl.classList.add('hidden');
+    if (logEl) logEl.classList.remove('hidden');
   } else if (data.type === 'complete') {
     setPipelineDotState(data.error ? 'error' : 'success');
+    showCancelButton(false);
   }
 }
 
 // ============================================================
 // 9. Status Indicator
 // ============================================================
+
+function showCancelButton(running) {
+  var runBtn = $('#pipeline-run-btn');
+  var cancelBtn = $('#pipeline-cancel-btn');
+  if (running) {
+    if (runBtn) runBtn.classList.add('hidden');
+    if (cancelBtn) {
+      cancelBtn.classList.remove('hidden');
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = 'Cancel Run';
+    }
+  } else {
+    if (runBtn) {
+      runBtn.classList.remove('hidden');
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run Now';
+    }
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+  }
+}
 
 function setPipelineDotState(state) {
   var dot = $('#pipeline-dot');
@@ -1516,22 +1845,51 @@ function updatePipelineDot(status) {
   if (status.running) {
     setPipelineDotState('running');
   } else if (status.lastRun) {
-    setPipelineDotState(status.lastRun.status === 'complete' ? 'success' : 'error');
+    var ls = status.lastRun.status;
+    setPipelineDotState(ls === 'complete' || ls === 'completed' ? 'success' : ls === 'cancelled' ? 'cancelled' : 'error');
   } else {
     setPipelineDotState('idle');
   }
 }
 
 // ============================================================
-// 10. Update Badge
+// 10. Version Footer
 // ============================================================
 
-async function checkForUpdateBadge() {
+async function initVersionFooter() {
+  var footer = $('#app-footer');
+  if (!footer) return;
+
+  // Show current version immediately
   try {
-    var res = await fetch('/api/updates/check');
-    var data = await res.json();
+    var statusRes = await fetch('/api/updates/status');
+    var status = await statusRes.json();
+    var versionEl = $('#footer-version');
+    var dotEl = $('#footer-update-dot');
+    if (versionEl) versionEl.textContent = 'v' + (status.current || '?');
+
+    // Check for updates in background
+    var checkRes = await fetch('/api/updates/check');
+    var check = await checkRes.json();
+
+    // Update settings badge
     var badge = $('#update-badge');
-    if (badge) badge.classList.toggle('hidden', !data.available);
+    if (badge) badge.classList.toggle('hidden', !check.available);
+
+    if (dotEl) {
+      if (check.available) {
+        dotEl.className = 'footer-dot update-available';
+        dotEl.title = 'Update available: v' + check.latest;
+        footer.title = 'Current: v' + (status.current || '?') + ' — Latest: v' + check.latest;
+      } else if (check.error) {
+        dotEl.className = 'footer-dot update-error';
+        dotEl.title = 'Update check failed';
+      } else {
+        dotEl.className = 'footer-dot update-current';
+        dotEl.title = 'Up to date';
+        footer.title = 'v' + (status.current || '?') + ' — up to date';
+      }
+    }
   } catch (e) { /* ignore */ }
 }
 
@@ -1553,7 +1911,18 @@ async function checkSuggestions() {
     banner.replaceChildren();
 
     var content = el('div', { className: 'suggestion-banner-content' });
-    content.appendChild(el('span', { textContent: suggestions.length + ' new category suggestion' + (suggestions.length > 1 ? 's' : '') + ' from the LLM' }));
+    var headerRow = el('div', { className: 'suggestion-header' }, [
+      el('span', { textContent: suggestions.length + ' new category suggestion' + (suggestions.length > 1 ? 's' : '') + ' from the LLM' }),
+      el('button', {
+        className: 'btn-dismiss-all',
+        textContent: 'Dismiss All',
+        onclick: async function() {
+          await fetch('/api/categories/suggestions/dismiss-all', { method: 'POST' });
+          checkSuggestions();
+        }
+      })
+    ]);
+    content.appendChild(headerRow);
 
     var actions = el('div', { className: 'suggestion-actions' });
     suggestions.forEach(function(s) {
@@ -1828,11 +2197,12 @@ loadAppTitle();
 // Load briefing
 loadBriefing();
 
-// Pipeline status indicator
+// Pipeline status indicator + global SSE
 updatePipelineStatus();
+connectGlobalSSE();
 
-// Check for updates (badge)
-checkForUpdateBadge();
+// Version footer + update check
+initVersionFooter();
 
 // Check for category suggestions
 checkSuggestions();

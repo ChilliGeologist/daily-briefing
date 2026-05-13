@@ -30,12 +30,13 @@ function keywordBonus(item, preferences) {
   return bonus;
 }
 
-function scoreAndFilter(items, settings, log) {
+function scoreAndFilter(items, settings, log, emitProgress) {
   const preferences = settings.getPreferences();
   const threshold = settings.getScoreThreshold();
   const maxItems = settings.getMaxCuratedItems();
 
-  const scored = items.map(item => {
+  if (emitProgress) emitProgress('score', 0, items.length);
+  const scored = items.map((item, idx) => {
     const recency = recencyScore(item);
     const engagement = engagementScore(item);
     const keywords = keywordBonus(item, preferences);
@@ -44,6 +45,7 @@ function scoreAndFilter(items, settings, log) {
 
     log.debug('scorer', `Score: ${relevance_score} (recency=${recency.toFixed(1)}, engagement=${engagement.toFixed(1)}, keywords=${keywords}) - ${item.title}`);
 
+    if (emitProgress) emitProgress('score', idx + 1, items.length);
     return { ...item, relevance_score };
   });
 

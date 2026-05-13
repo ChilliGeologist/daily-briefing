@@ -16,7 +16,7 @@
     <header>
       <div class="header-content">
         <div class="header-left">
-          <h1>Daily Briefing</h1>
+          <h1 id="app-title">Daily Briefing</h1>
           <p class="date" id="briefing-date"></p>
         </div>
         <div class="header-right">
@@ -62,7 +62,6 @@
         <button class="settings-tab" data-tab="preferences">Preferences</button>
         <button class="settings-tab" data-tab="schedule">Schedule</button>
         <button class="settings-tab" data-tab="ollama">Ollama</button>
-        <button class="settings-tab" data-tab="updates">Updates</button>
         <button class="settings-tab" data-tab="backup">Backup</button>
         <button class="settings-tab" data-tab="log">Log</button>
       </div>
@@ -119,6 +118,14 @@
         <p class="muted">Run the pipeline or wait for the next scheduled run.</p>
       </div>
     </main>
+    <footer id="app-footer" class="app-footer">
+      <div class="footer-inner">
+        <a href="https://github.com/ChilliGeologist/daily-briefing" target="_blank" rel="noopener" class="footer-link">Daily Briefing</a>
+        <span class="footer-sep">&middot;</span>
+        <span class="footer-dot" id="footer-update-dot"></span>
+        <span class="footer-version" id="footer-version"></span>
+      </div>
+    </footer>
   </div>
   <script src="/app.js"></script>
 </body>

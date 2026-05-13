@@ -16,7 +16,7 @@ module.exports = function (updater) {
     try {
       const current = updater.getCurrentVersion();
       const lastCheck = updater.getLastCheckResult();
-      res.json({ current, lastCheck });
+      res.json({ current: current.display, version: current.version, isDev: current.isDev, lastCheck });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
