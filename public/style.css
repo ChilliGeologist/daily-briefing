@@ -205,17 +205,6 @@ header h1 {
   50% { opacity: 0.4; }
 }
 
-/* Update badge */
-.update-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--red);
-}
-
 /* Suggestion banner */
 .suggestion-banner {
   max-width: var(--max-width);
@@ -1494,10 +1483,13 @@ main {
 .footer-sep { opacity: 0.4; }
 
 .footer-dot {
+  display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+  transform: translateY(-2px);
+  will-change: opacity;
 }
 
 .footer-dot.update-current { background: var(--green); }

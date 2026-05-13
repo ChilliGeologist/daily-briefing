@@ -2051,10 +2051,6 @@ async function initVersionFooter() {
     var checkRes = await fetch('/api/updates/check');
     var check = await checkRes.json();
 
-    // Update settings badge
-    var badge = $('#update-badge');
-    if (badge) badge.classList.toggle('hidden', !check.available);
-
     if (dotEl) {
       if (check.available) {
         dotEl.className = 'footer-dot update-available';
