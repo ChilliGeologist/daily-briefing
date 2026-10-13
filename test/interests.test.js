@@ -52,6 +52,16 @@ it('requires a place match for locally scoped topic interests', () => {
   ]);
 });
 
+it('counts Tasmanian organisations and "Tas" as Tasmania', () => {
+  const tasmania = DEFAULT_INTERESTS.filter(entry => entry.label === 'Tasmania');
+  assert.deepStrictEqual(
+    matchInterests('‘Cost-efficient’: TasNetworks latest govt business to defend AI ads', tasmania).map(m => m.term),
+    ['TasNetworks'],
+  );
+  assert.deepStrictEqual(matchInterests('Free for Tas residents', tasmania).map(m => m.term), ['Tas']);
+  assert.deepStrictEqual(matchInterests('Taser used in arrest', tasmania), []);
+});
+
 it('matches whole words and phrases case-insensitively once per interest', () => {
   const interests = [
     { label: 'Shop', kind: 'product', terms: ['Coles', 'Coles Online'], weight: 2, urgent: false },

@@ -15,7 +15,11 @@ const DEFAULT_INTERESTS = Object.freeze([
   interest('West Tamar', 'place', ['West Tamar', 'Beaconsfield', 'Beauty Point', 'Exeter', 'Legana', 'Riverside', 'Grindelwald', 'Tamar Valley'], 3),
   interest('Launceston', 'place', ['Launceston', 'City of Launceston'], 3),
   interest('Northern Tasmania', 'place', ['northern Tasmania', 'north Tasmania', 'Devonport', 'George Town', 'Meander Valley', 'Deloraine'], 2),
-  interest('Tasmania', 'place', ['Tasmania', 'Tasmanian', 'Tassie', 'Hobart'], 1),
+  // State bodies that never name the state in a headline count as Tasmanian.
+  interest('Tasmania', 'place', [
+    'Tasmania', 'Tasmanian', 'Tassie', 'Tas', 'Hobart',
+    'TasNetworks', 'TasWater', 'TasRail', 'TasPorts', 'TasTAFE',
+  ], 1),
   interest('Council politics', 'topic', ['council', 'mayor', 'councillor'], 2, false, true),
   interest('State politics', 'topic', ['Tasmanian parliament', 'House of Assembly', 'Tasmanian government', 'premier', 'state budget'], 2, false, true),
   interest('Federal politics', 'topic', ['federal parliament', 'prime minister', 'Senate', 'federal budget', 'federal election'], 1),
