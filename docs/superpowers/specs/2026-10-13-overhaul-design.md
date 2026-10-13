@@ -108,22 +108,31 @@ collect → normalise → filter → cluster → rank → extract → write → 
 
 1. **collect** — unchanged fetchers. Reddit via Atom feeds and the shared
    rate-limited queue (stage 1).
-2. **normalise** — canonical URL (strip `utm_*`, `ref`, fragments), resolve
-   Google News redirect links to the publisher URL, record the Reddit
-   listing position (1..25) as the engagement proxy the Atom feed lacks.
+2. **normalise** — canonical URL (strip `utm_*`, `ref`, fragments), strip
+   Google News' " - Publisher" title suffix, record each item's position in
+   its source's list (1..n) as the engagement proxy the Reddit Atom feed
+   lacks. Google News links are resolved to the publisher URL later, in
+   extract, and only for selected stories: resolving costs two requests per
+   link (article page for a signature, then Google's `batchexecute`
+   `garturlreq` call), verified working 2026-10-13.
 3. **filter** — drop items older than a cut-off (default 36 h; per-source
    override for slow sources). Drop filler by an editable list of title
    patterns (seeded: weather report for, magistrates court list, superquiz,
-   best of cartoons, crossword, horoscope, as it happened) plus a cheap
-   AI yes/no "is this a news story?" pass on survivors that match nothing.
+   best of cartoons, crossword, horoscope, as it happened).
    Every drop is logged with its reason so the Status page can show it.
-4. **cluster** — group items reporting the same story. Pass 1: same URL path
-   across hosts (catches SMH/Age syndication). Pass 2: embedding similarity
-   on title + teaser using a local Ollama embedding model
-   (`nomic-embed-text` or similar, to pull), threshold tuned on a saved
-   real day. Pass 3: borderline pairs go to the writer model for a yes/no.
+   The "is this a news story?" AI check moves into the stage 3 writer, which
+   already reads each selected story: running it on ~900 raw items a day
+   would cost more than the whole write step.
+4. **cluster** — group items reporting the same story. Pass 1: same
+   canonical URL. Pass 2: same URL path across hosts (catches SMH/Age
+   syndication). Pass 3: TF-IDF cosine similarity on title + teaser,
+   thresholds tuned on a saved real day; pairs between the low and high
+   threshold go to the local model for a yes/no, capped per run. Embeddings
+   from a local Ollama model are the fallback if the saved day shows TF-IDF
+   missing real repeats; they need a model pulled onto the AI host, which
+   needs Jesse's say-so.
    A cluster carries all its source items; its **coverage** is the number of
-   distinct outlets.
+   distinct outlets, with syndicated copies counting once.
 5. **rank** — score clusters, not items:
    coverage (strongest signal for "biggest news"), recency, interest-list
    match, source weight, Reddit/HN position, and (stage 7) learned nudges.
