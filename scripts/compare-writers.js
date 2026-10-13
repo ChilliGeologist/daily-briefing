@@ -31,6 +31,7 @@ function metrics(stats) {
     countLabel(stats.written || 0, 'written', 'written'),
     countLabel(stats.failures || 0, 'failure'),
     countLabel(stats.not_news || 0, 'not-news', 'not-news'),
+    `editor fallback: ${stats.edit_fallback || 'none'}`,
     `${stats.input_tokens || 0} input / ${stats.output_tokens || 0} output tokens`,
     formatDuration(stats.duration_ms || 0),
   ].join(' · ');
@@ -137,6 +138,7 @@ async function runWriter(spec, candidates, settings) {
       input_tokens: written.stats.input_tokens + edited.stats.input_tokens,
       output_tokens: written.stats.output_tokens + edited.stats.output_tokens,
       duration_ms: written.stats.duration_ms + edited.stats.duration_ms,
+      edit_fallback: edited.stats.edit_fallback,
     },
     error: null,
   };

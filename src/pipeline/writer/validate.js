@@ -196,8 +196,12 @@ function deterministicEdit(stories, { sectionSize, topSize }) {
 
 function validateEdit(raw, stories, { sectionSize, topSize }) {
   const parsed = parseObject(raw);
-  if (!parsed || !Array.isArray(parsed.top) || !parsed.sections || typeof parsed.sections !== 'object') {
-    return { ...deterministicEdit(stories, { sectionSize, topSize }), problems: ['Editor output was not valid JSON'] };
+  if (!parsed || !Array.isArray(parsed.top) || !parsed.sections || typeof parsed.sections !== 'object' || Array.isArray(parsed.sections)) {
+    return {
+      ...deterministicEdit(stories, { sectionSize, topSize }),
+      fallback: 'full',
+      problems: ['Editor output was not valid JSON'],
+    };
   }
 
   const problems = [];
@@ -263,7 +267,9 @@ function validateEdit(raw, stories, { sectionSize, topSize }) {
     }
   }
 
-  return { top, ...placeRemaining(stories, top, sectionSize, preferred), problems };
+  const editorSelectionSurvived = seenTop.size > 0 || assigned.size > 0;
+  const fallback = problems.length === 0 ? 'none' : (editorSelectionSurvived ? 'partial' : 'full');
+  return { top, ...placeRemaining(stories, top, sectionSize, preferred), fallback, problems };
 }
 
 module.exports = { validateWrite, validateEdit, deterministicEdit, defaultSection };

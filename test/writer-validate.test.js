@@ -110,6 +110,7 @@ it('drops invalid and duplicate editor ids, clamps top, and fills deterministica
     top: ['s2', 's1', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    fallback: 'partial',
     problems: [
       'Unknown top story id: missing',
       'Duplicate top story id: s2',
@@ -136,6 +137,45 @@ it('clamps twelve valid editor top picks to the configured maximum', () => {
     top: ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
     sections: { tasmania: [], australia: [], world: ['s8'], tech: ['s9', 's10'], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: [], tech: ['s11', 's12'], homelab: [], gaming: [], internet: [] },
+    fallback: 'partial',
     problems: ['Top list had more than 7 valid stories and was clamped'],
+  });
+});
+
+it('reports a full fallback for an editor object with no usable selection', () => {
+  assert.deepStrictEqual(validateEdit({}, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
+    ...deterministicEdit(stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }),
+    fallback: 'full',
+    problems: ['Editor output was not valid JSON'],
+  });
+});
+
+it('reports a partial fallback when one editor id is invalid', () => {
+  assert.deepStrictEqual(validateEdit({
+    top: ['s1', 's2', 's3', 's4', 'missing'],
+    sections: { world: ['s5', 's6'] },
+  }, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
+    top: ['s1', 's2', 's3', 's4', 's5'],
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    fallback: 'partial',
+    problems: [
+      'Unknown top story id: missing',
+      'Top list had fewer than 5 valid stories and was filled',
+      'Story s5 was already selected for top',
+    ],
+  });
+});
+
+it('reports no fallback for a clean editor selection', () => {
+  assert.deepStrictEqual(validateEdit({
+    top: ['s1', 's2', 's3', 's4', 's5'],
+    sections: { world: ['s6', 's7'] },
+  }, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
+    top: ['s1', 's2', 's3', 's4', 's5'],
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    fallback: 'none',
+    problems: [],
   });
 });

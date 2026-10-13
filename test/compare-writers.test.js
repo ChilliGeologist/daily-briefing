@@ -24,7 +24,7 @@ it('builds a self-contained responsive comparison with exact metrics, top picks 
       }],
       dropped: [{ id: 's2', write_ok: true }],
       top: ['s1'],
-      stats: { written: 1, failures: 0, not_news: 1, input_tokens: 10, output_tokens: 5, duration_ms: 20 },
+      stats: { written: 1, failures: 0, not_news: 1, input_tokens: 10, output_tokens: 5, duration_ms: 20, edit_fallback: 'partial' },
       error: null,
     },
     {
@@ -33,7 +33,7 @@ it('builds a self-contained responsive comparison with exact metrics, top picks 
       stories: [{ id: 's1', write_ok: false }],
       dropped: [],
       top: [],
-      stats: { written: 0, failures: 1, not_news: 0, input_tokens: 3, output_tokens: 1, duration_ms: 1500 },
+      stats: { written: 0, failures: 1, not_news: 0, input_tokens: 3, output_tokens: 1, duration_ms: 1500, edit_fallback: 'full' },
       error: 'model <offline>',
     },
   ];
@@ -47,8 +47,8 @@ it('builds a self-contained responsive comparison with exact metrics, top picks 
   assert.strictEqual(document.querySelectorAll('style').length, 1);
   assert.deepStrictEqual(text('.writer-header h2'), ['ollama:<model>', 'ollama:qwen3:8b']);
   assert.deepStrictEqual(text('.metrics'), [
-    '1 written · 0 failures · 1 not-news · 10 input / 5 output tokens · 20 ms',
-    '0 written · 1 failure · 0 not-news · 3 input / 1 output tokens · 1.50 s',
+    '1 written · 0 failures · 1 not-news · editor fallback: partial · 10 input / 5 output tokens · 20 ms',
+    '0 written · 1 failure · 0 not-news · editor fallback: full · 3 input / 1 output tokens · 1.50 s',
   ]);
   assert.deepStrictEqual(text('.writer-error'), ['Failure: model <offline>']);
   assert.deepStrictEqual(text('.top-column h3'), ['ollama:<model>', 'ollama:qwen3:8b']);

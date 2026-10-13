@@ -42,12 +42,12 @@ it('assembles top first, ordered non-empty sections, more stories and exact read
     more: { tasmania: ['s3'] },
   }, storiesById, {
     writer: 'ollama:qwen3:8b',
-    stats: { write: { written: 3 }, edit: { edit_fallback: false } },
+    stats: { write: { written: 3 }, edit: { edit_fallback: 'none' } },
     log: { info: (...args) => logs.push(args) },
   }), {
     headline: 'Top headline',
     writer: 'ollama:qwen3:8b',
-    stats: { write: { written: 3 }, edit: { edit_fallback: false } },
+    stats: { write: { written: 3 }, edit: { edit_fallback: 'none' } },
     sections: [
       {
         id: 'top', title: 'You should know', icon: 'globe',
