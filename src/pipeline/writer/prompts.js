@@ -44,11 +44,13 @@ Choose exactly one section:
 - gaming — Video games and gaming communities.
 - internet — Reddit and Hacker News culture, online communities and oddities.
 
-keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions; the kicker is one or two plain words naming the topic ("Plex", "State politics", "Basketball"), never a sentence and never a reason the story was picked.
+The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech.
 
-The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story.`;
+Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
-const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know": biggest coverage first, then interest matches with real consequence for the reader, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories.`;
+The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question.`;
+
+const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories.`;
 
 function distinctOutlets(item) {
   const names = (item.sources || []).map(source => source.name).filter(Boolean);

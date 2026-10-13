@@ -17,6 +17,8 @@ it('runs the pipeline stages in the specified order', () => {
   ]);
   assert.strictEqual(source.includes("require('./categoriser')"), false);
   assert.strictEqual(source.includes("require('./summariser')"), false);
+  assert.strictEqual(source.includes('limit: settings.getMaxCandidates(),'), true);
+  assert.strictEqual(source.includes('limit: settings.getMaxCuratedItems(),'), false);
 });
 
 it('saves candidate arrays with article text and retains the newest seven files', async t => {

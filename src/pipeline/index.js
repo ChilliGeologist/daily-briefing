@@ -146,7 +146,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
       boostKeywords: preferences.boost_keywords,
       penaltyKeywords: preferences.penalty_keywords,
       interests: settings.getInterests(),
-      limit: settings.getMaxCuratedItems(),
+      limit: settings.getMaxCandidates(),
     });
     runLog.info('pipeline:rank',
       `Ranked ${rankStats.clusters} stories: ${rankStats.selected} selected (${rankStats.floor_added} by source floor)`);

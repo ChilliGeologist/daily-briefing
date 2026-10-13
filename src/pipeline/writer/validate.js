@@ -56,6 +56,19 @@ function words(text) {
   return String(text).trim().match(/\S+/g) || [];
 }
 
+function stripHeadlineFullStop(headline) {
+  return /[a-z0-9]\.$/.test(headline) ? headline.slice(0, -1) : headline;
+}
+
+function isSectionKicker(kicker, sectionId) {
+  const section = SECTIONS.find(candidate => candidate.id === sectionId);
+  if (!section) return false;
+  const normalised = kicker.toLocaleLowerCase('en-AU');
+  return [section.id, section.title]
+    .flatMap(name => [name, `${name} news`])
+    .some(name => normalised === name.toLocaleLowerCase('en-AU'));
+}
+
 function shortenDetail(detail) {
   const wordMatches = [...detail.matchAll(/\S+/g)];
   if (wordMatches.length <= 160) return { detail, problem: null, fatal: false };
@@ -94,7 +107,7 @@ function validateWrite(raw, item) {
   let fatal = false;
   const value = {
     is_news: parsed.is_news,
-    headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
+    headline: typeof parsed.headline === 'string' ? stripHeadlineFullStop(parsed.headline.trim()) : '',
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
     detail: typeof parsed.detail === 'string' ? parsed.detail.trim() : '',
     kicker: typeof parsed.kicker === 'string' ? parsed.kicker.trim() : '',
@@ -115,7 +128,14 @@ function validateWrite(raw, item) {
     problems.push(`Unknown section: ${String(value.section)}`);
     fatal = true;
   }
-  if (value.kicker && (words(value.kicker).length > 3 || value.kicker.length > 24)) {
+  let retainedSectionKicker = false;
+  if (value.kicker && isSectionKicker(value.kicker, value.section)) {
+    problems.push('Kicker repeated the section name');
+    const interestLabel = (item.interest_matches || []).map(match => match.label).find(Boolean);
+    if (interestLabel) value.kicker = interestLabel;
+    else retainedSectionKicker = true;
+  }
+  if (value.kicker && !retainedSectionKicker && (words(value.kicker).length > 3 || value.kicker.length > 24)) {
     problems.push('Kicker exceeded three words or 24 characters');
     fatal = true;
   }
@@ -187,7 +207,7 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
 
 function deterministicEdit(stories, { sectionSize, topSize }) {
   const ordered = deterministicOrder(stories);
-  const qualified = ordered.filter(story => (Number(story.coverage) || 0) >= 2 || (story.interest_matches || []).length > 0);
+  const qualified = ordered.filter(story => (Number(story.coverage) || 0) >= 3 || (story.interest_matches || []).length > 0);
   const rest = ordered.filter(story => !qualified.includes(story));
   const top = [...qualified, ...rest].slice(0, Math.min(topSize.min, stories.length)).map(story => story.id);
   const placed = placeRemaining(stories, top, sectionSize);

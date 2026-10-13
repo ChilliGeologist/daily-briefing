@@ -33,6 +33,72 @@ it('parses and trims a valid writer result', () => {
   });
 });
 
+it('replaces a section-name kicker with the first interest label', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Clear headline',
+    summary: 'A clear summary.',
+    detail: 'Useful detail.',
+    kicker: 'Homelab & Self-hosting news',
+    section: 'homelab',
+  }, item), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Clear headline',
+      summary: 'A clear summary.',
+      detail: 'Useful detail.',
+      kicker: 'Plex',
+      section: 'homelab',
+    },
+    problems: ['Kicker repeated the section name'],
+  });
+});
+
+it('keeps a section-name kicker when no interest label is available', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Clear headline',
+    summary: 'A clear summary.',
+    detail: 'Useful detail.',
+    kicker: 'Around the internet news',
+    section: 'internet',
+  }, { ...item, interest_matches: [] }), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Clear headline',
+      summary: 'A clear summary.',
+      detail: 'Useful detail.',
+      kicker: 'Around the internet news',
+      section: 'internet',
+    },
+    problems: ['Kicker repeated the section name'],
+  });
+});
+
+it('strips only a single sentence-ending full stop from headlines', () => {
+  const result = headline => validateWrite({
+    is_news: true,
+    headline,
+    summary: 'A clear summary.',
+    detail: 'Useful detail.',
+    kicker: 'Topic',
+    section: 'world',
+  }, item);
+  assert.deepStrictEqual([
+    result('Fine refused.'),
+    result('Made in the U.S.'),
+    result('Wait...'),
+    result('Version 2.'),
+  ], [
+    { ok: true, value: { is_news: true, headline: 'Fine refused', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Made in the U.S.', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Wait...', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Version 2', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
+  ]);
+});
+
 it('cuts an overlong detail at its last safe sentence and notes it', () => {
   const first = `${Array(150).fill('word').join(' ')}.`;
   const detail = `${first} ${Array(20).fill('extra').join(' ')}`;
@@ -99,6 +165,18 @@ it('builds a deterministic top, sections and more without losing stories', () =>
     top: ['s1', 's2', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+  });
+});
+
+it('qualifies top stories only at three-outlet coverage or with an interest match', () => {
+  const candidates = [
+    { id: 'coverage-two', section: 'world', coverage: 2, interest_matches: [], rank: 1 },
+    { id: 'reader-interest', section: 'tasmania', coverage: 1, interest_matches: [{ weight: 1 }], rank: 2 },
+  ];
+  assert.deepStrictEqual(deterministicEdit(candidates, { sectionSize: 2, topSize: { min: 1, max: 1 } }), {
+    top: ['reader-interest'],
+    sections: { tasmania: [], australia: [], world: ['coverage-two'], tech: [], homelab: [], gaming: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
   });
 });
 

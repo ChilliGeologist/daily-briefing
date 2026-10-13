@@ -5,32 +5,50 @@ const assert = require('node:assert');
 const { DEFAULT_INTERESTS, matchInterests, interestScore } = require('../src/pipeline/writer/interests');
 
 it('seeds all interests in the specified order with complete values', () => {
-  assert.deepStrictEqual(DEFAULT_INTERESTS.map(({ label, kind, weight, urgent }) => ({ label, kind, weight, urgent })), [
-    { label: 'West Tamar', kind: 'place', weight: 3, urgent: false },
-    { label: 'Launceston', kind: 'place', weight: 3, urgent: false },
-    { label: 'Northern Tasmania', kind: 'place', weight: 2, urgent: false },
-    { label: 'Tasmania', kind: 'place', weight: 1, urgent: false },
-    { label: 'Council politics', kind: 'topic', weight: 2, urgent: false },
-    { label: 'State politics', kind: 'topic', weight: 2, urgent: false },
-    { label: 'Federal politics', kind: 'topic', weight: 1, urgent: false },
-    { label: 'Emergencies', kind: 'topic', weight: 3, urgent: true },
-    { label: 'Events', kind: 'topic', weight: 1, urgent: false },
-    { label: 'Unraid', kind: 'product', weight: 2, urgent: true },
-    { label: 'Plex', kind: 'product', weight: 2, urgent: true },
-    { label: 'Sonarr', kind: 'product', weight: 2, urgent: true },
-    { label: 'Radarr', kind: 'product', weight: 2, urgent: true },
-    { label: 'Home Assistant', kind: 'product', weight: 2, urgent: true },
-    { label: 'UniFi', kind: 'product', weight: 2, urgent: true },
-    { label: 'Tailscale', kind: 'product', weight: 2, urgent: true },
-    { label: 'Authelia', kind: 'product', weight: 2, urgent: true },
-    { label: 'Proton', kind: 'product', weight: 2, urgent: true },
-    { label: 'Up Bank', kind: 'product', weight: 2, urgent: false },
-    { label: 'Aurora Energy', kind: 'product', weight: 2, urgent: false },
-    { label: 'Interest rates', kind: 'product', weight: 2, urgent: false },
-    { label: 'Woolworths', kind: 'product', weight: 2, urgent: false },
-    { label: 'Coles', kind: 'product', weight: 2, urgent: false },
-    { label: 'Dota 2', kind: 'product', weight: 2, urgent: false },
-    { label: 'Old School RuneScape', kind: 'product', weight: 2, urgent: false },
+  assert.deepStrictEqual(DEFAULT_INTERESTS.map(({ label, kind, weight, urgent, requires_place }) => ({ label, kind, weight, urgent, requires_place })), [
+    { label: 'West Tamar', kind: 'place', weight: 3, urgent: false, requires_place: undefined },
+    { label: 'Launceston', kind: 'place', weight: 3, urgent: false, requires_place: undefined },
+    { label: 'Northern Tasmania', kind: 'place', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Tasmania', kind: 'place', weight: 1, urgent: false, requires_place: undefined },
+    { label: 'Council politics', kind: 'topic', weight: 2, urgent: false, requires_place: true },
+    { label: 'State politics', kind: 'topic', weight: 2, urgent: false, requires_place: true },
+    { label: 'Federal politics', kind: 'topic', weight: 1, urgent: false, requires_place: undefined },
+    { label: 'Emergencies', kind: 'topic', weight: 3, urgent: true, requires_place: true },
+    { label: 'Events', kind: 'topic', weight: 1, urgent: false, requires_place: true },
+    { label: 'Unraid', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Plex', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Sonarr', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Radarr', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Home Assistant', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'UniFi', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Tailscale', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Authelia', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Proton', kind: 'product', weight: 2, urgent: true, requires_place: undefined },
+    { label: 'Up Bank', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Aurora Energy', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Interest rates', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Woolworths', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Coles', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Dota 2', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+    { label: 'Old School RuneScape', kind: 'product', weight: 2, urgent: false, requires_place: undefined },
+  ]);
+  assert.deepStrictEqual(DEFAULT_INTERESTS.find(({ label }) => label === 'Events'), {
+    label: 'Events',
+    kind: 'topic',
+    terms: ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Launceston Show'],
+    weight: 1,
+    urgent: false,
+    requires_place: true,
+  });
+});
+
+it('requires a place match for locally scoped topic interests', () => {
+  assert.deepStrictEqual(matchInterests('Show HN: SolidCraft', DEFAULT_INTERESTS), []);
+  assert.deepStrictEqual(matchInterests('NSW bushfire warning issued near Newcastle', DEFAULT_INTERESTS), []);
+  assert.deepStrictEqual(matchInterests('Launceston mayor opens Festivale concert', DEFAULT_INTERESTS), [
+    { label: 'Launceston', kind: 'place', weight: 3, urgent: false, term: 'Launceston' },
+    { label: 'Council politics', kind: 'topic', weight: 2, urgent: false, term: 'mayor' },
+    { label: 'Events', kind: 'topic', weight: 1, urgent: false, term: 'concert' },
   ]);
 });
 

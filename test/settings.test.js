@@ -18,6 +18,7 @@ it('returns defaults when unset', () => {
     'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
   ]);
   assert.strictEqual(settings.getMaxSameStoryChecks(), 40);
+  assert.strictEqual(settings.getMaxCandidates(), 120);
   assert.deepStrictEqual(settings.getInterests(), DEFAULT_INTERESTS);
   assert.strictEqual(settings.getWriterOllamaModel(), 'gemma4:26b');
   assert.strictEqual(settings.getOllamaNumCtx(), 8192);
@@ -32,6 +33,7 @@ it('returns stored values when set', () => {
     filler_patterns: ['x'],
     paywalled_hosts: [],
     max_same_story_checks: 5,
+    max_candidates: 135,
     interests: [{ label: 'Mine' }],
     writer_ollama_model: 'writer-model',
     ollama_num_ctx: 16384,
@@ -44,7 +46,8 @@ it('returns stored values when set', () => {
     settings.getFillerPatterns(),
     settings.getPaywalledHosts(),
     settings.getMaxSameStoryChecks(),
-  ], [24, ['x'], [], 5]);
+    settings.getMaxCandidates(),
+  ], [24, ['x'], [], 5, 135]);
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),

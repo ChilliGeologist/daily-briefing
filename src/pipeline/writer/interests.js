@@ -1,7 +1,14 @@
 'use strict';
 
-function interest(label, kind, terms, weight, urgent = false) {
-  return Object.freeze({ label, kind, terms: Object.freeze(terms), weight, urgent });
+function interest(label, kind, terms, weight, urgent = false, requiresPlace = false) {
+  return Object.freeze({
+    label,
+    kind,
+    terms: Object.freeze(terms),
+    weight,
+    urgent,
+    ...(requiresPlace ? { requires_place: true } : {}),
+  });
 }
 
 const DEFAULT_INTERESTS = Object.freeze([
@@ -9,11 +16,11 @@ const DEFAULT_INTERESTS = Object.freeze([
   interest('Launceston', 'place', ['Launceston', 'City of Launceston'], 3),
   interest('Northern Tasmania', 'place', ['northern Tasmania', 'north Tasmania', 'Devonport', 'George Town', 'Meander Valley', 'Deloraine'], 2),
   interest('Tasmania', 'place', ['Tasmania', 'Tasmanian', 'Hobart'], 1),
-  interest('Council politics', 'topic', ['council', 'mayor', 'councillor'], 2),
-  interest('State politics', 'topic', ['Tasmanian parliament', 'House of Assembly', 'Tasmanian government', 'premier', 'state budget'], 2),
+  interest('Council politics', 'topic', ['council', 'mayor', 'councillor'], 2, false, true),
+  interest('State politics', 'topic', ['Tasmanian parliament', 'House of Assembly', 'Tasmanian government', 'premier', 'state budget'], 2, false, true),
   interest('Federal politics', 'topic', ['federal parliament', 'prime minister', 'Senate', 'federal budget', 'federal election'], 1),
-  interest('Emergencies', 'topic', ['bushfire', 'fire warning', 'flood', 'severe weather', 'evacuate', 'emergency warning', 'road closed', 'road closure'], 3, true),
-  interest('Events', 'topic', ['festival', 'show', 'market', 'concert', 'AFL', 'NBL', 'JackJumpers', 'Tassie Devils'], 1),
+  interest('Emergencies', 'topic', ['bushfire', 'fire warning', 'flood', 'severe weather', 'evacuate', 'emergency warning', 'road closed', 'road closure'], 3, true, true),
+  interest('Events', 'topic', ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Launceston Show'], 1, false, true),
   interest('Unraid', 'product', ['Unraid'], 2, true),
   interest('Plex', 'product', ['Plex'], 2, true),
   interest('Sonarr', 'product', ['Sonarr'], 2, true),
@@ -44,21 +51,24 @@ function hasWholeTerm(text, term) {
 
 function matchInterests(text, interests = DEFAULT_INTERESTS) {
   const haystack = typeof text === 'string' ? text : '';
-  const matches = [];
+  const candidates = [];
 
   for (const entry of interests || []) {
     const term = (entry.terms || []).find(candidate => hasWholeTerm(haystack, candidate));
     if (term === undefined) continue;
-    matches.push({
+    candidates.push({ entry, term });
+  }
+
+  const hasPlace = candidates.some(({ entry }) => entry.kind === 'place');
+  return candidates
+    .filter(({ entry }) => !entry.requires_place || hasPlace)
+    .map(({ entry, term }) => ({
       label: entry.label,
       kind: entry.kind,
       weight: entry.weight,
       urgent: Boolean(entry.urgent),
       term,
-    });
-  }
-
-  return matches;
+    }));
 }
 
 function interestScore(matches) {

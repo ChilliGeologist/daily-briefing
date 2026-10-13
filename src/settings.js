@@ -51,6 +51,11 @@ function createSettings(db) {
       return val !== null ? Number(val) : 60;
     },
 
+    getMaxCandidates() {
+      const val = db.getSetting('max_candidates');
+      return val !== null ? Number(val) : 120;
+    },
+
     getFilterMaxAgeHours() {
       const val = db.getSetting('filter_max_age_hours');
       return val !== null ? Number(val) : 36;
