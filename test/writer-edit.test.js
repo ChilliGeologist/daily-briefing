@@ -38,6 +38,13 @@ it('repairs editor ids and reports measured edit stats', async () => {
     top: ['s2', 's1', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    problems: [
+      'Unknown top story id: missing',
+      'Duplicate top story id: s2',
+      'Top list had fewer than 5 valid stories and was filled',
+      'Story s1 was already selected for top',
+      'Story s3 was already selected for top',
+    ],
     stats: { input_tokens: 1000000, output_tokens: 1000000, duration_ms: 42, edit_fallback: 'partial' },
   });
   assert.deepStrictEqual(logs, [
@@ -62,6 +69,7 @@ it('uses the deterministic edit entirely when the editor throws', async () => {
     top: ['s1', 's2', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    problems: [],
     stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: 'full' },
   });
   assert.deepStrictEqual(logs, [

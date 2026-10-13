@@ -4,7 +4,7 @@ const { it } = require('node:test');
 const assert = require('node:assert');
 const {
   WRITE_SCHEMA,
-  EDIT_SCHEMA,
+  editSchema,
   writeSystemPrompt,
   writeUserPrompt,
   editSystemPrompt,
@@ -75,14 +75,14 @@ COMMUNITY COMMENTS:
 5. Five`);
 });
 
-it('defines the exact closed edit schema and fixed editor prompt', () => {
-  const sectionArray = { type: 'array', items: { type: 'string' } };
-  assert.deepStrictEqual(EDIT_SCHEMA, {
+it('defines an edit schema constrained to the supplied story ids and fixed editor prompt', () => {
+  const sectionArray = { type: 'array', items: { type: 'string', enum: ['s1', 's2'] } };
+  assert.deepStrictEqual(editSchema(['s1', 's2']), {
     type: 'object',
     additionalProperties: false,
     required: ['top', 'sections'],
     properties: {
-      top: { type: 'array', items: { type: 'string' } },
+      top: sectionArray,
       sections: {
         type: 'object',
         additionalProperties: false,
@@ -99,7 +99,7 @@ it('defines the exact closed edit schema and fixed editor prompt', () => {
       },
     },
   });
-  assert.strictEqual(editSystemPrompt(), `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories.`);
+  assert.strictEqual(editSystemPrompt(), `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`);
 });
 
 it('formats every story for the editor on one line', () => {
@@ -107,6 +107,6 @@ it('formats every story for the editor on one line', () => {
     { id: 's1', section: 'tasmania', coverage: 3, interest_matches: [{ label: 'West Tamar' }], kicker: 'Council', headline: 'Rates change', summary: 'Rates will change.' },
     { id: 's2', section: 'world', coverage: 1, interest_matches: [], kicker: 'Diplomacy', headline: 'Talks resume', summary: 'Talks have resumed.' },
   ], { sectionSize: 4 }), `SECTION LIMIT: 4
-s1 | tasmania | coverage 3 | interests West Tamar | Council | Rates change | Rates will change.
-s2 | world | coverage 1 | interests none | Diplomacy | Talks resume | Talks have resumed.`);
+[s1] | tasmania | coverage 3 | interests West Tamar | Council | Rates change | Rates will change.
+[s2] | world | coverage 1 | interests none | Diplomacy | Talks resume | Talks have resumed.`);
 });

@@ -17,8 +17,9 @@ const WRITE_SCHEMA = Object.freeze({
   },
 });
 
-const sectionArraySchema = () => ({ type: 'array', items: { type: 'string' } });
-const EDIT_SCHEMA = Object.freeze({
+function editSchema(ids) {
+  const sectionArraySchema = () => ({ type: 'array', items: { type: 'string', enum: ids } });
+  return {
   type: 'object',
   additionalProperties: false,
   required: ['top', 'sections'],
@@ -31,7 +32,8 @@ const EDIT_SCHEMA = Object.freeze({
       properties: Object.fromEntries(SECTION_IDS.map(id => [id, sectionArraySchema()])),
     },
   },
-});
+  };
+}
 
 const WRITE_SYSTEM_PROMPT = `You write a concise morning news briefing in Australian English. Decide whether the supplied page is a genuine news story, then write it for one reader who lives in West Tamar near Launceston, Tasmania and reads on a phone at breakfast.
 
@@ -50,7 +52,7 @@ Keep the publisher's headline unless it is vague, clickbait or misleading, and n
 
 The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question.`;
 
-const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories.`;
+const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`;
 
 function distinctOutlets(item) {
   const names = (item.sources || []).map(source => source.name).filter(Boolean);
@@ -107,7 +109,7 @@ function editUserPrompt(stories, { sectionSize }) {
   for (const story of stories) {
     const labels = (story.interest_matches || []).map(match => match.label).filter(Boolean);
     lines.push([
-      story.id,
+      `[${story.id}]`,
       story.section,
       `coverage ${Number(story.coverage) || 1}`,
       `interests ${labels.join(', ') || 'none'}`,
@@ -121,7 +123,7 @@ function editUserPrompt(stories, { sectionSize }) {
 
 module.exports = {
   WRITE_SCHEMA,
-  EDIT_SCHEMA,
+  editSchema,
   writeSystemPrompt,
   writeUserPrompt,
   editSystemPrompt,

@@ -55,6 +55,72 @@ it('replaces a section-name kicker with the first interest label', () => {
   });
 });
 
+it('repairs an overlong kicker without discarding the model writing', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Model headline',
+    summary: 'Model summary.',
+    detail: 'Model detail.',
+    kicker: 'A much too long model kicker.',
+    section: 'homelab',
+  }, item), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Model headline',
+      summary: 'Model summary.',
+      detail: 'Model detail.',
+      kicker: 'Plex',
+      section: 'homelab',
+    },
+    problems: ['Kicker exceeded three words or 24 characters'],
+  });
+});
+
+it('cuts an overlong kicker to two words when no interest label is available', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Model headline',
+    summary: 'Model summary.',
+    detail: 'Model detail.',
+    kicker: 'A much too long model kicker...',
+    section: 'world',
+  }, { ...item, interest_matches: [] }), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Model headline',
+      summary: 'Model summary.',
+      detail: 'Model detail.',
+      kicker: 'A much',
+      section: 'world',
+    },
+    problems: ['Kicker exceeded three words or 24 characters'],
+  });
+});
+
+it('repairs an unknown section without discarding the model writing', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Model headline',
+    summary: 'Model summary.',
+    detail: 'Model detail.',
+    kicker: 'Plex',
+    section: 'space',
+  }, item), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Model headline',
+      summary: 'Model summary.',
+      detail: 'Model detail.',
+      kicker: 'Plex',
+      section: 'homelab',
+    },
+    problems: ['Unknown section: space'],
+  });
+});
+
 it('keeps a section-name kicker when no interest label is available', () => {
   assert.deepStrictEqual(validateWrite({
     is_news: true,
@@ -131,9 +197,7 @@ it('falls back for every junk writer shape without throwing', () => {
   const base = { is_news: true, headline: 'H', summary: 'S', detail: 'D', kicker: 'K', section: 'world' };
   const cases = [
     ['not json', ['Writer output was not valid JSON']],
-    [{ ...base, section: 'space' }, ['Unknown section: space']],
     [{ ...base, headline: '   ' }, ['Headline was empty']],
-    [{ ...base, detail: Array.from({ length: 40 }, () => `${Array(10).fill('word').join(' ')}.`).join(' ') }, ['Detail was 400 words or longer']],
   ];
   assert.deepStrictEqual(cases.map(([raw]) => validateWrite(raw, item)), cases.map(([, problems]) => ({ ...expected, problems })));
 });

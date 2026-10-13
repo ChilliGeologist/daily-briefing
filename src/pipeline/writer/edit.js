@@ -1,6 +1,6 @@
 'use strict';
 
-const { EDIT_SCHEMA, editSystemPrompt, editUserPrompt } = require('./prompts');
+const { editSchema, editSystemPrompt, editUserPrompt } = require('./prompts');
 const { validateEdit, deterministicEdit } = require('./validate');
 
 async function editStories(stories, writer, settings, log) {
@@ -20,7 +20,7 @@ async function editStories(stories, writer, settings, log) {
     const response = await writer.edit(
       editSystemPrompt(),
       editUserPrompt(stories, { sectionSize: options.sectionSize }),
-      EDIT_SCHEMA
+      editSchema(stories.map(story => story.id))
     );
     edited = validateEdit(response.json, stories, options);
     const usage = response.usage || {};
@@ -49,6 +49,7 @@ async function editStories(stories, writer, settings, log) {
     top: edited.top,
     sections: edited.sections,
     more: edited.more,
+    problems: edited.problems || [],
     stats,
   };
 }

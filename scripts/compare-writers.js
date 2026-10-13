@@ -29,7 +29,8 @@ function formatDuration(durationMs) {
 function metrics(stats) {
   return [
     countLabel(stats.written || 0, 'written', 'written'),
-    countLabel(stats.failures || 0, 'failure'),
+    countLabel(stats.repairs || 0, 'repair'),
+    countLabel(stats.fallbacks || 0, 'fallback'),
     countLabel(stats.not_news || 0, 'not-news', 'not-news'),
     `editor fallback: ${stats.edit_fallback || 'none'}`,
     `${stats.input_tokens || 0} input / ${stats.output_tokens || 0} output tokens`,
@@ -39,6 +40,11 @@ function metrics(stats) {
 
 function renderStory(story, className) {
   return `<article class="${className}"><div class="kicker">${escapeHtml(story.kicker)}</div><div class="headline">${escapeHtml(story.headline)}</div><div class="summary">${escapeHtml(story.summary)}</div><div class="detail">${escapeHtml(story.detail)}</div></article>`;
+}
+
+function renderProblems(problems, className = 'story-problems') {
+  if (!Array.isArray(problems) || problems.length === 0) return '';
+  return `<div class="${className}">${problems.map(escapeHtml).join('; ')}</div>`;
 }
 
 function storyMaps(result) {
@@ -57,16 +63,16 @@ function buildCompareHtml(results) {
       .filter(story => story && story.write_ok !== false)
       .map(story => renderStory(story, 'story-card'))
       .join('');
-    return `<section class="top-column"><h3>${escapeHtml(result.name)}</h3>${cards || '<div class="empty">No top picks</div>'}</section>`;
+    return `<section class="top-column"><h3>${escapeHtml(result.name)}</h3>${cards || '<div class="empty">No top picks</div>'}${renderProblems(result.editor_problems, 'editor-problems')}</section>`;
   }).join('');
   const rows = originals.map(original => {
     const cells = results.map((result, index) => {
       const story = maps[index].stories.get(original.id);
       const dropped = maps[index].dropped.get(original.id);
       let content;
-      if (dropped) content = '<div class="missing">Not news</div>';
-      else if (!story || story.write_ok === false) content = '<div class="missing">Failed</div>';
-      else content = renderStory(story, 'story-copy');
+      if (dropped) content = `<div class="missing">Not news</div>${renderProblems(dropped.write_problems)}`;
+      else if (!story || story.write_ok === false) content = `<div class="missing">Failed</div>${renderProblems(story && story.write_problems)}`;
+      else content = `${story.write_problems && story.write_problems.length ? '<div class="missing">Repaired</div>' : ''}${renderStory(story, 'story-copy')}${renderProblems(story.write_problems)}`;
       return `<div class="story-cell"><h4>${escapeHtml(result.name)}</h4>${content}</div>`;
     }).join('');
     return `<section class="story-row"><h3 class="original-title">${escapeHtml(original.title)}</h3><div class="story-columns">${cells}</div></section>`;
@@ -79,7 +85,7 @@ function buildCompareHtml(results) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Writer comparison</title>
 <style>
-:root{color-scheme:light dark;--paper:#fbf6e9;--ink:#24211d;--muted:#6d665c;--line:#cfc5b2;--accent:#9a3f27;--panel:#fffaf0}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 Georgia,serif}main{max-width:1400px;margin:auto;padding:1rem}h1,h2,h3,h4{line-height:1.15}.writer-grid,.top-grid,.story-columns{display:grid;grid-template-columns:repeat(var(--writers),minmax(0,1fr));gap:1rem}.writer-header,.top-column,.story-cell{min-width:0;padding:1rem;background:var(--panel);border:1px solid var(--line);border-radius:.4rem}.metrics,.kicker,.empty,.missing{color:var(--muted);font-family:system-ui,sans-serif;font-size:.85rem}.writer-error{margin-top:.6rem;color:#b3261e;font-weight:bold}.story-card,.story-copy{margin:.75rem 0}.headline{font-size:1.15rem;font-weight:bold}.summary{margin-top:.35rem}.detail{margin-top:.5rem;color:var(--muted)}.story-row{padding:1rem 0;border-top:1px solid var(--line)}.original-title{color:var(--accent)}.story-cell h4{display:none}@media(max-width:700px){.writer-grid,.top-grid,.story-columns{display:block}.writer-header,.top-column,.story-cell{margin-bottom:.8rem}.story-cell h4{display:block}.writer-header h2,.top-column h3{overflow-wrap:anywhere}}@media(prefers-color-scheme:dark){:root{--paper:#1d1b18;--ink:#eee8db;--muted:#bcb3a5;--line:#4f493f;--accent:#e18a6c;--panel:#28241f}}
+:root{color-scheme:light dark;--paper:#fbf6e9;--ink:#24211d;--muted:#6d665c;--line:#cfc5b2;--accent:#9a3f27;--panel:#fffaf0}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 Georgia,serif}main{max-width:1400px;margin:auto;padding:1rem}h1,h2,h3,h4{line-height:1.15}.writer-grid,.top-grid,.story-columns{display:grid;grid-template-columns:repeat(var(--writers),minmax(0,1fr));gap:1rem}.writer-header,.top-column,.story-cell{min-width:0;padding:1rem;background:var(--panel);border:1px solid var(--line);border-radius:.4rem}.metrics,.kicker,.empty,.missing,.story-problems,.editor-problems{color:var(--muted);font-family:system-ui,sans-serif;font-size:.85rem}.writer-error{margin-top:.6rem;color:#b3261e;font-weight:bold}.story-card,.story-copy{margin:.75rem 0}.story-problems,.editor-problems{margin-top:.5rem}.headline{font-size:1.15rem;font-weight:bold}.summary{margin-top:.35rem}.detail{margin-top:.5rem;color:var(--muted)}.story-row{padding:1rem 0;border-top:1px solid var(--line)}.original-title{color:var(--accent)}.story-cell h4{display:none}@media(max-width:700px){.writer-grid,.top-grid,.story-columns{display:block}.writer-header,.top-column,.story-cell{margin-bottom:.8rem}.story-cell h4{display:block}.writer-header h2,.top-column h3{overflow-wrap:anywhere}}@media(prefers-color-scheme:dark){:root{--paper:#1d1b18;--ink:#eee8db;--muted:#bcb3a5;--line:#4f493f;--accent:#e18a6c;--panel:#28241f}}
 </style>
 </head>
 <body>
@@ -133,13 +139,15 @@ async function runWriter(spec, candidates, settings) {
     top: edited.top,
     stats: {
       written: written.stories.filter(story => story.write_ok).length,
-      failures: written.stats.fallbacks,
+      repairs: written.stats.repairs,
+      fallbacks: written.stats.fallbacks,
       not_news: written.stats.not_news,
       input_tokens: written.stats.input_tokens + edited.stats.input_tokens,
       output_tokens: written.stats.output_tokens + edited.stats.output_tokens,
       duration_ms: written.stats.duration_ms + edited.stats.duration_ms,
       edit_fallback: edited.stats.edit_fallback,
     },
+    editor_problems: edited.problems,
     error: null,
   };
 }
@@ -167,7 +175,8 @@ async function main(argv = process.argv.slice(2)) {
           stories: [],
           dropped: [],
           top: [],
-          stats: { written: 0, failures: selected.length, not_news: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+          stats: { written: 0, repairs: 0, fallbacks: selected.length, not_news: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+          editor_problems: [],
           error: error.message,
         });
       }
@@ -180,6 +189,10 @@ async function main(argv = process.argv.slice(2)) {
     `${path.basename(candidatesPath, path.extname(candidatesPath))}-writers.html`
   ));
   fs.writeFileSync(outputPath, buildCompareHtml(results));
+  for (const result of results) {
+    const stats = result.stats || {};
+    process.stdout.write(`${result.name}: ${stats.written || 0} written, ${stats.repairs || 0} repairs, ${stats.fallbacks || 0} fallbacks, ${stats.not_news || 0} not-news, editor fallback: ${stats.edit_fallback || 'none'}, ${stats.input_tokens || 0} input / ${stats.output_tokens || 0} output tokens, ${((stats.duration_ms || 0) / 1000).toFixed(2)} seconds\n`);
+  }
   process.stdout.write(`${outputPath}\n`);
   return outputPath;
 }

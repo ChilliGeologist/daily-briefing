@@ -144,9 +144,9 @@ function validateWrite(raw, item, interests) {
 
   if (typeof value.is_news !== 'boolean') {
     problems.push('is_news was not a boolean');
-    fatal = true;
+    value.is_news = true;
   }
-  for (const [field, label] of [['headline', 'Headline'], ['summary', 'Summary'], ['detail', 'Detail'], ['kicker', 'Kicker']]) {
+  for (const [field, label] of [['headline', 'Headline'], ['summary', 'Summary'], ['detail', 'Detail']]) {
     if (!value[field]) {
       problems.push(`${label} was empty`);
       fatal = true;
@@ -154,7 +154,13 @@ function validateWrite(raw, item, interests) {
   }
   if (!isSectionId(value.section)) {
     problems.push(`Unknown section: ${String(value.section)}`);
-    fatal = true;
+    value.section = defaultSection(item);
+  }
+  if (!value.kicker) {
+    problems.push('Kicker was empty');
+    value.kicker = (item.interest_matches || []).map(match => match.label).find(Boolean)
+      || item.source_name
+      || 'News';
   }
   let retainedSectionKicker = false;
   if (value.kicker && isSectionKicker(value.kicker, value.section)) {
@@ -165,13 +171,13 @@ function validateWrite(raw, item, interests) {
   }
   if (value.kicker && !retainedSectionKicker && (words(value.kicker).length > 3 || value.kicker.length > 24)) {
     problems.push('Kicker exceeded three words or 24 characters');
-    fatal = true;
+    const interestLabel = (item.interest_matches || []).map(match => match.label).find(Boolean);
+    value.kicker = interestLabel || words(value.kicker).slice(0, 2).join(' ').replace(/[^\p{L}\p{N}]+$/u, '');
   }
   if (value.detail) {
     const shortened = shortenDetail(value.detail);
     value.detail = shortened.detail;
     if (shortened.problem) problems.push(shortened.problem);
-    if (shortened.fatal) fatal = true;
   }
 
   if (fatal) {

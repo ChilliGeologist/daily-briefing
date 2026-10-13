@@ -12,6 +12,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
   const droppedByIndex = new Array(items.length);
   const stats = {
     written: 0,
+    repairs: 0,
     fallbacks: 0,
     not_news: 0,
     section_moves: 0,
@@ -51,6 +52,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
           });
         }
       }
+      if (validation.ok && validation.problems.length > 0) stats.repairs++;
     } catch (error) {
       validation = validateWrite(null, item, interests);
       stats.fallbacks++;
@@ -66,6 +68,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       ...validation.value,
       written_by: writtenBy,
       write_ok: validation.ok,
+      write_problems: validation.problems,
     };
     if (validation.sectionMoved) {
       stats.section_moves++;
@@ -100,7 +103,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   if (log && log.info) {
     log.info('pipeline:writer',
-      `Wrote ${stories.length} stories: ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}`);
+      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}`);
   }
   return { stories, dropped, stats };
 }
