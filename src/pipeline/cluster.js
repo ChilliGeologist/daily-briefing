@@ -2,19 +2,23 @@
 
 const STOPWORDS = new Set([
   'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'amid', 'an', 'and',
+  'article',
   'any', 'are', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below',
-  'between', 'both', 'but', 'by', 'can', 'could', 'did', 'do', 'does', 'doing',
+  'between', 'both', 'but', 'by', 'can', 'com', 'comment', 'comments', 'could', 'did', 'do', 'does', 'doing',
   'down', 'during', 'each', 'few', 'for', 'from', 'further', 'had', 'has', 'have',
   'having', 'he', 'her', 'here', 'hers', 'herself', 'him', 'himself', 'his', 'how',
-  'i', 'if', 'in', 'into', 'is', 'it', 'its', 'itself', 'just', 'me', 'more',
-  'most', 'my', 'myself', 'new', 'no', 'nor', 'not', 'now', 'of', 'off', 'on',
+  'http', 'https', 'i', 'if', 'in', 'into', 'is', 'it', 'item', 'its', 'itself', 'just', 'me', 'more',
+  'most', 'my', 'myself', 'new', 'no', 'nor', 'not', 'now', 'object', 'of', 'off', 'on',
   'once', 'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out', 'over', 'own',
-  'same', 'said', 'says', 'she', 'should', 'so', 'some', 'such', 'than', 'that',
+  'point', 'points', 'same', 'said', 'says', 'she', 'should', 'so', 'some', 'such', 'than', 'that',
   'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'these', 'they',
   'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very', 'was',
   'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom', 'why',
-  'will', 'with', 'would', 'you', 'your', 'yours', 'yourself', 'yourselves',
+  'url', 'will', 'with', 'would', 'ycombinator', 'you', 'your', 'yours', 'yourself', 'yourselves',
 ]);
+
+const HIGH_SIMILARITY = 0.42;
+const LOW_SIMILARITY = 0.3;
 
 function tokenize(text) {
   return String(text || '')
@@ -148,8 +152,8 @@ function rootGroups(items, unionFind) {
 
 async function clusterItems(items, {
   judge = async () => false,
-  high = 0.5,
-  low = 0.3,
+  high = HIGH_SIMILARITY,
+  low = LOW_SIMILARITY,
   maxChecks = 40,
   log = { warn() {} },
 } = {}) {

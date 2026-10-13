@@ -1485,12 +1485,13 @@ function renderLogEntries(viewer, entries, minLevel) {
 // 8. Pipeline Monitor
 // ============================================================
 
-var PIPELINE_STAGES = ['Collect', 'Score', 'Extract', 'Dedup', 'Categorise', 'Summarise', 'Assemble'];
+var PIPELINE_STAGES = ['Collect', 'Filter', 'Cluster', 'Rank', 'Extract', 'Categorise', 'Summarise', 'Assemble'];
 var STAGE_DESCRIPTIONS = {
   collect: 'Collecting items from configured sources',
-  score: 'Scoring items for relevance',
-  extract: 'Fetching article content and top Reddit comments',
-  dedup: 'Removing duplicate items',
+  filter: 'Dropping old news and filler',
+  cluster: 'Grouping the same story from different outlets',
+  rank: 'Choosing the stories worth writing up',
+  extract: 'Fetching the full articles',
   categorise: 'Sorting items into categories',
   summarise: 'Generating summaries',
   assemble: 'Assembling the final briefing'
@@ -1615,18 +1616,20 @@ function closePipelinePanel() {
 // We match these to determine which stages actually finished.
 var STAGE_COMPLETE_PATTERNS = {
   collect: /^Collection complete:/,
-  score: /^Scored \d+ items:/,
-  extract: /^Extracted \d+ items/,
-  dedup: /^Dedup: /,
+  filter: /^Filtered \d+ items:/,
+  cluster: /^Clustered \d+ items/,
+  rank: /^Ranked \d+ stories:/,
+  extract: /^Extracted \d+ stories:/,
   categorise: /^Categorised \d+ items/,
   summarise: /^Summarised \d+ items in/,
   assemble: /^Assembled briefing:/
 };
 var STAGE_COMPLETE_COMPONENTS = {
   collect: 'collector',
-  score: 'scorer',
+  filter: 'pipeline:filter',
+  cluster: 'pipeline:cluster',
+  rank: 'pipeline:rank',
   extract: 'pipeline:extract',
-  dedup: 'dedup',
   categorise: 'pipeline:categoriser',
   summarise: 'pipeline:summariser',
   assemble: 'assembler'

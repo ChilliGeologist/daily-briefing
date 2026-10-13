@@ -3,9 +3,13 @@
 const { v4: uuidv4 } = require('uuid');
 const { createLogger } = require('../logger');
 const { collect } = require('./collector');
-const { scoreAndFilter } = require('./scorer');
-const { extract } = require('./extractor');
-const { dedup } = require('./dedup');
+const { normalise } = require('./normalise');
+const { filterItems } = require('./filter');
+const { clusterItems } = require('./cluster');
+const { makeJudge } = require('./sameStory');
+const { rankClusters } = require('./rank');
+const { extractClusters } = require('./extractor');
+const { toItem } = require('./toItem');
 const { categorise } = require('./categoriser');
 const { summarise } = require('./summariser');
 const { assemble } = require('./assembler');
@@ -58,57 +62,104 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
   emit({ type: 'start', runId });
 
   try {
+    const enabledSources = db.getEnabledSources();
+    const priorities = new Map(enabledSources.map(source => [source.name, source.priority]));
+    const sourceMaxAge = new Map(enabledSources
+      .filter(source => source.config && source.config.max_age_hours != null)
+      .map(source => [source.name, Number(source.config.max_age_hours)]));
+
     // Stage 1 - Collect
     currentRun.stage = 'collect';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'collect', status: 'running' });
     const { items: collected, stats: collectStats } = await collect(db, runLog, emitProgress);
+    const prioritised = collected.map(item => ({
+      ...item,
+      source_priority: priorities.get(item.source_name) ?? 1,
+    }));
     db.updateRun(runId, { items_collected: collected.length });
     emit({ type: 'stage', stage: 'collect', status: 'complete', stats: collectStats });
     checkCancelled();
 
-    // Stage 2 - Score
-    currentRun.stage = 'score';
+    // Stage 2 - Filter
+    currentRun.stage = 'filter';
     currentRun.stageStartedAt = new Date().toISOString();
-    emit({ type: 'stage', stage: 'score', status: 'running' });
-    const { passed: scored, stats: scoreStats } = scoreAndFilter(collected, settings, runLog, emitProgress);
-    db.updateRun(runId, { items_scored: scored.length });
-    emit({ type: 'stage', stage: 'score', status: 'complete', stats: scoreStats });
+    emit({ type: 'stage', stage: 'filter', status: 'running' });
+    const normalised = normalise(prioritised);
+    const { kept, dropped: filteredOut, stats: filterStats } = filterItems(normalised, {
+      maxAgeHours: settings.getFilterMaxAgeHours(),
+      fillerPatterns: settings.getFillerPatterns(),
+      sourceMaxAge,
+      now: Date.now(),
+    });
+    for (const { item, reason } of filteredOut) {
+      runLog.debug('pipeline:filter', `Dropped "${item.title}" (${reason})`);
+    }
+    runLog.info('pipeline:filter',
+      `Filtered ${filterStats.total} items: ${filterStats.kept} kept, ${filterStats.stale} stale, ${filterStats.filler} filler`);
+    emit({ type: 'stage', stage: 'filter', status: 'complete', stats: filterStats });
     checkCancelled();
 
-    // Stage 3 - Extract
+    // Stage 3 - Cluster
+    currentRun.stage = 'cluster';
+    currentRun.stageStartedAt = new Date().toISOString();
+    emit({ type: 'stage', stage: 'cluster', status: 'running' });
+    const { clusters, stats: clusterStats } = await clusterItems(kept, {
+      judge: makeJudge(ollama, settings, runLog),
+      maxChecks: settings.getMaxSameStoryChecks(),
+      log: runLog,
+    });
+    runLog.info('pipeline:cluster',
+      `Clustered ${clusterStats.items} items into ${clusterStats.clusters} stories: ${clusterStats.url_merges} same link, ${clusterStats.path_merges} syndicated, ${clusterStats.similar_merges} similar, ${clusterStats.judged_yes}/${clusterStats.judged} confirmed by model`);
+    emit({ type: 'stage', stage: 'cluster', status: 'complete', stats: clusterStats });
+    checkCancelled();
+
+    // Stage 4 - Rank
+    currentRun.stage = 'rank';
+    currentRun.stageStartedAt = new Date().toISOString();
+    emit({ type: 'stage', stage: 'rank', status: 'running' });
+    const preferences = settings.getPreferences();
+    const { selected, stats: rankStats } = rankClusters(clusters, {
+      now: Date.now(),
+      boostKeywords: preferences.boost_keywords,
+      penaltyKeywords: preferences.penalty_keywords,
+      limit: settings.getMaxCuratedItems(),
+    });
+    runLog.info('pipeline:rank',
+      `Ranked ${rankStats.clusters} stories: ${rankStats.selected} selected (${rankStats.floor_added} by source floor)`);
+    db.updateRun(runId, { items_scored: selected.length });
+    emit({ type: 'stage', stage: 'rank', status: 'complete', stats: rankStats });
+    checkCancelled();
+
+    // Stage 5 - Extract
     currentRun.stage = 'extract';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'extract', status: 'running' });
-    const { items: extracted, stats: extractStats } = await extract(scored, settings, runLog, emitProgress);
+    const { clusters: extractedClusters, stats: extractStats } = await extractClusters(
+      selected, settings, runLog, emitProgress
+    );
+    const extracted = extractedClusters.map(toItem);
     emit({ type: 'stage', stage: 'extract', status: 'complete', stats: extractStats });
     checkCancelled();
 
-    // Stage 4 - Dedup
-    currentRun.stage = 'dedup';
-    currentRun.stageStartedAt = new Date().toISOString();
-    emit({ type: 'stage', stage: 'dedup', status: 'running' });
-    const { items: deduped, stats: dedupStats } = await dedup(extracted, ollama, settings, runLog, emitProgress);
-    emit({ type: 'stage', stage: 'dedup', status: 'complete', stats: dedupStats });
-    checkCancelled();
-
-    // Stage 4 - Categorise
+    // Stage 6 - Categorise
     currentRun.stage = 'categorise';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'categorise', status: 'running' });
-    const { categorised, stats: catStats } = await categorise(deduped, db, ollama, settings, runLog, emitProgress, checkCancelled);
+    const { categorised, stats: catStats } = await categorise(extracted, db, ollama, settings, runLog, emitProgress, checkCancelled);
     emit({ type: 'stage', stage: 'categorise', status: 'complete', stats: catStats });
     checkCancelled();
 
-    // Stage 5 - Summarise
+    // Stage 7 - Summarise
     currentRun.stage = 'summarise';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'summarise', status: 'running' });
     const { items: summarised, stats: sumStats } = await summarise(categorised, ollama, settings, runLog, emitProgress, checkCancelled);
     db.updateRun(runId, { items_curated: summarised.length });
     emit({ type: 'stage', stage: 'summarise', status: 'complete', stats: sumStats });
+    checkCancelled();
 
-    // Stage 6 - Assemble
+    // Stage 8 - Assemble
     currentRun.stage = 'assemble';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'assemble', status: 'running' });
@@ -129,8 +180,10 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
       briefingDate,
       stats: {
         collected: collected.length,
-        scored: scored.length,
-        deduped: deduped.length,
+        filtered: kept.length,
+        clustered: clusters.length,
+        ranked: selected.length,
+        extracted: extracted.length,
         categorised: categorised.length,
         summarised: summarised.length,
         duration_ms,
