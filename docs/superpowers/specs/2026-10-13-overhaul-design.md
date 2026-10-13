@@ -56,8 +56,9 @@ paid one is unreachable the free one takes over, so a briefing always arrives.
 
 **Notifications.** One each morning when the briefing is ready, showing the
 top headline. And, during the day, an alert when something urgent touches
-you — a serious hole in something you run, an emergency near home. Alerts
-stay rare by design, and none come overnight unless it's an emergency.
+you — a serious hole in something you run, an emergency near home. At most
+three a day, and none between 10pm and 6am unless it's an emergency near
+home.
 
 **How it gets built.** In eight stages, inside the existing app. After each
 stage you get a list of things to check on the test copy, and the next stage
