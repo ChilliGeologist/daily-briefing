@@ -20,7 +20,8 @@ const SENSITIVE_TERMS = Object.freeze([
   sensitiveGroup(['abus']),
   sensitiveGroup(['assault']),
   sensitiveGroup(['rape']),
-  sensitiveGroup(['stab']),
+  // 'stab' alone would match stable/stability.
+  sensitiveGroup(['stabb', 'stab wound', 'stabs']),
   sensitiveGroup(['shoot', 'shot']),
   sensitiveGroup(['fraud']),
   sensitiveGroup(['terror']),

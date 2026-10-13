@@ -162,6 +162,25 @@ it('does not flag 34 when it is present in the source', () => {
   });
 });
 
+it('does not treat "stable" as a stabbing claim', () => {
+  const value = written({ detail: 'Bryan Cranston paid tribute to his former co-star. His condition had been stable for years, friends and colleagues said.' });
+  assert.deepStrictEqual(guardFacts(value, source), {
+    value,
+    problems: [],
+    facts_removed: 0,
+    numbers_unsupported: 0,
+  });
+});
+
+it('still removes an unsupported stabbing claim', () => {
+  assert.deepStrictEqual(guardFacts(written({ summary: 'He was stabbed.' }), source), {
+    value: written({ summary: 'RJ Mitte died suddenly.' }),
+    problems: ['removed unsupported claim: "stabb"'],
+    facts_removed: 1,
+    numbers_unsupported: 0,
+  });
+});
+
 it('strictly flags an abbreviated numeric unit absent from the source', () => {
   assert.deepStrictEqual(guardFacts(written({ summary: 'The fundraiser collected $1.9m.' }), {
     ...source,
