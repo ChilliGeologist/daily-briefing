@@ -28,7 +28,6 @@ it('repairs editor ids and reports measured edit stats', async () => {
     usage: { input_tokens: 1000000, output_tokens: 1000000 },
     duration_ms: 42,
   };
-  Object.defineProperty(response, 'model', { value: 'claude-sonnet-5-5' });
   const logs = [];
   const output = await editStories(stories(), { async edit() { return response; } }, settings, {
     info: (...args) => logs.push(['info', ...args]),
@@ -39,7 +38,7 @@ it('repairs editor ids and reports measured edit stats', async () => {
     top: ['s2', 's1', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
-    stats: { input_tokens: 1000000, output_tokens: 1000000, cost_usd: 12, duration_ms: 42, edit_fallback: false },
+    stats: { input_tokens: 1000000, output_tokens: 1000000, duration_ms: 42, edit_fallback: false },
   });
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:editor', 'Editor output needed repair', { problems: [
@@ -63,7 +62,7 @@ it('uses the deterministic edit entirely when the editor throws', async () => {
     top: ['s1', 's2', 's3', 's4', 's5'],
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
-    stats: { input_tokens: 0, output_tokens: 0, cost_usd: 0, duration_ms: 0, edit_fallback: true },
+    stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: true },
   });
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:editor', 'Editor failed, using deterministic order: editor offline'],

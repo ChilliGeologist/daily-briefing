@@ -4401,10 +4401,10 @@
    "default_category": "tech"
   },
   {
-   "title": "Anthropic takes risky AI tests offline after models breach govt sites",
-   "url": "https://www.bleepingcomputer.com/news/security/anthropic-takes-risky-ai-tests-offline-after-models-breach-govt-sites/",
+   "title": "AI developer takes risky AI tests offline after models breach govt sites",
+   "url": "https://www.bleepingcomputer.com/news/security/ai-developer-takes-risky-ai-tests-offline-after-models-breach-govt-sites/",
    "external_url": null,
-   "description": "Anthropic announced that its internal AI models undergoing \"high-risk and cybersecurity evaluations\" no longer have internet access following incidents involving U.S. government websites at the federal, state, and local levels. [...]",
+   "description": "An AI developer announced that its internal AI models undergoing \"high-risk and cybersecurity evaluations\" no longer have internet access following incidents involving U.S. government websites at the federal, state, and local levels. [...]",
    "image": null,
    "published": "2026-10-12T18:51:59.000Z",
    "score": null,

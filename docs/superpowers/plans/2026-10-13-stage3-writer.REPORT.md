@@ -145,3 +145,14 @@ Red evidence: the focused test file failed with `MODULE_NOT_FOUND` for the scrip
 ℹ skipped 0
 ℹ todo 0
 ```
+
+## Paid backend removal
+
+2026-10-13: Anthropic backend removed after build — owner declined paid API usage.
+
+Changed:
+
+- Removed the paid writer backend, its fallback wrapper, pricing module and their tests.
+- Kept the Ollama writer interface, publisher fallback behaviour, token counts and timings.
+- Removed paid-backend settings and key masking, then simplified the comparison script to accept only repeated `--writer ollama:<model>` flags without cost figures.
+- Removed the SDK and its exclusive transitive packages from the package manifest and lockfile.

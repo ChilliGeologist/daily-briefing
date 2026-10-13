@@ -16,17 +16,17 @@ function result(json, backend, model, usage, duration_ms) {
 it('writes with backend concurrency while preserving rank order and aggregating all outcomes', async () => {
   const outputs = [
     result({ is_news: true, headline: 'Written one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world' },
-      'anthropic:claude-haiku-4-5', 'claude-haiku-4-5', { input_tokens: 1000000, output_tokens: 1000000 }, 10),
+      'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 10),
     result({ is_news: true, headline: '', summary: 'Bad.', detail: 'Bad.', kicker: 'Bad', section: 'unknown' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 20),
     result({ is_news: false, headline: 'An advert', summary: 'This is an advert.', detail: 'It is sponsored.', kicker: 'Advert', section: 'australia' },
-      'anthropic:claude-haiku-4-5', 'claude-haiku-4-5', { input_tokens: 1000000, output_tokens: 1000000 }, 30),
+      'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 30),
   ];
   let callIndex = 0;
   let active = 0;
   let maxActive = 0;
   const writer = {
-    name: 'anthropic:claude-haiku-4-5',
+    name: 'ollama:qwen3:8b',
     concurrency: 4,
     async write() {
       const index = callIndex++;
@@ -64,7 +64,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
     stories: [
       {
         ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world',
-        written_by: 'anthropic:claude-haiku-4-5', write_ok: true,
+        written_by: 'ollama:qwen3:8b', write_ok: true,
       },
       {
         ...items[1], rank: 2, id: 's2', is_news: true, headline: 'Publisher two', summary: 'Teaser two.', detail: 'Teaser two. More.', kicker: 'Plex', section: 'homelab',
@@ -73,7 +73,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
     ],
     dropped: [{
       ...items[2], rank: 3, id: 's3', is_news: false, headline: 'An advert', summary: 'This is an advert.', detail: 'It is sponsored.', kicker: 'Advert', section: 'australia',
-      written_by: 'anthropic:claude-haiku-4-5', write_ok: true,
+      written_by: 'ollama:qwen3:8b', write_ok: true,
     }],
     stats: {
       written: 2,
@@ -81,7 +81,6 @@ it('writes with backend concurrency while preserving rank order and aggregating 
       not_news: 1,
       input_tokens: 3000000,
       output_tokens: 3000000,
-      cost_usd: 12,
       duration_ms: 60,
     },
   });
@@ -111,7 +110,7 @@ it('turns a thrown story call into a publisher fallback', async () => {
       written_by: 'ollama:qwen', write_ok: false,
     }],
     dropped: [],
-    stats: { written: 1, fallbacks: 1, not_news: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, duration_ms: 0 },
+    stats: { written: 1, fallbacks: 1, not_news: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [['pipeline:writer', 'Writer failed for "Publisher", using fallback: model stopped']]);
 });

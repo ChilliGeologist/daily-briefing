@@ -2,7 +2,6 @@
 
 const { EDIT_SCHEMA, editSystemPrompt, editUserPrompt } = require('./prompts');
 const { validateEdit, deterministicEdit } = require('./validate');
-const { costUsd } = require('./prices');
 
 async function editStories(stories, writer, settings, log) {
   const options = {
@@ -13,7 +12,6 @@ async function editStories(stories, writer, settings, log) {
   let stats = {
     input_tokens: 0,
     output_tokens: 0,
-    cost_usd: 0,
     duration_ms: 0,
     edit_fallback: false,
   };
@@ -29,7 +27,6 @@ async function editStories(stories, writer, settings, log) {
     stats = {
       input_tokens: Number(usage.input_tokens) || 0,
       output_tokens: Number(usage.output_tokens) || 0,
-      cost_usd: costUsd(response.model || '', usage),
       duration_ms: Number(response.duration_ms) || 0,
       edit_fallback: false,
     };

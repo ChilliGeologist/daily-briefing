@@ -348,3 +348,5 @@ is set.
 Write `docs/superpowers/plans/2026-10-13-stage3-writer.REPORT.md`: per task,
 what changed, the failing-test evidence, anything in the plan you could not
 do or did differently and why, and the final `npm test` summary line.
+
+2026-10-13: Anthropic backend removed after build — owner declined paid API usage.

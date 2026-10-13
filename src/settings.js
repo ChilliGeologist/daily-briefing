@@ -76,22 +76,6 @@ function createSettings(db) {
       return val !== null ? val : DEFAULT_INTERESTS;
     },
 
-    getWriter() {
-      return db.getSetting('writer') || 'ollama';
-    },
-
-    getAnthropicApiKey() {
-      return db.getSetting('anthropic_api_key') || null;
-    },
-
-    getAnthropicWriteModel() {
-      return db.getSetting('anthropic_write_model') || 'claude-haiku-4-5';
-    },
-
-    getAnthropicEditModel() {
-      return db.getSetting('anthropic_edit_model') || 'claude-sonnet-5-5';
-    },
-
     getWriterOllamaModel() {
       return db.getSetting('writer_ollama_model') || this.getOllamaModel();
     },

@@ -41,12 +41,12 @@ it('assembles top first, ordered non-empty sections, more stories and exact read
     sections: { tasmania: ['s2'], world: ['s1'] },
     more: { tasmania: ['s3'] },
   }, storiesById, {
-    writer: 'anthropic:claude-haiku-4-5 + ollama:qwen3:8b',
+    writer: 'ollama:qwen3:8b',
     stats: { write: { written: 3 }, edit: { edit_fallback: false } },
     log: { info: (...args) => logs.push(args) },
   }), {
     headline: 'Top headline',
-    writer: 'anthropic:claude-haiku-4-5 + ollama:qwen3:8b',
+    writer: 'ollama:qwen3:8b',
     stats: { write: { written: 3 }, edit: { edit_fallback: false } },
     sections: [
       {

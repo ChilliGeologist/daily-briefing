@@ -2,7 +2,6 @@
 
 const { WRITE_SCHEMA, writeSystemPrompt, writeUserPrompt } = require('./prompts');
 const { validateWrite } = require('./validate');
-const { costUsd } = require('./prices');
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return count === 1 ? singular : pluralForm;
@@ -17,7 +16,6 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     not_news: 0,
     input_tokens: 0,
     output_tokens: 0,
-    cost_usd: 0,
     duration_ms: 0,
   };
   let cursor = 0;
@@ -42,7 +40,6 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       stats.input_tokens += Number(usage.input_tokens) || 0;
       stats.output_tokens += Number(usage.output_tokens) || 0;
       stats.duration_ms += Number(response.duration_ms) || 0;
-      stats.cost_usd += costUsd(response.model || writtenBy.replace(/^[^:]+:/, ''), usage);
       validation = validateWrite(response.json, item);
       if (!validation.ok) {
         stats.fallbacks++;

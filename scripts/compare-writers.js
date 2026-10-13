@@ -6,7 +6,6 @@ const path = require('node:path');
 const { initDB } = require('../src/db');
 const { createSettings } = require('../src/settings');
 const { createOllamaWriter } = require('../src/pipeline/writer/ollama');
-const { createAnthropicWriter } = require('../src/pipeline/writer/anthropic');
 const { writeStories } = require('../src/pipeline/writer/write');
 const { editStories } = require('../src/pipeline/writer/edit');
 
@@ -33,7 +32,6 @@ function metrics(stats) {
     countLabel(stats.failures || 0, 'failure'),
     countLabel(stats.not_news || 0, 'not-news', 'not-news'),
     `${stats.input_tokens || 0} input / ${stats.output_tokens || 0} output tokens`,
-    `$${(stats.cost_usd || 0).toFixed(2)} edition / $${((stats.cost_usd || 0) * 30).toFixed(2)} month`,
     formatDuration(stats.duration_ms || 0),
   ].join(' · ');
 }
@@ -117,18 +115,7 @@ function makeWriter(spec, settings) {
       numCtx: settings.getOllamaNumCtx(),
     });
   }
-  if (spec.startsWith('anthropic:')) {
-    const models = spec.slice('anthropic:'.length).split('/');
-    const apiKey = process.env.ANTHROPIC_API_KEY || settings.getAnthropicApiKey();
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY or anthropic_api_key setting is required');
-    if (!models[0]) throw new Error(`Invalid writer: ${spec}`);
-    return createAnthropicWriter({
-      apiKey,
-      writeModel: models[0],
-      editModel: models[1] || settings.getAnthropicEditModel(),
-    });
-  }
-  throw new Error(`Unknown writer: ${spec}`);
+  throw new Error(`Writer must use ollama:<model>: ${spec}`);
 }
 
 async function runWriter(spec, candidates, settings) {
@@ -149,7 +136,6 @@ async function runWriter(spec, candidates, settings) {
       not_news: written.stats.not_news,
       input_tokens: written.stats.input_tokens + edited.stats.input_tokens,
       output_tokens: written.stats.output_tokens + edited.stats.output_tokens,
-      cost_usd: written.stats.cost_usd + edited.stats.cost_usd,
       duration_ms: written.stats.duration_ms + edited.stats.duration_ms,
     },
     error: null,
@@ -179,7 +165,7 @@ async function main(argv = process.argv.slice(2)) {
           stories: [],
           dropped: [],
           top: [],
-          stats: { written: 0, failures: selected.length, not_news: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, duration_ms: 0 },
+          stats: { written: 0, failures: selected.length, not_news: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
           error: error.message,
         });
       }
