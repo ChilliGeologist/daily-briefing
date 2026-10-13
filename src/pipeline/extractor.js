@@ -240,6 +240,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     attempted: 0,
     articles: 0,
     comments: 0,
+    discussions: 0,
     failures: 0,
     gnews_resolved: 0,
     gnews_failed: 0,
@@ -258,7 +259,15 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     cluster.article_url = null;
     cluster.top_comments = null;
 
-    for (const item of orderedCandidates(cluster, paywalledHosts)) {
+    // A Reddit post page is a discussion, not an article: Readability finds
+    // nothing on it, and every request waits a minute in the Reddit queue.
+    // The post's own text is already in its description; comments are fetched
+    // separately below.
+    const fetchable = orderedCandidates(cluster, paywalledHosts)
+      .filter(item => !isRedditUrl(item.canonical_url || item.url));
+    if (fetchable.length === 0) stats.discussions++;
+
+    for (const item of fetchable) {
       let url = item.canonical_url || item.url;
       if (!url) continue;
 
@@ -300,7 +309,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
       }
     }
 
-    if (!cluster.article_text) stats.failures++;
+    if (!cluster.article_text && fetchable.length > 0) stats.failures++;
   }
 
   async function worker() {
@@ -325,7 +334,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, () => worker()));
 
   log.info('pipeline:extract',
-    `Extracted ${total} stories: ${stats.articles} articles, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed`);
+    `Extracted ${total} stories: ${stats.articles} articles, ${stats.discussions} discussion posts, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed`);
   return { clusters, stats };
 }
 

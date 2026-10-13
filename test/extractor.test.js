@@ -251,6 +251,26 @@ describe('Extractor', () => {
       assert.strictEqual(result.clusters[0].article_url, 'https://www.abc.net.au/news/free');
     });
 
+    it('never fetches a Reddit post page as an article and does not count it as a failure', async () => {
+      const urls = [];
+      const discussion = cluster([clusterItem('https://www.reddit.com/r/homelab/comments/1x4ezxj/rack_got_out_of_hand')]);
+      const linked = cluster([
+        clusterItem('https://www.reddit.com/r/news/comments/1x4abcd/paris_market_fire'),
+        clusterItem('https://www.abc.net.au/news/paris-fire'),
+      ]);
+      const result = await extractClusters([discussion, linked], clusterSettings, log, null, {
+        fetchImpl: async url => {
+          urls.push(url);
+          return makeResponse({ body: LONG_HTML, url });
+        },
+      });
+
+      assert.deepStrictEqual(urls, ['https://www.abc.net.au/news/paris-fire']);
+      assert.deepStrictEqual(
+        [result.stats.articles, result.stats.discussions, result.stats.failures],
+        [1, 1, 0]);
+    });
+
     it('resolves Google News before fetching the publisher article', async () => {
       const urls = [];
       const googleUrl = 'https://news.google.com/rss/articles/CBMiabc?oc=5';
