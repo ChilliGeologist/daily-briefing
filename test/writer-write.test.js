@@ -79,6 +79,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
       written: 2,
       fallbacks: 1,
       not_news: 1,
+      section_moves: 0,
       input_tokens: 3000000,
       output_tokens: 3000000,
       duration_ms: 60,
@@ -90,7 +91,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:writer', 'Writer output invalid for "Publisher two", using fallback', { problems: ['Headline was empty', 'Unknown section: unknown'] }],
     ['info', 'pipeline:writer', 'Not news: "Publisher three"'],
-    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 fallback, 1 not news'],
+    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 fallback, 1 not news, 0 section moves'],
   ]);
 });
 
@@ -110,7 +111,60 @@ it('turns a thrown story call into a publisher fallback', async () => {
       written_by: 'ollama:qwen', write_ok: false,
     }],
     dropped: [],
-    stats: { written: 1, fallbacks: 1, not_news: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 1, fallbacks: 1, not_news: 0, section_moves: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [['pipeline:writer', 'Writer failed for "Publisher", using fallback: model stopped']]);
+});
+
+it('moves unsupported local sections using configured place interests and counts the move', async () => {
+  const outputs = [
+    result({ is_news: true, headline: 'Queensland inquest continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'Council decision', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'National update', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia' }, 'ollama:test', 'test', {}, 0),
+  ];
+  let index = 0;
+  const logs = [];
+  const output = await writeStories(
+    [
+      { title: 'Queensland inquest continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1 },
+      { title: 'Council decision', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1 },
+      { title: 'National update', description: 'A national update.', interest_matches: [], coverage: 1 },
+    ],
+    { name: 'ollama:test', concurrency: 1, async write() { return outputs[index++]; } },
+    {
+      getWriterArticleChars: () => 6000,
+      getInterests: () => [{ label: 'Local places', kind: 'place', terms: ['Launceston'], weight: 1 }],
+    },
+    {
+      info: (...args) => logs.push(['info', ...args]),
+      warn() {},
+      debug: (...args) => logs.push(['debug', ...args]),
+    }
+  );
+
+  assert.deepStrictEqual(output, {
+    stories: [
+      {
+        title: 'Queensland inquest continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1,
+        rank: 1, id: 's1', is_news: true, headline: 'Queensland inquest continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'australia',
+        written_by: 'ollama:test', write_ok: true,
+      },
+      {
+        title: 'Council decision', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1,
+        rank: 2, id: 's2', is_news: true, headline: 'Council decision', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania',
+        written_by: 'ollama:test', write_ok: true,
+      },
+      {
+        title: 'National update', description: 'A national update.', interest_matches: [], coverage: 1,
+        rank: 3, id: 's3', is_news: true, headline: 'National update', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia',
+        written_by: 'ollama:test', write_ok: true,
+      },
+    ],
+    dropped: [],
+    stats: { written: 3, fallbacks: 0, not_news: 0, section_moves: 1, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+  assert.deepStrictEqual(logs, [
+    ['debug', 'pipeline:writer', 'section moved: tasmania -> australia (no Tasmanian place named)'],
+    ['info', 'pipeline:writer', 'Wrote 3 stories: 0 fallbacks, 0 not news, 1 section move'],
+  ]);
 });

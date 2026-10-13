@@ -14,10 +14,12 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     written: 0,
     fallbacks: 0,
     not_news: 0,
+    section_moves: 0,
     input_tokens: 0,
     output_tokens: 0,
     duration_ms: 0,
   };
+  const interests = typeof settings.getInterests === 'function' ? settings.getInterests() : undefined;
   let cursor = 0;
   let completed = 0;
   if (emitProgress) emitProgress('write', 0, items.length);
@@ -40,7 +42,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       stats.input_tokens += Number(usage.input_tokens) || 0;
       stats.output_tokens += Number(usage.output_tokens) || 0;
       stats.duration_ms += Number(response.duration_ms) || 0;
-      validation = validateWrite(response.json, item);
+      validation = validateWrite(response.json, item, interests);
       if (!validation.ok) {
         stats.fallbacks++;
         if (log && log.warn) {
@@ -50,7 +52,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         }
       }
     } catch (error) {
-      validation = validateWrite(null, item);
+      validation = validateWrite(null, item, interests);
       stats.fallbacks++;
       if (log && log.warn) {
         log.warn('pipeline:writer', `Writer failed for "${item.title}", using fallback: ${error.message}`);
@@ -65,6 +67,12 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       written_by: writtenBy,
       write_ok: validation.ok,
     };
+    if (validation.sectionMoved) {
+      stats.section_moves++;
+      if (log && log.debug) {
+        log.debug('pipeline:writer', validation.problems.at(-1));
+      }
+    }
     if (story.is_news) {
       storiesByIndex[index] = story;
     } else {
@@ -92,7 +100,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   if (log && log.info) {
     log.info('pipeline:writer',
-      `Wrote ${stories.length} stories: ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news`);
+      `Wrote ${stories.length} stories: ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}`);
   }
   return { stories, dropped, stats };
 }

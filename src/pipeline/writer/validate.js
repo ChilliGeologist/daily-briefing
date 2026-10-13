@@ -1,10 +1,11 @@
 'use strict';
 
-const { interestScore } = require('./interests');
+const { interestScore, matchInterests } = require('./interests');
 const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
+  SECTION_REQUIRES_PLACE,
   isSectionId,
 } = require('./sections');
 
@@ -52,6 +53,30 @@ function fallbackWrite(item) {
   };
 }
 
+function sectionEvidence(item, value) {
+  return [
+    item.title,
+    value.headline,
+    item.description,
+    ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : []),
+    item.article_content,
+  ].filter(text => typeof text === 'string' && text.trim()).join('\n');
+}
+
+function enforceSectionRequirements(value, item, interests, problems) {
+  const requirement = SECTION_REQUIRES_PLACE[value.section];
+  if (!requirement) return false;
+
+  const requiredKinds = new Set(requirement.kinds || []);
+  const matched = matchInterests(sectionEvidence(item, value), interests);
+  if (matched.some(match => requiredKinds.has(match.kind))) return false;
+
+  const from = value.section;
+  value.section = requirement.fallback;
+  problems.push(`section moved: ${from} -> ${value.section} (no ${requirement.placeName || 'required'} place named)`);
+  return true;
+}
+
 function words(text) {
   return String(text).trim().match(/\S+/g) || [];
 }
@@ -97,10 +122,13 @@ function shortenDetail(detail) {
   };
 }
 
-function validateWrite(raw, item) {
+function validateWrite(raw, item, interests) {
   const parsed = parseObject(raw);
   if (!parsed) {
-    return { ok: false, value: fallbackWrite(item), problems: ['Writer output was not valid JSON'] };
+    const value = fallbackWrite(item);
+    const problems = ['Writer output was not valid JSON'];
+    const sectionMoved = enforceSectionRequirements(value, item, interests, problems);
+    return sectionMoved ? { ok: false, value, problems, sectionMoved } : { ok: false, value, problems };
   }
 
   const problems = [];
@@ -146,9 +174,16 @@ function validateWrite(raw, item) {
     if (shortened.fatal) fatal = true;
   }
 
-  return fatal
-    ? { ok: false, value: fallbackWrite(item), problems }
-    : { ok: true, value, problems };
+  if (fatal) {
+    const fallback = fallbackWrite(item);
+    const sectionMoved = enforceSectionRequirements(fallback, item, interests, problems);
+    return sectionMoved
+      ? { ok: false, value: fallback, problems, sectionMoved }
+      : { ok: false, value: fallback, problems };
+  }
+
+  const sectionMoved = enforceSectionRequirements(value, item, interests, problems);
+  return sectionMoved ? { ok: true, value, problems, sectionMoved } : { ok: true, value, problems };
 }
 
 function emptySections() {

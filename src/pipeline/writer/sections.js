@@ -30,6 +30,10 @@ const SECTION_BY_INTEREST_LABEL = Object.freeze({
   'Old School RuneScape': 'gaming',
 });
 
+const SECTION_REQUIRES_PLACE = Object.freeze({
+  tasmania: Object.freeze({ kinds: Object.freeze(['place']), fallback: 'australia', placeName: 'Tasmanian' }),
+});
+
 function isSectionId(id) {
   return SECTION_IDS.has(id);
 }
@@ -39,5 +43,6 @@ module.exports = {
   TOP_SECTION,
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
+  SECTION_REQUIRES_PLACE,
   isSectionId,
 };
