@@ -1,10 +1,36 @@
 'use strict';
 
+function sensitiveGroup(claim, support = []) {
+  return Object.freeze({
+    claim: Object.freeze([...claim]),
+    support: Object.freeze([...new Set([...claim, ...support])]),
+  });
+}
+
 const SENSITIVE_TERMS = Object.freeze([
-  'suicid', 'self-harm', 'overdos', 'murder', 'manslaughter', 'homicid', 'rape',
-  'sexual assault', 'abuse', 'cancer', 'terminal', 'dementia', 'HIV', 'stroke',
-  'heart attack', 'drunk', 'intoxicat', 'arrested', 'charged', 'convicted', 'guilty',
-  'pleaded', 'fraud', 'terroris', 'shot dead', 'stabbed', 'killed',
+  sensitiveGroup(['suicid', 'own life', 'killed himself', 'killed herself', 'killed themselves']),
+  sensitiveGroup(['convict']),
+  sensitiveGroup(['kill']),
+  sensitiveGroup(['murder']),
+  sensitiveGroup(['charg']),
+  sensitiveGroup(['arrest']),
+  sensitiveGroup(['plead']),
+  sensitiveGroup(['guilt']),
+  sensitiveGroup(['overdos']),
+  sensitiveGroup(['abus']),
+  sensitiveGroup(['assault']),
+  sensitiveGroup(['rape']),
+  sensitiveGroup(['stab']),
+  sensitiveGroup(['shoot', 'shot']),
+  sensitiveGroup(['fraud']),
+  sensitiveGroup(['terror']),
+  sensitiveGroup(['cancer']),
+  sensitiveGroup(['dementia']),
+  sensitiveGroup(['stroke']),
+  sensitiveGroup(['heart attack']),
+  sensitiveGroup(['HIV']),
+  sensitiveGroup(['drunk', 'intoxicat']),
+  sensitiveGroup(['self-harm']),
 ]);
 
 function escapeRegExp(value) {
@@ -12,10 +38,14 @@ function escapeRegExp(value) {
 }
 
 function termPattern(term) {
-  return new RegExp(`\\b${escapeRegExp(term).replace(/ /g, '\\s+').replace('-', '[- ]')}\\w*`, 'iu');
+  return new RegExp(`\\b${escapeRegExp(term).replace(/ /g, '\\s+').replace(/-/g, '[- ]')}\\w*`, 'iu');
 }
 
-const SENSITIVE_PATTERNS = SENSITIVE_TERMS.map(term => ({ term, pattern: termPattern(term) }));
+const SENSITIVE_PATTERNS = SENSITIVE_TERMS.map(({ claim, support }) => ({
+  term: claim[0],
+  claim: claim.map(termPattern),
+  support: [...new Set([...claim, ...support])].map(termPattern),
+}));
 
 function teasers(item) {
   if (Array.isArray(item.merged_descriptions) && item.merged_descriptions.length > 0) {
@@ -46,7 +76,9 @@ function firstSentence(text) {
 }
 
 function unsupportedTerm(sentence, source) {
-  return SENSITIVE_PATTERNS.find(({ pattern }) => pattern.test(sentence) && !pattern.test(source));
+  return SENSITIVE_PATTERNS.find(({ claim, support }) =>
+    claim.some(pattern => pattern.test(sentence)) && !support.some(pattern => pattern.test(source))
+  );
 }
 
 function wordCount(text) {

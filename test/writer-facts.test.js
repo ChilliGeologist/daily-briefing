@@ -61,6 +61,70 @@ it('keeps a sensitive term when its stem occurs in the source', () => {
   });
 });
 
+it('keeps a suicide claim supported by a report that he took his own life', () => {
+  const value = written({ detail: 'A publicist confirmed that Mitte died by suicide. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.' });
+  assert.deepStrictEqual(guardFacts(value, {
+    ...source,
+    article_content: 'A publicist confirmed news reports that Mitte took his own life.',
+  }), {
+    value,
+    problems: [],
+    facts_removed: 0,
+    numbers_unsupported: 0,
+  });
+});
+
+it('keeps a conviction claim supported by a murder conviction', () => {
+  const value = written({ detail: 'He was convicted of murder. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  assert.deepStrictEqual(guardFacts(value, {
+    ...source,
+    article_content: 'He appeals his murder conviction.',
+  }), {
+    value,
+    problems: [],
+    facts_removed: 0,
+    numbers_unsupported: 0,
+  });
+});
+
+it('keeps a killing claim supported by a reference to a killer', () => {
+  const value = written({ detail: 'The man was killed. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  assert.deepStrictEqual(guardFacts(value, {
+    ...source,
+    article_content: 'Police are searching for the killer.',
+  }), {
+    value,
+    problems: [],
+    facts_removed: 0,
+    numbers_unsupported: 0,
+  });
+});
+
+it('removes a suicide claim when the source reports only a sudden death under investigation', () => {
+  assert.deepStrictEqual(guardFacts(written({ summary: 'He died by suicide.' }), {
+    ...source,
+    merged_descriptions: ['His sudden death is under investigation.'],
+  }), {
+    value: written({ summary: 'His sudden death is under investigation.' }),
+    problems: ['removed unsupported claim: "suicid"'],
+    facts_removed: 1,
+    numbers_unsupported: 0,
+  });
+});
+
+it('keeps a charge claim supported by charges in the source', () => {
+  const value = written({ detail: 'He was charged. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  assert.deepStrictEqual(guardFacts(value, {
+    ...source,
+    article_content: 'He faces charges.',
+  }), {
+    value,
+    problems: [],
+    facts_removed: 0,
+    numbers_unsupported: 0,
+  });
+});
+
 it('replaces a fully removed summary with the first teaser sentence', () => {
   assert.deepStrictEqual(guardFacts(written({ summary: 'RJ Mitte died by suicide.' }), source), {
     value: written({ summary: 'RJ Mitte died suddenly.' }),
