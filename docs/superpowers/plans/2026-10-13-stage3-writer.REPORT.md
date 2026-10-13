@@ -156,3 +156,28 @@ Changed:
 - Kept the Ollama writer interface, publisher fallback behaviour, token counts and timings.
 - Removed paid-backend settings and key masking, then simplified the comparison script to accept only repeated `--writer ollama:<model>` flags without cost figures.
 - Removed the SDK and its exclusive transitive packages from the package manifest and lockfile.
+
+## After the build: fixes from real dev runs (2026-10-13/14, Claude)
+
+Four real runs over the same morning (929 items collected) found defects the
+unit tests could not:
+
+| Found on real data | Fix |
+| --- | --- |
+| "Events" matched "Show HN", the share market and every AFL story; "council", "premier" matched anywhere | `requires_place` on council/state/emergency/event interests; generic event terms dropped |
+| Celebrity gossip led "You should know" on coverage alone | Editor prompt excludes gossip; deterministic top needs coverage ≥ 3 or an interest match |
+| Overseas and interstate stories filed under Tasmania (syndicated by Tasmanian outlets) | Hard rule: Tasmania only when a Tasmanian place is named in headline, teaser or article |
+| World/Tech/Gaming nearly empty with 60 candidates | `max_candidates` 120 |
+| qwen3 kickers over-long → whole story discarded | Kicker repaired in place, writing kept |
+| qwen3 editor answered with headlines, not ids | Editor schema constrains ids to an enum |
+| Risk of invented sensitive claims | Facts guard: sentence with a sensitive term (word families) unsupported by the source is dropped; unsupported numbers logged |
+
+The first facts guard matched exact stems and removed six true sentences
+(conviction/convicted, killer/killed, "took his own life"/suicide); it now
+matches word families.
+
+Comparisons are disturbed by the nightly backup, which restarts the Ollama
+container around 00:00 Hobart; run them away from midnight.
+
+**Known, not fixed here (stage 2 clustering):** two Guardian/other-outlet
+stories about David Pocock and the AI letter were not merged.
