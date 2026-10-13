@@ -1,6 +1,7 @@
 'use strict';
 
 const { interestScore, matchInterests } = require('./interests');
+const { guardFacts } = require('./facts');
 const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
@@ -174,12 +175,6 @@ function validateWrite(raw, item, interests) {
     const interestLabel = (item.interest_matches || []).map(match => match.label).find(Boolean);
     value.kicker = interestLabel || words(value.kicker).slice(0, 2).join(' ').replace(/[^\p{L}\p{N}]+$/u, '');
   }
-  if (value.detail) {
-    const shortened = shortenDetail(value.detail);
-    value.detail = shortened.detail;
-    if (shortened.problem) problems.push(shortened.problem);
-  }
-
   if (fatal) {
     const fallback = fallbackWrite(item);
     const sectionMoved = enforceSectionRequirements(fallback, item, interests, problems);
@@ -188,8 +183,20 @@ function validateWrite(raw, item, interests) {
       : { ok: false, value: fallback, problems };
   }
 
+  const facts = guardFacts(value, item);
+  Object.assign(value, facts.value);
+  problems.push(...facts.problems);
+  if (value.detail) {
+    const shortened = shortenDetail(value.detail);
+    value.detail = shortened.detail;
+    if (shortened.problem) problems.push(shortened.problem);
+  }
+
   const sectionMoved = enforceSectionRequirements(value, item, interests, problems);
-  return sectionMoved ? { ok: true, value, problems, sectionMoved } : { ok: true, value, problems };
+  const result = sectionMoved ? { ok: true, value, problems, sectionMoved } : { ok: true, value, problems };
+  if (facts.facts_removed > 0) result.facts_removed = facts.facts_removed;
+  if (facts.numbers_unsupported > 0) result.numbers_unsupported = facts.numbers_unsupported;
+  return result;
 }
 
 function emptySections() {

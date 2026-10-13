@@ -33,6 +33,33 @@ it('parses and trims a valid writer result', () => {
   });
 });
 
+it('applies the facts guard after parsing a valid writer result', () => {
+  assert.deepStrictEqual(validateWrite({
+    is_news: true,
+    headline: 'Actor dies at 34',
+    summary: 'The death remains under investigation.',
+    detail: 'RJ Mitte died by suicide at 34 in Texas. The death remains under investigation and colleagues shared their memories of his work.',
+    kicker: 'Tribute',
+    section: 'world',
+  }, {
+    ...item,
+    merged_descriptions: ['RJ Mitte died suddenly. An investigation is ongoing.'],
+  }), {
+    ok: true,
+    value: {
+      is_news: true,
+      headline: 'Actor dies at 34',
+      summary: 'The death remains under investigation.',
+      detail: 'The death remains under investigation and colleagues shared their memories of his work. RJ Mitte died suddenly. An investigation is ongoing.',
+      kicker: 'Tribute',
+      section: 'world',
+    },
+    problems: ['removed unsupported claim: "suicid"', 'unsupported number: 34', 'unsupported number: 34'],
+    facts_removed: 1,
+    numbers_unsupported: 2,
+  });
+});
+
 it('replaces a section-name kicker with the first interest label', () => {
   assert.deepStrictEqual(validateWrite({
     is_news: true,
@@ -161,7 +188,7 @@ it('strips only a single sentence-ending full stop from headlines', () => {
     { ok: true, value: { is_news: true, headline: 'Fine refused', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
     { ok: true, value: { is_news: true, headline: 'Made in the U.S.', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
     { ok: true, value: { is_news: true, headline: 'Wait...', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
-    { ok: true, value: { is_news: true, headline: 'Version 2', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Version 2', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: ['unsupported number: 2'], numbers_unsupported: 1 },
   ]);
 });
 

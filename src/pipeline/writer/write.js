@@ -16,6 +16,8 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     fallbacks: 0,
     not_news: 0,
     section_moves: 0,
+    facts_removed: 0,
+    numbers_unsupported: 0,
     input_tokens: 0,
     output_tokens: 0,
     duration_ms: 0,
@@ -44,6 +46,8 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       stats.output_tokens += Number(usage.output_tokens) || 0;
       stats.duration_ms += Number(response.duration_ms) || 0;
       validation = validateWrite(response.json, item, interests);
+      stats.facts_removed += validation.facts_removed || 0;
+      stats.numbers_unsupported += validation.numbers_unsupported || 0;
       if (!validation.ok) {
         stats.fallbacks++;
         if (log && log.warn) {
@@ -103,7 +107,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   if (log && log.info) {
     log.info('pipeline:writer',
-      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}`);
+      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}, ${stats.facts_removed} ${plural(stats.facts_removed, 'fact', 'facts')} removed, ${stats.numbers_unsupported} unsupported ${plural(stats.numbers_unsupported, 'number')}`);
   }
   return { stories, dropped, stats };
 }

@@ -24,7 +24,7 @@ it('builds a self-contained responsive comparison with exact metrics, top picks 
       }],
       dropped: [{ id: 's2', write_ok: true }],
       top: ['s1'],
-      stats: { written: 1, repairs: 1, fallbacks: 0, not_news: 1, input_tokens: 10, output_tokens: 5, duration_ms: 20, edit_fallback: 'partial' },
+      stats: { written: 1, repairs: 1, fallbacks: 0, not_news: 1, facts_removed: 2, numbers_unsupported: 1, input_tokens: 10, output_tokens: 5, duration_ms: 20, edit_fallback: 'partial' },
       editor_problems: ['Story s1 was already selected for top'],
       error: null,
     },
@@ -48,8 +48,8 @@ it('builds a self-contained responsive comparison with exact metrics, top picks 
   assert.strictEqual(document.querySelectorAll('style').length, 1);
   assert.deepStrictEqual(text('.writer-header h2'), ['ollama:<model>', 'ollama:qwen3:8b']);
   assert.deepStrictEqual(text('.metrics'), [
-    '1 written · 1 repair · 0 fallbacks · 1 not-news · editor fallback: partial · 10 input / 5 output tokens · 20 ms',
-    '0 written · 0 repairs · 1 fallback · 0 not-news · editor fallback: full · 3 input / 1 output tokens · 1.50 s',
+    '1 written · 1 repair · 0 fallbacks · 1 not-news · 2 facts removed · 1 unsupported number · editor fallback: partial · 10 input / 5 output tokens · 20 ms',
+    '0 written · 0 repairs · 1 fallback · 0 not-news · 0 facts removed · 0 unsupported numbers · editor fallback: full · 3 input / 1 output tokens · 1.50 s',
   ]);
   assert.deepStrictEqual(text('.writer-error'), ['Failure: model <offline>']);
   assert.deepStrictEqual(text('.top-column h3'), ['ollama:<model>', 'ollama:qwen3:8b']);

@@ -43,6 +43,8 @@ The section is where the story happens, not who reports it: a story set overseas
 
 Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
+Use only facts stated in the supplied text; never add a cause of death, illness, diagnosis, criminal charge, age, number, place, name or quote that the text does not state. If the text says a cause is unknown or under investigation, say exactly that.
+
 The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question.`);
 });
 

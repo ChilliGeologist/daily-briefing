@@ -81,6 +81,8 @@ it('writes with backend concurrency while preserving rank order and aggregating 
       fallbacks: 1,
       not_news: 1,
       section_moves: 0,
+      facts_removed: 0,
+      numbers_unsupported: 0,
       input_tokens: 3000000,
       output_tokens: 3000000,
       duration_ms: 60,
@@ -92,7 +94,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:writer', 'Writer output invalid for "Publisher two", using fallback', { problems: ['Headline was empty', 'Unknown section: unknown'] }],
     ['info', 'pipeline:writer', 'Not news: "Publisher three"'],
-    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 1 fallback, 1 not news, 0 section moves'],
+    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 1 fallback, 1 not news, 0 section moves, 0 facts removed, 0 unsupported numbers'],
   ]);
 });
 
@@ -112,7 +114,7 @@ it('turns a thrown story call into a publisher fallback', async () => {
       written_by: 'ollama:qwen', write_ok: false, write_problems: ['Writer output was not valid JSON'],
     }],
     dropped: [],
-    stats: { written: 1, repairs: 0, fallbacks: 1, not_news: 0, section_moves: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 1, repairs: 0, fallbacks: 1, not_news: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [['pipeline:writer', 'Writer failed for "Publisher", using fallback: model stopped']]);
 });
@@ -162,10 +164,40 @@ it('moves unsupported local sections using configured place interests and counts
       },
     ],
     dropped: [],
-    stats: { written: 3, repairs: 1, fallbacks: 0, not_news: 0, section_moves: 1, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 3, repairs: 1, fallbacks: 0, not_news: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [
     ['debug', 'pipeline:writer', 'section moved: tasmania -> australia (no Tasmanian place named)'],
-    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 fallbacks, 0 not news, 1 section move'],
+    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 fallbacks, 0 not news, 1 section move, 0 facts removed, 0 unsupported numbers'],
   ]);
+});
+
+it('counts removed facts and unsupported numbers in writer statistics and logging', async () => {
+  const logs = [];
+  const output = await writeStories(
+    [{ title: 'Sudden death', description: 'The death is under investigation.', interest_matches: [], coverage: 1 }],
+    {
+      name: 'ollama:test', concurrency: 1, async write() {
+        return result({
+          is_news: true,
+          headline: 'Actor dies at 34',
+          summary: 'The death is under investigation.',
+          detail: 'The actor died by suicide at 34. Friends remembered his long career and the death remains under investigation by authorities.',
+          kicker: 'Tribute',
+          section: 'world',
+        }, 'ollama:test', 'test', {}, 0);
+      },
+    },
+    { getWriterArticleChars: () => 6000 },
+    { info: (...args) => logs.push(args), warn() {} }
+  );
+
+  assert.deepStrictEqual(output.stats, {
+    written: 1, repairs: 1, fallbacks: 0, not_news: 0, section_moves: 0,
+    facts_removed: 1, numbers_unsupported: 2, input_tokens: 0, output_tokens: 0, duration_ms: 0,
+  });
+  assert.deepStrictEqual(logs, [[
+    'pipeline:writer',
+    'Wrote 1 stories: 1 repair, 0 fallbacks, 0 not news, 0 section moves, 1 fact removed, 2 unsupported numbers',
+  ]]);
 });
