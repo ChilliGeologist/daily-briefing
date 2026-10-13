@@ -246,9 +246,10 @@ function isPaywalledUrl(url, paywalledHosts) {
 function orderedCandidates(cluster, paywalledHosts) {
   return cluster.items
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => !isPaywalledUrl(item.canonical_url || item.url, paywalledHosts))
     .sort((a, b) =>
-      ((b.item.source_priority ?? 1) - (a.item.source_priority ?? 1))
+      (Number(isPaywalledUrl(a.item.canonical_url || a.item.url, paywalledHosts))
+        - Number(isPaywalledUrl(b.item.canonical_url || b.item.url, paywalledHosts)))
+      || ((b.item.source_priority ?? 1) - (a.item.source_priority ?? 1))
       || (a.index - b.index)
     )
     .slice(0, 3)
@@ -293,7 +294,8 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
       stats.discussions++;
     }
 
-    for (const item of fetchable) {
+    const deferredPaywalledGoogleNews = [];
+    for (const [index, item] of fetchable.entries()) {
       let url = item.canonical_url || item.url;
       if (!url) continue;
 
@@ -305,7 +307,13 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         }
         stats.gnews_resolved++;
         url = resolved;
-        if (isPaywalledUrl(url, paywalledHosts)) continue;
+        const hasUntriedUnpaywalledCandidate = fetchable
+          .slice(index + 1)
+          .some(candidate => !isPaywalledUrl(candidate.canonical_url || candidate.url, paywalledHosts));
+        if (isPaywalledUrl(url, paywalledHosts) && hasUntriedUnpaywalledCandidate) {
+          deferredPaywalledGoogleNews.push(url);
+          continue;
+        }
       }
 
       try {
@@ -320,6 +328,24 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         break;
       } catch (error) {
         log.warn('pipeline:extract', `Article fetch failed for ${url}: ${error.message}`);
+      }
+    }
+
+    if (!cluster.article_text) {
+      for (const url of deferredPaywalledGoogleNews) {
+        try {
+          const article = await extractArticle(url, log, fetchImpl);
+          if (article.article_content.length < 400) {
+            throw new Error(`Article text too short (${article.article_content.length} characters)`);
+          }
+          cluster.article_text = article.article_content;
+          cluster.article_html = article.article_html;
+          cluster.article_url = article.canonical_url;
+          stats.articles++;
+          break;
+        } catch (error) {
+          log.warn('pipeline:extract', `Article fetch failed for ${url}: ${error.message}`);
+        }
       }
     }
 
