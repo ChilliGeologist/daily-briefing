@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULT_INTERESTS } = require('./pipeline/writer/interests');
+
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
@@ -67,6 +69,50 @@ function createSettings(db) {
     getMaxSameStoryChecks() {
       const val = db.getSetting('max_same_story_checks');
       return val !== null ? Number(val) : 40;
+    },
+
+    getInterests() {
+      const val = db.getSetting('interests');
+      return val !== null ? val : DEFAULT_INTERESTS;
+    },
+
+    getWriter() {
+      return db.getSetting('writer') || 'ollama';
+    },
+
+    getAnthropicApiKey() {
+      return db.getSetting('anthropic_api_key') || null;
+    },
+
+    getAnthropicWriteModel() {
+      return db.getSetting('anthropic_write_model') || 'claude-haiku-4-5';
+    },
+
+    getAnthropicEditModel() {
+      return db.getSetting('anthropic_edit_model') || 'claude-sonnet-5-5';
+    },
+
+    getWriterOllamaModel() {
+      return db.getSetting('writer_ollama_model') || this.getOllamaModel();
+    },
+
+    getOllamaNumCtx() {
+      const val = db.getSetting('ollama_num_ctx');
+      return val !== null ? Number(val) : 8192;
+    },
+
+    getWriterArticleChars() {
+      const val = db.getSetting('writer_article_chars');
+      return val !== null ? Number(val) : 6000;
+    },
+
+    getSectionSize() {
+      const val = db.getSetting('section_size');
+      return val !== null ? Number(val) : 5;
+    },
+
+    getTopSize() {
+      return db.getSetting('top_size') || { min: 5, max: 7 };
     },
 
     getLogDisplayLevel() {

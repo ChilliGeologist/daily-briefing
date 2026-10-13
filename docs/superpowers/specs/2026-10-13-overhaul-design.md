@@ -51,6 +51,10 @@ same morning's stories side by side, and I'll tell you what the paid one
 would cost a month, measured on a real morning. Whichever you choose, if the
 paid one is unreachable the free one takes over, so a briefing always arrives.
 
+*Changed 2026-10-13: you decided not to pay for an AI service. The briefing
+is written only by the free AI on your server. Before choosing, you'll see the
+two free AIs on the server write the same morning side by side.*
+
 **Previous editions.** Every briefing is kept, and you can search them all
 ("that Plex thing last month").
 
@@ -156,6 +160,11 @@ collect → normalise → filter → cluster → rank → extract → write → 
 9. **assemble** — stored as an edition (see data model).
 
 ### Writers
+
+> **2026-10-13: no paid writer.** Jesse declined Anthropic API usage on cost
+> grounds. Only the `ollama` backend ships; compare mode compares Ollama models
+> (`qwen3:8b` vs `gemma4`). The `anthropic` and fallback text below is kept as
+> the record of the original design, not as work to do.
 
 A `writer` interface with two backends, chosen in settings:
 

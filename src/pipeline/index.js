@@ -1,6 +1,8 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { createLogger } = require('../logger');
 const { collect } = require('./collector');
 const { normalise } = require('./normalise');
@@ -10,9 +12,10 @@ const { makeJudge } = require('./sameStory');
 const { rankClusters } = require('./rank');
 const { extractClusters } = require('./extractor');
 const { toItem } = require('./toItem');
-const { categorise } = require('./categoriser');
-const { summarise } = require('./summariser');
 const { assemble } = require('./assembler');
+const { createWriter } = require('./writer');
+const { writeStories } = require('./writer/write');
+const { editStories } = require('./writer/edit');
 
 let currentRun = null;
 let cancelRequested = false;
@@ -33,7 +36,26 @@ function checkCancelled() {
   if (cancelRequested) throw new Error('Pipeline cancelled by user');
 }
 
-async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
+async function saveCandidates(candidates, { candidatesDir, briefingDate, runId }) {
+  await fs.mkdir(candidatesDir, { recursive: true });
+  const filename = `${briefingDate}-${runId.slice(0, 8)}.json`;
+  const savedPath = path.join(candidatesDir, filename);
+  await fs.writeFile(savedPath, JSON.stringify(candidates, null, 2));
+
+  const entries = await fs.readdir(candidatesDir, { withFileTypes: true });
+  const candidateFiles = await Promise.all(entries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+    .map(async entry => {
+      const filePath = path.join(candidatesDir, entry.name);
+      const stat = await fs.stat(filePath);
+      return { filePath, name: entry.name, mtimeMs: stat.mtimeMs };
+    }));
+  candidateFiles.sort((a, b) => (b.mtimeMs - a.mtimeMs) || b.name.localeCompare(a.name));
+  await Promise.all(candidateFiles.slice(7).map(file => fs.unlink(file.filePath)));
+  return savedPath;
+}
+
+async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options = {}) {
   if (isRunning()) {
     throw new Error('Pipeline is already running');
   }
@@ -123,6 +145,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
       now: Date.now(),
       boostKeywords: preferences.boost_keywords,
       penaltyKeywords: preferences.penalty_keywords,
+      interests: settings.getInterests(),
       limit: settings.getMaxCuratedItems(),
     });
     runLog.info('pipeline:rank',
@@ -139,33 +162,47 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
       selected, settings, runLog, emitProgress
     );
     const extracted = extractedClusters.map(toItem);
+    await saveCandidates(extracted, {
+      candidatesDir: options.candidatesDir || path.join(__dirname, '../../data/candidates'),
+      briefingDate,
+      runId,
+    });
     emit({ type: 'stage', stage: 'extract', status: 'complete', stats: extractStats });
     checkCancelled();
 
-    // Stage 6 - Categorise
-    currentRun.stage = 'categorise';
+    const writer = options.writer || createWriter(settings, runLog, options.writerDeps);
+
+    // Stage 6 - Write
+    currentRun.stage = 'write';
     currentRun.stageStartedAt = new Date().toISOString();
-    emit({ type: 'stage', stage: 'categorise', status: 'running' });
-    const { categorised, stats: catStats } = await categorise(extracted, db, ollama, settings, runLog, emitProgress, checkCancelled);
-    emit({ type: 'stage', stage: 'categorise', status: 'complete', stats: catStats });
+    emit({ type: 'stage', stage: 'write', status: 'running' });
+    const { stories, dropped, stats: writeStats } = await writeStories(
+      extracted, writer, settings, runLog, emitProgress, checkCancelled
+    );
+    db.updateRun(runId, { items_curated: stories.length });
+    emit({ type: 'stage', stage: 'write', status: 'complete', stats: writeStats });
     checkCancelled();
 
-    // Stage 7 - Summarise
-    currentRun.stage = 'summarise';
+    // Stage 7 - Edit
+    currentRun.stage = 'edit';
     currentRun.stageStartedAt = new Date().toISOString();
-    emit({ type: 'stage', stage: 'summarise', status: 'running' });
-    const { items: summarised, stats: sumStats } = await summarise(categorised, ollama, settings, runLog, emitProgress, checkCancelled);
-    db.updateRun(runId, { items_curated: summarised.length });
-    emit({ type: 'stage', stage: 'summarise', status: 'complete', stats: sumStats });
+    emit({ type: 'stage', stage: 'edit', status: 'running' });
+    const edited = await editStories(stories, writer, settings, runLog);
+    emit({ type: 'stage', stage: 'edit', status: 'complete', stats: edited.stats });
     checkCancelled();
 
     // Stage 8 - Assemble
     currentRun.stage = 'assemble';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'assemble', status: 'running' });
-    const categories = db.getCategories();
-    const briefingData = assemble(summarised, categories, runLog);
-    db.insertBriefing(briefingDate, { headline: briefingData.headline, sections: briefingData.sections });
+    const storiesById = new Map(stories.map(story => [story.id, story]));
+    const usedWriters = [...new Set(stories.map(story => story.written_by).filter(Boolean))];
+    const briefingData = assemble(edited, storiesById, {
+      writer: usedWriters.join(' + ') || writer.name,
+      stats: { write: writeStats, edit: edited.stats },
+      log: runLog,
+    });
+    db.insertBriefing(briefingDate, briefingData);
     emit({ type: 'stage', stage: 'assemble', status: 'complete' });
 
     // Success
@@ -184,8 +221,8 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
         clustered: clusters.length,
         ranked: selected.length,
         extracted: extracted.length,
-        categorised: categorised.length,
-        summarised: summarised.length,
+        written: stories.length,
+        not_news: dropped.length,
         duration_ms,
       },
     };
@@ -209,4 +246,4 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger) {
   }
 }
 
-module.exports = { runPipeline, isRunning, getStatus, requestCancel };
+module.exports = { runPipeline, isRunning, getStatus, requestCancel, saveCandidates };

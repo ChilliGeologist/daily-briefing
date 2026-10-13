@@ -2,10 +2,17 @@
 
 const router = require('express').Router();
 
+function maskAnthropicApiKey(value) {
+  return value ? `••••${String(value).slice(-4)}` : null;
+}
+
 module.exports = function (db, settings, scheduler) {
   router.get('/settings', (req, res) => {
     try {
-      res.json(settings.getAll());
+      res.json({
+        ...settings.getAll(),
+        anthropic_api_key: maskAnthropicApiKey(settings.getAnthropicApiKey()),
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -13,6 +20,12 @@ module.exports = function (db, settings, scheduler) {
 
   router.get('/settings/:key', (req, res) => {
     try {
+      if (req.params.key === 'anthropic_api_key') {
+        return res.json({
+          key: req.params.key,
+          value: maskAnthropicApiKey(settings.getAnthropicApiKey()),
+        });
+      }
       const value = db.getSetting(req.params.key);
       if (value === null) return res.status(404).json({ error: 'Setting not found' });
       res.json({ key: req.params.key, value });
@@ -59,3 +72,5 @@ module.exports = function (db, settings, scheduler) {
 
   return router;
 };
+
+module.exports.maskAnthropicApiKey = maskAnthropicApiKey;

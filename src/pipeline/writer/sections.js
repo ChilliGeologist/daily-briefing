@@ -1,0 +1,43 @@
+'use strict';
+
+const SECTIONS = Object.freeze([
+  Object.freeze({ id: 'tasmania', title: 'Tasmania' }),
+  Object.freeze({ id: 'australia', title: 'Australia' }),
+  Object.freeze({ id: 'world', title: 'World' }),
+  Object.freeze({ id: 'tech', title: 'Tech & Security' }),
+  Object.freeze({ id: 'homelab', title: 'Homelab & Self-hosting' }),
+  Object.freeze({ id: 'gaming', title: 'Gaming' }),
+  Object.freeze({ id: 'internet', title: 'Around the internet' }),
+]);
+
+const TOP_SECTION = Object.freeze({ id: 'top', title: 'You should know' });
+const SECTION_IDS = new Set(SECTIONS.map(section => section.id));
+
+// Fallback classification is deliberately data-driven so adding another
+// product or interest does not add product-specific branches to validation.
+const SECTION_BY_INTEREST_KIND = Object.freeze({ place: 'tasmania' });
+const SECTION_BY_INTEREST_LABEL = Object.freeze({
+  Unraid: 'homelab',
+  Plex: 'homelab',
+  Sonarr: 'homelab',
+  Radarr: 'homelab',
+  'Home Assistant': 'homelab',
+  UniFi: 'homelab',
+  Tailscale: 'homelab',
+  Authelia: 'homelab',
+  Proton: 'homelab',
+  'Dota 2': 'gaming',
+  'Old School RuneScape': 'gaming',
+});
+
+function isSectionId(id) {
+  return SECTION_IDS.has(id);
+}
+
+module.exports = {
+  SECTIONS,
+  TOP_SECTION,
+  SECTION_BY_INTEREST_KIND,
+  SECTION_BY_INTEREST_LABEL,
+  isSectionId,
+};

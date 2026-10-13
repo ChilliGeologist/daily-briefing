@@ -1485,15 +1485,15 @@ function renderLogEntries(viewer, entries, minLevel) {
 // 8. Pipeline Monitor
 // ============================================================
 
-var PIPELINE_STAGES = ['Collect', 'Filter', 'Cluster', 'Rank', 'Extract', 'Categorise', 'Summarise', 'Assemble'];
+var PIPELINE_STAGES = ['Collect', 'Filter', 'Cluster', 'Rank', 'Extract', 'Write', 'Edit', 'Assemble'];
 var STAGE_DESCRIPTIONS = {
   collect: 'Collecting items from configured sources',
   filter: 'Dropping old news and filler',
   cluster: 'Grouping the same story from different outlets',
   rank: 'Choosing the stories worth writing up',
   extract: 'Fetching the full articles',
-  categorise: 'Sorting items into categories',
-  summarise: 'Generating summaries',
+  write: 'Writing stories',
+  edit: 'Choosing what matters',
   assemble: 'Assembling the final briefing'
 };
 var pipelineSSE = null;
@@ -1620,8 +1620,8 @@ var STAGE_COMPLETE_PATTERNS = {
   cluster: /^Clustered \d+ items/,
   rank: /^Ranked \d+ stories:/,
   extract: /^Extracted \d+ stories:/,
-  categorise: /^Categorised \d+ items/,
-  summarise: /^Summarised \d+ items in/,
+  write: /^Wrote \d+ stories/,
+  edit: /^Edited: \d+ top, \d+ in sections/,
   assemble: /^Assembled briefing:/
 };
 var STAGE_COMPLETE_COMPONENTS = {
@@ -1630,8 +1630,8 @@ var STAGE_COMPLETE_COMPONENTS = {
   cluster: 'pipeline:cluster',
   rank: 'pipeline:rank',
   extract: 'pipeline:extract',
-  categorise: 'pipeline:categoriser',
-  summarise: 'pipeline:summariser',
+  write: 'pipeline:writer',
+  edit: 'pipeline:editor',
   assemble: 'assembler'
 };
 

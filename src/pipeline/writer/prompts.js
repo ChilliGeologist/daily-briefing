@@ -1,0 +1,127 @@
+'use strict';
+
+const { SECTIONS } = require('./sections');
+
+const SECTION_IDS = SECTIONS.map(section => section.id);
+const WRITE_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  required: ['is_news', 'headline', 'summary', 'detail', 'kicker', 'section'],
+  properties: {
+    is_news: { type: 'boolean' },
+    headline: { type: 'string' },
+    summary: { type: 'string' },
+    detail: { type: 'string' },
+    kicker: { type: 'string' },
+    section: { type: 'string', enum: SECTION_IDS },
+  },
+});
+
+const sectionArraySchema = () => ({ type: 'array', items: { type: 'string' } });
+const EDIT_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  required: ['top', 'sections'],
+  properties: {
+    top: sectionArraySchema(),
+    sections: {
+      type: 'object',
+      additionalProperties: false,
+      required: SECTION_IDS,
+      properties: Object.fromEntries(SECTION_IDS.map(id => [id, sectionArraySchema()])),
+    },
+  },
+});
+
+const WRITE_SYSTEM_PROMPT = `You write a concise morning news briefing in Australian English. Decide whether the supplied page is a genuine news story, then write it for one reader who lives in West Tamar near Launceston, Tasmania and reads on a phone at breakfast.
+
+Choose exactly one section:
+- tasmania — Tasmanian news, local government, events and what's on.
+- australia — Australian national and interstate news.
+- world — News outside Australia.
+- tech — General technology, privacy and security news.
+- homelab — Homelab, self-hosting, servers, networking and related products.
+- gaming — Video games and gaming communities.
+- internet — Reddit and Hacker News culture, online communities and oddities.
+
+keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions; the kicker is one or two plain words naming the topic ("Plex", "State politics", "Basketball"), never a sentence and never a reason the story was picked.
+
+The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story.`;
+
+const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know": biggest coverage first, then interest matches with real consequence for the reader, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories.`;
+
+function distinctOutlets(item) {
+  const names = (item.sources || []).map(source => source.name).filter(Boolean);
+  if (names.length === 0 && item.source_name) names.push(item.source_name);
+  return [...new Set(names)];
+}
+
+function isCommunityItem(item) {
+  const type = String(item.source_type || '').toLowerCase();
+  if (['reddit', 'hackernews', 'hacker_news', 'hn'].includes(type)) return true;
+  return distinctOutlets(item).some(name => /^(reddit|hacker news|hn)$/i.test(name));
+}
+
+function writeSystemPrompt() {
+  return WRITE_SYSTEM_PROMPT;
+}
+
+function writeUserPrompt(item, { articleChars }) {
+  const teasers = Array.isArray(item.merged_descriptions) && item.merged_descriptions.length > 0
+    ? item.merged_descriptions
+    : [item.description || ''];
+  const article = String(item.article_content || '').slice(0, articleChars);
+  const matches = (item.interest_matches || []).map(match => match.label).filter(Boolean);
+  const lines = [
+    `ORIGINAL HEADLINE: ${item.title || ''}`,
+    `OUTLETS: ${distinctOutlets(item).join(', ') || 'Unknown'}`,
+    `COVERAGE: ${Number(item.coverage) || 1}`,
+    `INTEREST MATCHES: ${matches.join(', ') || 'None'}`,
+    'TEASERS:',
+    ...teasers.map(teaser => `- ${teaser}`),
+    `ARTICLE TEXT (capped to ${articleChars} characters):`,
+    article || '(none)',
+  ];
+
+  if (isCommunityItem(item)) {
+    const comments = (item.top_comments || [])
+      .filter(comment => typeof comment === 'string' && comment.trim())
+      .slice(0, 5);
+    if (comments.length > 0) {
+      lines.push('COMMUNITY COMMENTS:');
+      comments.forEach((comment, index) => lines.push(`${index + 1}. ${comment.trim()}`));
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function editSystemPrompt() {
+  return EDIT_SYSTEM_PROMPT;
+}
+
+function editUserPrompt(stories, { sectionSize }) {
+  const lines = [`SECTION LIMIT: ${sectionSize}`];
+  for (const story of stories) {
+    const labels = (story.interest_matches || []).map(match => match.label).filter(Boolean);
+    lines.push([
+      story.id,
+      story.section,
+      `coverage ${Number(story.coverage) || 1}`,
+      `interests ${labels.join(', ') || 'none'}`,
+      story.kicker,
+      story.headline,
+      story.summary,
+    ].join(' | '));
+  }
+  return lines.join('\n');
+}
+
+module.exports = {
+  WRITE_SCHEMA,
+  EDIT_SCHEMA,
+  writeSystemPrompt,
+  writeUserPrompt,
+  editSystemPrompt,
+  editUserPrompt,
+};

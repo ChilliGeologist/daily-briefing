@@ -40,6 +40,9 @@ function toItem(rankedCluster) {
     article_url: rankedCluster.article_url,
     canonical_url: lead.canonical_url,
     top_comments: rankedCluster.top_comments,
+    interest_matches: rankedCluster.interest_matches || [],
+    coverage: rankedCluster.coverage,
+    rank: rankedCluster.rank,
   };
 }
 
