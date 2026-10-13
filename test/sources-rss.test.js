@@ -2,8 +2,9 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
+const http = require('node:http');
 const RSSParser = require('rss-parser');
-const { stripHTML, decodeEntities, extractImage, ensureISO } = require('../src/pipeline/sources/rss');
+const { fetchRSS, stripHTML, decodeEntities, extractImage, ensureISO } = require('../src/pipeline/sources/rss');
 
 // Minimal logger for tests
 const log = {
@@ -14,6 +15,44 @@ const log = {
 };
 
 describe('RSS source', () => {
+  it('reports a plain error for an HTML content-type', async () => {
+    const server = http.createServer((_request, response) => {
+      response.setHeader('content-type', 'text/html; charset=utf-8');
+      response.end('<?xml version="1.0"?><rss version="2.0"><channel><title>Looks valid</title></channel></rss>');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const address = `http://127.0.0.1:${server.address().port}/news`;
+      const result = await fetchRSS({ name: 'Not a feed', url: address }, log);
+      assert.deepStrictEqual(result, {
+        items: [],
+        error: 'This address returns a web page, not a news feed',
+      });
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('reports a plain error when the body starts with HTML', async () => {
+    const server = http.createServer((_request, response) => {
+      response.setHeader('content-type', 'application/xml; charset=utf-8');
+      response.end('<!DOCTYPE html><html><body>News & updates</body></html>');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const address = `http://127.0.0.1:${server.address().port}/news`;
+      const result = await fetchRSS({ name: 'Not a feed', url: address }, log);
+      assert.deepStrictEqual(result, {
+        items: [],
+        error: 'This address returns a web page, not a news feed',
+      });
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
   describe('stripHTML', () => {
     it('should remove HTML tags', () => {
       assert.strictEqual(stripHTML('<p>Hello <b>world</b></p>'), 'Hello world');

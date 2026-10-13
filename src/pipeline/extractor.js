@@ -2,6 +2,8 @@
 
 const { Readability } = require('@mozilla/readability');
 const { parseHTML } = require('linkedom');
+const RSSParser = require('rss-parser');
+const { redditRequestQueue } = require('../reddit-request-queue');
 
 const FETCH_TIMEOUT_MS = 10000;
 const CONCURRENCY = 5;
@@ -65,40 +67,44 @@ function redditPermalinkUrl(item) {
   // (format: https://www.reddit.com/r/<sub>/comments/<id>/<slug>/)
   if (!item || !item.url) return null;
   if (!isRedditUrl(item.url)) return null;
-  // Strip query/hash and trailing slash, then append .json
+  // Strip query/hash and trailing slash, then append the Atom feed suffix.
   let base = item.url.split('#')[0].split('?')[0];
   if (base.endsWith('/')) base = base.slice(0, -1);
-  return `${base}.json?raw_json=1&limit=${TOP_COMMENTS * 3}`;
+  return `${base}/.rss`;
+}
+
+async function parseRedditComments(xml) {
+  const parser = new RSSParser({
+    customFields: { item: [['id', 'id']] },
+  });
+  const feed = await parser.parseString(xml);
+  const comments = [];
+
+  for (const entry of (feed.items || [])) {
+    if ((entry.id || '').startsWith('t3_')) continue;
+    const body = (entry.contentSnippet || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!body || body === '[deleted]' || body === '[removed]') continue;
+    comments.push(body);
+    if (comments.length === TOP_COMMENTS) break;
+  }
+
+  return comments;
 }
 
 async function extractRedditComments(item, log) {
   const url = redditPermalinkUrl(item);
   if (!url) throw new Error('No reddit permalink available');
 
-  const response = await fetchWithTimeout(url);
+  const response = await redditRequestQueue.fetch(url, {
+    log,
+    timeoutMs: FETCH_TIMEOUT_MS,
+  });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
-  const json = await response.json();
-
-  // Reddit returns an array: [postListing, commentListing]
-  if (!Array.isArray(json) || json.length < 2) {
-    throw new Error('Unexpected reddit comments response shape');
-  }
-  const listing = json[1];
-  const children = (listing && listing.data && listing.data.children) || [];
-
-  const comments = [];
-  for (const child of children) {
-    if (!child || child.kind !== 't1') continue;
-    const data = child.data || {};
-    if (data.stickied) continue;
-    if (!data.body || data.body === '[deleted]' || data.body === '[removed]') continue;
-    comments.push({ body: data.body, score: data.score != null ? data.score : 0 });
-  }
-
-  comments.sort((a, b) => b.score - a.score);
-  return comments.slice(0, TOP_COMMENTS).map(c => c.body);
+  return parseRedditComments(await response.text());
 }
 
 async function processItem(item, log) {
@@ -185,4 +191,10 @@ async function extract(items, settings, log, emitProgress) {
   return { items, stats };
 }
 
-module.exports = { extract, isRedditUrl };
+module.exports = {
+  extract,
+  isRedditUrl,
+  redditPermalinkUrl,
+  parseRedditComments,
+  extractRedditComments,
+};

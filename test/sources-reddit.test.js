@@ -1,10 +1,12 @@
 'use strict';
 
-const { describe, it } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
-const { extractImage } = require('../src/pipeline/sources/reddit');
+const fs = require('node:fs');
+const path = require('node:path');
+const { fetchReddit } = require('../src/pipeline/sources/reddit');
+const { redditRequestQueue, USER_AGENT } = require('../src/reddit-request-queue');
 
-// Minimal logger for tests
 const log = {
   debug() {},
   info() {},
@@ -12,127 +14,121 @@ const log = {
   error() {},
 };
 
+const originalFetch = globalThis.fetch;
+const originalDateNow = Date.now;
+
+function fixture(name) {
+  return fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
+}
+
+function atomResponse(body) {
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      get(name) {
+        const values = {
+          'content-type': 'application/atom+xml; charset=UTF-8',
+          'x-ratelimit-used': '1',
+          'x-ratelimit-remaining': '5.0',
+          'x-ratelimit-reset': '60',
+        };
+        return values[name.toLowerCase()] || null;
+      },
+    },
+    text: async () => body,
+  };
+}
+
 describe('Reddit source', () => {
-  describe('extractImage', () => {
-    it('should extract from preview images', () => {
-      const data = {
-        preview: {
-          images: [{
-            source: { url: 'https://preview.redd.it/image.jpg?width=1080&amp;format=pjpg' },
-          }],
-        },
-      };
-      assert.strictEqual(extractImage(data), 'https://preview.redd.it/image.jpg?width=1080&format=pjpg');
-    });
+  beforeEach(() => {
+    redditRequestQueue.reset();
+    Date.now = () => Date.parse('2026-10-13T01:00:00.000Z');
+  });
 
-    it('should skip special thumbnail values', () => {
-      for (const thumb of ['self', 'default', 'nsfw', 'spoiler', '']) {
-        assert.strictEqual(extractImage({ thumbnail: thumb }), null);
-      }
-    });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    Date.now = originalDateNow;
+  });
 
-    it('should use valid thumbnail as fallback', () => {
-      const data = { thumbnail: 'https://b.thumbs.redditmedia.com/thumb.jpg' };
-      assert.strictEqual(extractImage(data), 'https://b.thumbs.redditmedia.com/thumb.jpg');
-    });
+  it('fetches and normalises the subreddit Atom feed', async () => {
+    let requestedUrl;
+    let requestedOptions;
+    globalThis.fetch = async (url, options) => {
+      requestedUrl = url;
+      requestedOptions = options;
+      return atomResponse(fixture('reddit-subreddit.atom.xml'));
+    };
 
-    it('should return null when no image available', () => {
-      assert.strictEqual(extractImage({}), null);
+    const result = await fetchReddit({
+      name: 'Tasmania Reddit',
+      url: 'r/tasmania',
+      config: { sort: 'new', limit: 7 },
+      default_category: 'local',
+    }, log);
+
+    assert.strictEqual(requestedUrl, 'https://www.reddit.com/r/tasmania/new/.rss?limit=7');
+    assert.strictEqual(requestedOptions.headers['User-Agent'], USER_AGENT);
+    assert.strictEqual(result.error, null);
+    assert.strictEqual(result.items.length, 23);
+    assert.deepStrictEqual(result.items[0], {
+      title: 'Looking Down On Badger Beach, Northern Tassie',
+      url: 'https://www.reddit.com/r/tasmania/comments/1x4hanh/looking_down_on_badger_beach_northern_tassie/',
+      external_url: null,
+      description: '',
+      image: 'https://preview.redd.it/4iwl3n19d4vh1.jpeg?width=640&crop=smart&auto=webp&s=ceeb60b14ff0ad4ed126222b8275dcaf4493c959',
+      published: '2026-10-12T23:30:37.000Z',
+      score: null,
+      comment_count: null,
+      source_name: 'r/tasmania',
+      source_type: 'reddit',
+      default_category: 'local',
+    });
+    assert.strictEqual(result.items[1].description, '​ The Mercury is reporting that Glenorchy alderman and current mayoral/councillor candidate Peter Ridler was reprimanded, ordered to undertake training and suspended from office for one month following a Code of Conduct investigation. According to the reported findings, upheld conduct included: • using the N-word in the expression involving a “woodpile” during a council workshop; • telling a female council employee words to the effect of “stick to your knitting and get back to the kitchen”; • pu');
+    assert.deepStrictEqual(result.items[13], {
+      title: "Tasmania's EPA worried AI company Firmus plans to use generators much more than first disclosed",
+      url: 'https://www.reddit.com/r/tasmania/comments/1x21m9e/tasmanias_epa_worried_ai_company_firmus_plans_to/',
+      external_url: 'https://www.abc.net.au/news/2026-10-10/firmus-generators-epa-appeal-watchdog/107247476',
+      description: '',
+      image: 'https://external-preview.redd.it/_z1kP6d6KMKzHUJwfqo_XSuIXJpUMJMZha7EHQelF0s.jpeg?width=640&crop=smart&auto=webp&s=d9f6c112f055b36a5aafe26082869503a595bcd8',
+      published: '2026-10-10T00:34:37.000Z',
+      score: null,
+      comment_count: null,
+      source_name: 'r/tasmania',
+      source_type: 'reddit',
+      default_category: 'local',
     });
   });
 
-  describe('Reddit response normalisation', () => {
-    function normalisePost(post) {
-      const data = post.data;
-      return {
-        title: data.title || '',
-        url: `https://www.reddit.com${data.permalink}`,
-        external_url: data.is_self ? null : (data.url || null),
-        description: (data.selftext || '').substring(0, 500),
-        image: extractImage(data),
-        published: data.created_utc ? new Date(data.created_utc * 1000).toISOString() : null,
-        score: data.score != null ? data.score : null,
-        comment_count: data.num_comments != null ? data.num_comments : null,
-        source_name: 'r/test',
-        source_type: 'reddit',
-        default_category: 'trending',
-      };
-    }
+  it('uses defaults and preserves a self-post body without the trailer', async () => {
+    let requestedUrl;
+    globalThis.fetch = async (url) => {
+      requestedUrl = url;
+      return atomResponse(fixture('reddit-homelab.atom.xml'));
+    };
 
-    it('should normalise a link post correctly', () => {
-      const post = {
-        data: {
-          title: 'Interesting external link',
-          permalink: '/r/test/comments/abc123/interesting/',
-          is_self: false,
-          url: 'https://external.com/article',
-          selftext: '',
-          created_utc: 1705312200,
-          score: 150,
-          num_comments: 42,
-          stickied: false,
-          thumbnail: 'https://thumb.redd.it/thumb.jpg',
-        },
-      };
+    const result = await fetchReddit({
+      name: 'Homelab Reddit',
+      url: '/r/homelab',
+      default_category: 'technology',
+    }, log);
 
-      const result = normalisePost(post);
-      assert.strictEqual(result.title, 'Interesting external link');
-      assert.strictEqual(result.url, 'https://www.reddit.com/r/test/comments/abc123/interesting/');
-      assert.strictEqual(result.external_url, 'https://external.com/article');
-      assert.strictEqual(result.score, 150);
-      assert.strictEqual(result.comment_count, 42);
-      assert.strictEqual(result.source_type, 'reddit');
-    });
-
-    it('should normalise a self post correctly', () => {
-      const post = {
-        data: {
-          title: 'Question about something',
-          permalink: '/r/test/comments/def456/question/',
-          is_self: true,
-          url: 'https://www.reddit.com/r/test/comments/def456/question/',
-          selftext: 'This is my question text',
-          created_utc: 1705312200,
-          score: 25,
-          num_comments: 10,
-          stickied: false,
-          thumbnail: 'self',
-        },
-      };
-
-      const result = normalisePost(post);
-      assert.strictEqual(result.external_url, null);
-      assert.strictEqual(result.description, 'This is my question text');
-      assert.strictEqual(result.image, null); // thumbnail = 'self' should be skipped
-    });
-
-    it('should filter stickied posts', () => {
-      const children = [
-        { data: { title: 'Stickied', stickied: true, score: 100 } },
-        { data: { title: 'Normal', stickied: false, score: 50 } },
-        { data: { title: 'Low score', stickied: false, score: 0 } },
-      ];
-
-      const filtered = children.filter(c => !c.data.stickied && c.data.score >= 1);
-      assert.strictEqual(filtered.length, 1);
-      assert.strictEqual(filtered[0].data.title, 'Normal');
-    });
-
-    it('should filter posts with score < 1', () => {
-      const children = [
-        { data: { title: 'Good', stickied: false, score: 5 } },
-        { data: { title: 'Bad', stickied: false, score: 0 } },
-        { data: { title: 'Negative', stickied: false, score: -3 } },
-      ];
-
-      const filtered = children.filter(c => !c.data.stickied && c.data.score >= 1);
-      assert.strictEqual(filtered.length, 1);
-      assert.strictEqual(filtered[0].data.title, 'Good');
-    });
-
-    it('should handle missing preview images', () => {
-      const data = { preview: { images: [] } };
-      assert.strictEqual(extractImage(data), null);
+    assert.strictEqual(requestedUrl, 'https://www.reddit.com/r/homelab/hot/.rss?limit=25');
+    assert.strictEqual(result.error, null);
+    assert.strictEqual(result.items.length, 24);
+    assert.deepStrictEqual(result.items[20], {
+      title: 'Unmanaged switch recommendation with at least one 10Gbps SFP+ port and one 10Gbps RJ45 port',
+      url: 'https://www.reddit.com/r/homelab/comments/1x4fb5s/unmanaged_switch_recommendation_with_at_least_one/',
+      external_url: null,
+      description: 'I just need direct connection from PC to Nas supporting 10Gbps connection to NAS. The other RJ45 ports are 3-4 low bandwidth IoT devices. Something not too wide less than 13”. Budget $400',
+      image: null,
+      published: '2026-10-12T22:01:17.000Z',
+      score: null,
+      comment_count: null,
+      source_name: 'r/homelab',
+      source_type: 'reddit',
+      default_category: 'technology',
     });
   });
 });

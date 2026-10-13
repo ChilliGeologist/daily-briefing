@@ -2,7 +2,10 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 const { extract, isRedditUrl } = require('../src/pipeline/extractor');
+const { redditRequestQueue } = require('../src/reddit-request-queue');
 
 const log = {
   debug() {},
@@ -48,6 +51,10 @@ const SAMPLE_HTML = `
 `;
 
 describe('Extractor', () => {
+  beforeEach(() => {
+    redditRequestQueue.reset();
+  });
+
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
@@ -134,24 +141,15 @@ describe('Extractor', () => {
       assert.strictEqual(stats.failures, 0);
     });
 
-    it('happy path: extracts top reddit comments sorted by score', async () => {
+    it('happy path: extracts reddit comments from Atom in feed order', async () => {
+      const commentsXml = fs.readFileSync(path.join(__dirname, 'fixtures', 'reddit-comments.atom.xml'), 'utf8');
+      let requestedUrl;
       globalThis.fetch = async (url) => {
-        if (url.includes('reddit.com') && url.includes('.json')) {
+        if (url.includes('reddit.com') && url.includes('.rss')) {
+          requestedUrl = url;
           return makeResponse({
-            json: [
-              { data: { children: [] } },
-              {
-                data: {
-                  children: [
-                    { kind: 't1', data: { body: 'low comment', score: 1 } },
-                    { kind: 't1', data: { body: 'top comment', score: 100 } },
-                    { kind: 't1', data: { body: 'mid comment', score: 50 } },
-                    { kind: 't1', data: { body: '[deleted]', score: 999 } },
-                    { kind: 'more', data: {} },
-                  ],
-                },
-              },
-            ],
+            body: commentsXml,
+            contentType: 'application/atom+xml; charset=UTF-8',
           });
         }
         throw new Error(`unexpected URL: ${url}`);
@@ -167,10 +165,17 @@ describe('Extractor', () => {
       ];
 
       const { items: result, stats } = await extract(items, settings, log);
-      assert.ok(Array.isArray(result[0].top_comments), 'top_comments should be an array');
-      assert.strictEqual(result[0].top_comments[0], 'top comment');
-      assert.strictEqual(result[0].top_comments[1], 'mid comment');
-      assert.ok(!result[0].top_comments.includes('[deleted]'));
+      assert.strictEqual(requestedUrl, 'https://www.reddit.com/r/test/comments/abc/self/.rss');
+      assert.deepStrictEqual(result[0].top_comments, [
+        'Why is it in the middle of a bedroom? Some of the setups I see here make me want to downsize my already small setup. Yikes.',
+        'Space constraints, mostly. Definitely not ideal, but it’s the only place I had room for the rack right now',
+        'I’ve always been a renter. This apt is kinda small but after GF moved in , things have been tight Idk why the yikes tbh, unless u think it looks bad then I get it. I like it and even non-IT friends don’t think it’s an eye sore I work in datacenters, I’m an ex-miner w loads of hardware, so having a full sized rack jived w me and my lifestyle Can this be done w/ much smaller form factor stuff ? Yes but I alrdy had 26 GPUs, 5 motherboards , memory , storage. I wanted to use what I already had',
+        "That rack has more security than some apartments I've lived in",
+        'For real, at this point the servers are safer than I am.',
+        'Except for nas, all of that runs on a single cheapish intel nuc box for a family use',
+        'Initially; I did this but ran into problem of: It’s so easy to setup that I didn’t feel I learned/understood much or worse I needed a way to tinker on a servic/system without putting other services hosted on that system at risk So, more so for learning purposes and aesthetics , and I am ex crypto miner with 25+ GPUs and hardware ; I figured why not isolate these systems/services in a. Way that my brain can understand all the pipelines',
+        'Right by the baseboard heater :( How is the airflow/ventalation on the 4U rack chassis?',
+      ]);
       assert.strictEqual(stats.comments_extracted, 1);
     });
 
