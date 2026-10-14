@@ -240,3 +240,44 @@ The four patterns hit 79 reply occurrences. Each distinct matching reply is repr
 ## Browser verification still required
 
 No browser automation, jsdom or manual browser run was used. Pure-function and server tests do not verify the masthead's visual weight, real column flow and rules at 700/1024 px, expansion reflow inside columns, whole-sheet curl appearance at the wider stage width, 200% zoom, community text appearance, touch/pointer feel, focus movement or installed service-worker refresh. Jesse should check those in the dev container.
+
+## Thumb index
+
+Implemented the approved Niagara-style section index for every non-empty section in the rendered edition. The production strip uses the prototype's 36 px right-edge hit area, 18 px icons, 30–92% vertical layout, `AMP 46`, `SIGMA 44`, `GROW 1.15`, story-picking reach multiplier `0.35`, active/release spring constants, 36 px sideways threshold, 150 ms ease-out glide and 5 ms vibration tick. The active section name is assigned with `textContent`, and its pill stays 10 px beyond the scaled icon's outer edge.
+
+The eight approved SVG drawings are reproduced as static SVG DOM nodes beside headings and in the strip. No briefing, story, section or settings value enters HTML parsing; unknown section ids select the front-page drawing. Sliding off the strip highlights the story row under the pointer and release opens it without disturbing the one-at-a-time expansion rule. Ordinary scrolling marks the section nearest the briefing top, while arrow keys move the focusable slider and update `aria-valuenow` and `aria-valuetext`.
+
+Reduced motion retains selection, pill, haptic attempt and direct section jumps, but bypasses bowing, springs, gliding and strip transitions. The cache version is v5 and includes the new helper.
+
+### Files changed
+
+- `public/app.js` — static SVG construction, thumb-index rendering/state, pointer and keyboard handling, scrolling, story targeting, and curl/reader coexistence.
+- `public/index.html` — thumb-index layer and helper-script load.
+- `public/style.css` — edge strip, heading icons, pill, target wash, focus, reduced-motion and matching right gutter styles.
+- `public/thumb-index-logic.js` — dependency-free layout, nearest-section, Gaussian target, pill-offset and icon-id helpers.
+- `public/sw.js` — v5 cache bump and helper precache entry.
+- `test/thumb-index-logic.test.js` — whole-value and floating-tolerance coverage for the four requested pure helper areas and unknown-icon fallback.
+- `docs/superpowers/plans/2026-10-14-stage4-reading-screen.REPORT.md` — this implementation record.
+
+### Test counts and fail-then-pass evidence
+
+- Red run, after the four helper tests and before the helper existed: `node --test test/thumb-index-logic.test.js` — 4 tests, 0 passed, 4 failed. Each named test failed because its new exported function was absent.
+- A later red run for the unknown-id allow-list: the same command — 5 tests, 4 passed, 1 failed because `sectionIconId` was not implemented yet.
+- Focused helper green run after both implementation steps: the same command — 5 passed, 0 failed.
+- Stage 4 pure-helper run: `node --test test/thumb-index-logic.test.js test/reading-logic.test.js test/curl-geometry.test.js` — 31 passed, 0 failed.
+- Full run: `npm test` — 241 passed, 0 failed, 16 suites.
+- `node --check` passed for `public/app.js`, `public/thumb-index-logic.js` and `public/reading-logic.js`; `git diff --check` passed.
+
+### How the strip and page curl share the right edge
+
+The strip is a 36 px layer at the paper sheet's right edge, above curl layers 2–5 at z-index 6. Briefing and curl-ghost content use a 38 px right gutter on phones and tablets, and the existing 40 px desktop gutter, so resting icons do not cover copy. Only the strip captures strip-originated pointers; the curl listeners remain on the briefing and reader pages, and forward curls still require a story-originated left drag. As soon as a curl direction locks, `curl-active` hides the strip; `reader-active` also hides it and makes the layer inert until the briefing returns.
+
+### Deviations from the prototype and why
+
+- The demo phone frame, explanatory hint, slow-motion control and left-handed control were not brought into the app. They are prototype scaffolding, and item 8 explicitly defers left-handed placement with no Settings toggle in this stage.
+- Icons are created with SVG DOM methods instead of the prototype's trusted `innerHTML` strings. Their paths and attributes are unchanged, but this keeps article HTML as the frontend's only data-backed parsing boundary.
+- The 30–92% positions use the real reading stage's height rather than the prototype phone frame's height, because the production masthead is a separate fixed sibling and the stage is the briefing's actual scroll viewport.
+
+### Could not verify without a browser
+
+No browser automation, jsdom or manual browser run was used. Pure tests do not verify visual icon/pill placement, spring feel, short-glide tracking, story hit-testing after live layout changes, native touch scrolling beside the strip, pointer capture, vibration support, keyboard focus appearance, screen-reader slider announcements, broadsheet edge placement, dark/light/Auto rendering, reduced-motion presentation, or the precise visual hand-off between the index and page curl. Those remain dev-container browser checks.

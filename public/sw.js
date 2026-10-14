@@ -1,9 +1,10 @@
-const CACHE_NAME = 'daily-briefing-v4';
+const CACHE_NAME = 'daily-briefing-v5';
 const PRECACHE = [
   '/',
   '/style.css',
   '/reading-logic.js',
   '/curl-geometry.js',
+  '/thumb-index-logic.js',
   '/sun-times.js',
   '/app.js',
   '/manifest.json'
