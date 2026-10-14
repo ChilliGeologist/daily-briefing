@@ -4,12 +4,12 @@
 > Claude Code. Steps use checkbox (`- [ ]`) syntax for tracking. Codex cannot
 > commit (its sandbox holds `.git` read-only); Claude commits after the run.
 
-## Open questions for Jesse
+## Decisions from Jesse
 
-1. The approved pictures only show cream paper. For dark mode, this plan uses
-   warm charcoal paper, off-white type and a lighter rust accent while keeping
-   the same newspaper feel. Is that the right night-time look, or should dark
-   mode keep the cream paper too?
+1. **Dark mode (answered 2026-10-14):** "yeah build one, but I want a
+   dark/light/system/auto switch". Build the warm charcoal Paper look proposed
+   below, and offer four theme choices: Light, Dark, System (follow the
+   phone's setting) and Auto (dark from sunset to sunrise at home). See Task 7.
 
 **Goal:** Replace the current card-based briefing with the approved Paper
 reading experience. On a phone it opens with "You should know", followed by
@@ -86,8 +86,11 @@ one is the source of truth for fold geometry and lighting.
   replaces the interactive/settling curl with a short opacity fade. Disable
   the expand slide too; content must not disappear or become delayed.
 - The proposed dark Paper palette is a warm dark sheet rather than the
-  rejected blue/black Night magazine design. The current Light/Dark/System
-  setting still chooses the palette, and System still follows the OS.
+  rejected blue/black Night magazine design. The theme setting gains a fourth
+  choice, Auto, alongside Light, Dark and System; System still follows the OS.
+  Auto is dark from local sunset to sunrise at home (West Tamar, about
+  41.30° S, 146.98° E), worked out in the browser with no location permission
+  and no network. The choice applies app-wide, not only to the reading route.
 - Pure frontend logic gets small `node:test` tests. Run only the named stage 4
   test files while developing this stage; do not use Playwright or claim that
   unit tests verified layout, scrolling, pointer feel or browser history.
@@ -377,7 +380,21 @@ if needed).
   at 200% zoom and ensure buttons and headings do not overlap.
 - [ ] If `applyTheme()` updates the browser's theme-colour meta tag, use the
   active Paper background on `/` and retain the existing app background on the
-  three panel routes. Do not alter theme storage or the Settings control.
+  three panel routes.
+- [ ] Add the **Auto** theme. Settings → Theme gets a fourth button (order:
+  Auto, System, Light, Dark; a small sun-and-moon icon in the existing icon
+  style). Stored value `auto` in the existing `theme` localStorage key; unknown
+  stored values fall back to `system`, and existing `system`/`light`/`dark`
+  values keep working. Put the sun maths in a pure module (for example
+  `public/sun-times.js`) using the NOAA sunrise/sunset equations for the fixed
+  home coordinates, returning the day's sunrise and sunset as Dates. Auto sets
+  `data-theme="dark"` between sunset and sunrise, else `light`. Re-evaluate on
+  `visibilitychange`, on page load, and with one timer set for the next
+  sunrise/sunset (not polling); clear the timer when the user picks another
+  theme. Unit tests: sunrise and sunset in Launceston on 21 June, 21 December
+  and a daylight-saving changeover day, each within 3 minutes of published
+  times (cite the source in the test), and Auto's dark/light decision either
+  side of each boundary.
 
 ### Task 8: Jesse's dev-container verification (Claude, not Playwright)
 
@@ -413,9 +430,11 @@ if needed).
   8. Enable reduced motion in the device/browser, repeat Read in full and both
      swipe directions, and confirm there is only a short fade—no fold, slide or
      delayed hidden content.
-  9. Check Light, Dark and System. Confirm Light matches the approved cream
-     mockup and, pending the open question, Dark looks like warm dark paper
-     with readable text rather than the rejected Night magazine.
+  9. Check Auto, System, Light and Dark. Confirm Light matches the approved
+     cream mockup and Dark looks like warm dark paper with readable text rather
+     than the rejected Night magazine. With Auto chosen, the page should be
+     light by day and dark after sunset (Claude confirms the switch times from
+     the unit tests; Jesse checks that it looks right in the evening).
   10. At tablet and desktop widths, and at 200% zoom, confirm the centred paper
       and article remain readable, images fit, keyboard focus is visible and
       every action works without horizontal scrolling.
