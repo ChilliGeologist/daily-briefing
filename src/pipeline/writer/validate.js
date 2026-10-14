@@ -24,7 +24,7 @@ const TOP_NEWS_SECTIONS = new Set(['tasmania', 'australia', 'world']);
 // Only phrasing about the supplied text itself. Ordinary reporting such as
 // "police released no details about the man" must not match.
 const MISSING_TEXT = /\b(?:no\s+(?:further\s+|additional\s+|other\s+)?(?:(?:article|story|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
-const META_KICKER = /^(?:headline mystery)$/i;
+const META_KICKER = /^(?:headline mystery|no story)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
 
 function parseObject(raw) {
@@ -460,7 +460,14 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
     const wide = deterministicOrder(stories)
       .filter(story => story.section === sectionId && (Number(story.coverage) || 0) >= 3)
       .map(story => story.id);
-    for (const id of [...wide, ...(preferred[sectionId] || [])]) {
+    // Then stories about something the reader runs or uses (Plex, Unraid, the
+    // arr apps): the editor left "Plex 1.6" and an arr-suite replacement in "more".
+    const product = stories
+      .filter(story => story.section === sectionId
+        && (story.interest_matches || []).some(match => match.kind === 'product'))
+      .sort((a, b) => interestScore(b.interest_matches) - interestScore(a.interest_matches))
+      .map(story => story.id);
+    for (const id of [...wide, ...product, ...(preferred[sectionId] || [])]) {
       const story = byId.get(id);
       if (!story || story.section !== sectionId || placed.has(id) || sections[sectionId].length >= sectionSize) continue;
       sections[sectionId].push(id);

@@ -694,3 +694,19 @@ it('leads a section with stories three or more outlets carried, ahead of the edi
   ];
   assert.deepStrictEqual(validateEdit({ top: [], sections: { tech: ['s1', 's3', 's2'] } }, list, { sectionSize: 2, topSize: { min: 0, max: 7 } }).sections.tech, ['s2', 's1']);
 });
+
+it('leads a section with stories about the reader\'s products after widely covered ones', () => {
+  const list = [
+    { id: 's1', section: 'homelab', coverage: 1, interest_matches: [], rank: 1 },
+    { id: 's2', section: 'homelab', coverage: 1, interest_matches: [{ label: 'Tailscale', kind: 'product', weight: 2 }], rank: 2 },
+    { id: 's3', section: 'homelab', coverage: 1, interest_matches: [{ label: 'Unraid', kind: 'product', weight: 2 }, { label: 'Sonarr', kind: 'product', weight: 2 }], rank: 3 },
+    { id: 's4', section: 'homelab', coverage: 4, interest_matches: [], rank: 4 },
+    { id: 's5', section: 'homelab', coverage: 1, interest_matches: [{ label: 'Tasmania', kind: 'place', weight: 1 }], rank: 5 },
+  ];
+  assert.deepStrictEqual(validateEdit({ top: [], sections: { homelab: ['s1', 's5', 's2', 's3', 's4'] } }, list, { sectionSize: 4, topSize: { min: 0, max: 7 } }).sections.homelab, ['s4', 's3', 's2', 's1']);
+});
+
+it('blanks a "No story" kicker', () => {
+  const raw = { is_news: true, headline: 'Everest Runner by Runner', summary: 'A feature.', detail: 'A feature.', kicker: 'No story', section: 'australia' };
+  assert.strictEqual(validateWrite(raw, { ...geographyItem, interest_matches: [] }).value.kicker, '');
+});

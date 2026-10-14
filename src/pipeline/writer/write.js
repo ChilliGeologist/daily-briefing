@@ -49,7 +49,12 @@ function isQuoteOnlyHeadline(headline) {
 
 function headlineRetryReason(headline, item) {
   if (isVagueHeadline(headline)) return 'too vague';
-  if ((String(headline || '').trim().match(/\S+/g) || []).length > 18) return 'longer than 18 words';
+  // A rewrite of a long publisher headline once said the opposite of the
+  // story (an IMF piece); a long headline beats a wrong one, so only Reddit and
+  // HN titles are shortened.
+  if (isCommunityItem(item) && (String(headline || '').trim().match(/\S+/g) || []).length > 18) {
+    return 'longer than 18 words';
+  }
   if (isCommunityItem(item) && isQuoteOnlyHeadline(headline)) return 'only a quote';
   return null;
 }

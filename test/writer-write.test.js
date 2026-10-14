@@ -457,3 +457,19 @@ it('leaves summary and detail empty when only the headline is available, and dro
     ['section moved: tasmania -> australia (no Tasmanian place named)', 'headline only: summary and detail left empty', 'not news: clickbait headline with no article text'],
   ]]);
 });
+
+it('keeps a long publisher headline rather than asking for a rewrite', async () => {
+  const headline = 'The IMF says we need to make urgent choices but are they choices the Albanese government is willing to make this year';
+  let count = 0;
+  const output = await writeStories([{
+    title: headline, source_name: 'The Guardian AU', description: 'The IMF advises targeted income support.', interest_matches: [],
+  }], {
+    name: 'test', async write() {
+      count++;
+      return { json: { is_news: true, headline, summary: 'The IMF advises targeted income support.', detail: 'The IMF advises targeted income support over price suppression.', kicker: 'Economic advice', section: 'australia' } };
+    },
+  }, retrySettings);
+  assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {
+    count: 1, headline, retries: 0,
+  });
+});

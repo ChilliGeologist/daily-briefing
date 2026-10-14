@@ -33,7 +33,8 @@ const DEFAULT_INTERESTS = Object.freeze([
   interest('UniFi', 'product', ['UniFi', 'Ubiquiti'], 2, true),
   interest('Tailscale', 'product', ['Tailscale'], 2, true),
   interest('Authelia', 'product', ['Authelia'], 2, true),
-  interest('Proton', 'product', ['Proton', 'Proton Drive', 'Proton Mail'], 2, true),
+  // Bare "Proton" also names Valve's game layer for Linux.
+  interest('Proton', 'product', ['Proton Drive', 'Proton Mail', 'Proton VPN', 'Proton Pass'], 2, true),
   interest('Up Bank', 'product', ['Up Bank', 'Up banking'], 2),
   interest('Aurora Energy', 'product', ['Aurora Energy', 'electricity price', 'solar feed-in'], 2),
   interest('Interest rates', 'product', ['RBA', 'cash rate', 'interest rate'], 2),

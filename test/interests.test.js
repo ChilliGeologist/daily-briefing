@@ -97,3 +97,10 @@ it('adds the weights of matched interests', () => {
     { weight: 1 },
   ]), 6);
 });
+
+it('matches Proton the service, not Valve\'s Proton game layer', () => {
+  assert.deepStrictEqual([
+    matchInterests('Proton and DXVK changed Linux gaming', DEFAULT_INTERESTS).map(match => match.label),
+    matchInterests('Proton Drive adds a Linux client', DEFAULT_INTERESTS).map(match => match.label),
+  ], [[], ['Proton']]);
+});
