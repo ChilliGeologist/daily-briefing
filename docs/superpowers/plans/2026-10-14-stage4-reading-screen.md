@@ -493,3 +493,45 @@ asked for, all part of stage 4:
    Showcases and announcements without replies stay. Add a filler default for
    standing "Discussion Thread" posts. Keep the post text and top replies on
    stored community stories so the reader can show them.
+
+
+---
+
+## Section navigation: the thumb index (approved by Jesse 2026-10-15)
+
+Jesse chose a Niagara-launcher-style strip ("mmm that's nice") after three
+prototype rounds. The approved working prototype is
+`docs/superpowers/mockups/stage4/thumb-index.html`; it is the source of truth
+for look, motion constants and behaviour. Build it into the reading screen:
+
+1. **The strip.** One small icon per section present in the edition, in
+   section order, quiet colour, spread evenly over the lower ~30–92% of the
+   viewport height on the right edge (thumb reach). The strip itself is only
+   about 36 px wide; the paper keeps a matching right margin so nothing sits
+   under the icons at rest. Icons are the prototype's static SVGs (front page,
+   Tasmania map, Australia map, Asia-Pacific map globe, shield, server rack,
+   controller, speech bubble) and also appear beside each section heading.
+2. **Holding and sliding.** Pointer capture on the strip only. Icons near the
+   finger bow outward on a Gaussian curve and swell (prototype: AMP 46,
+   SIGMA 44, GROW 1.15) with the prototype's spring constants; the current one
+   turns rust; a rust name pill sits a constant 10 px beyond the icon's outer
+   edge, vertically centred; the paper jumps to the section with a ~150 ms
+   ease-out glide; `navigator.vibrate(5)` per section change, wrapped in
+   try/catch. No heading landing animation (Jesse: "it's one or the other").
+3. **Release** springs everything back. **Sliding sideways off the strip**
+   (more than 36 px away from it) targets the story row under the finger with
+   a rust wash; releasing there opens that story exactly as a tap does
+   (one-at-a-time expansion). Releasing anywhere else opens nothing.
+4. **When not held**, the icon for the section currently at the top of the
+   briefing is shown in ink (the prototype's `here` state) as you scroll.
+5. **Coexistence.** The strip sits above the curl layers but only on the
+   briefing page, never on the reader; a gesture that starts on the strip
+   never starts a page curl, and the curl's left swipe still starts only on a
+   story. Hide the strip while the reader is open and during a curl.
+6. **Desktop/tablet.** On the broadsheet layout the strip sits at the right
+   edge of the paper sheet, works with mouse drag and click, and is a
+   keyboard-focusable slider (arrow keys move section by section, with
+   aria-valuetext set to the section name).
+7. **Reduced motion:** no bow or spring and no glide; the current icon and pill
+   still show and the paper jumps directly.
+8. No Settings toggle in this stage; left-handed placement can come later.
