@@ -446,12 +446,12 @@ function stories() {
   return [
     { id: 's1', section: 'world', coverage: 4, interest_matches: [], rank: 1 },
     { id: 's2', section: 'tasmania', coverage: 1, interest_matches: [{ weight: 3 }], rank: 2 },
-    { id: 's3', section: 'world', coverage: 1, interest_matches: [], rank: 3 },
-    { id: 's4', section: 'world', coverage: 1, interest_matches: [], rank: 4 },
-    { id: 's5', section: 'world', coverage: 1, interest_matches: [], rank: 5 },
-    { id: 's6', section: 'world', coverage: 1, interest_matches: [], rank: 6 },
-    { id: 's7', section: 'world', coverage: 1, interest_matches: [], rank: 7 },
-    { id: 's8', section: 'world', coverage: 1, interest_matches: [], rank: 8 },
+    { id: 's3', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 3 },
+    { id: 's4', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 4 },
+    { id: 's5', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 5 },
+    { id: 's6', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 6 },
+    { id: 's7', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 7 },
+    { id: 's8', section: 'world', coverage: 1, interest_matches: [{ weight: 1 }], rank: 8 },
   ];
 }
 
@@ -555,14 +555,14 @@ it('reports no fallback for a clean editor selection', () => {
 
 it('repairs community-only and over-balanced tech top picks with ranked general news', () => {
   const candidates = [
-    { id: 's1', section: 'tech', coverage: 1, interest_matches: [], rank: 1, source_type: 'reddit', sources: [{ name: 'Reddit' }] },
-    { id: 's2', section: 'tech', coverage: 1, interest_matches: [], rank: 2, sources: [{ name: 'ABC News' }] },
-    { id: 's3', section: 'homelab', coverage: 1, interest_matches: [], rank: 3, sources: [{ name: 'The Register' }] },
-    { id: 's4', section: 'gaming', coverage: 1, interest_matches: [], rank: 4, sources: [{ name: 'GamesIndustry.biz' }] },
-    { id: 's5', section: 'world', coverage: 1, interest_matches: [], rank: 5, sources: [{ name: 'Reuters' }] },
-    { id: 's6', section: 'tasmania', coverage: 1, interest_matches: [], rank: 6, sources: [{ name: 'ABC Tasmania' }] },
-    { id: 's7', section: 'australia', coverage: 1, interest_matches: [], rank: 7, sources: [{ name: 'Guardian Australia' }] },
-    { id: 's8', section: 'internet', coverage: 1, interest_matches: [], rank: 8, sources: [{ name: 'Wired' }] },
+    { id: 's1', section: 'tech', coverage: 2, interest_matches: [], rank: 1, source_type: 'reddit', sources: [{ name: 'Reddit' }] },
+    { id: 's2', section: 'tech', coverage: 2, interest_matches: [], rank: 2, sources: [{ name: 'ABC News' }] },
+    { id: 's3', section: 'homelab', coverage: 2, interest_matches: [], rank: 3, sources: [{ name: 'The Register' }] },
+    { id: 's4', section: 'gaming', coverage: 2, interest_matches: [], rank: 4, sources: [{ name: 'GamesIndustry.biz' }] },
+    { id: 's5', section: 'world', coverage: 2, interest_matches: [], rank: 5, sources: [{ name: 'Reuters' }] },
+    { id: 's6', section: 'tasmania', coverage: 2, interest_matches: [], rank: 6, sources: [{ name: 'ABC Tasmania' }] },
+    { id: 's7', section: 'australia', coverage: 2, interest_matches: [], rank: 7, sources: [{ name: 'Guardian Australia' }] },
+    { id: 's8', section: 'internet', coverage: 2, interest_matches: [], rank: 8, sources: [{ name: 'Wired' }] },
   ];
   assert.deepStrictEqual(validateEdit({
     top: ['s1', 's2', 's3', 's4', 's5'],
@@ -688,10 +688,14 @@ it('keeps stories from a gaming or homelab source out of the news sections', () 
   const value = section => ({ is_news: true, headline: 'Australia misses out on the collector edition', summary: 'The edition is sold elsewhere.', detail: 'The edition is sold elsewhere.', kicker: 'Collector edition', section });
   assert.deepStrictEqual([
     validateWrite(value('world'), { ...geographyItem, default_category: 'gaming' }),
+    validateWrite(value('tech'), { ...geographyItem, default_category: 'gaming' }),
+    validateWrite(value('internet'), { ...geographyItem, default_category: 'gaming' }),
     validateWrite(value('australia'), { ...geographyItem, default_category: 'homelab' }),
     validateWrite(value('tech'), { ...geographyItem, default_category: 'homelab' }),
   ], [
     { ok: true, value: value('gaming'), problems: ['section moved: world -> gaming (gaming source)'], sectionMoved: true },
+    { ok: true, value: value('gaming'), problems: ['section moved: tech -> gaming (gaming source)'], sectionMoved: true },
+    { ok: true, value: value('gaming'), problems: ['section moved: internet -> gaming (gaming source)'], sectionMoved: true },
     { ok: true, value: value('homelab'), problems: ['section moved: australia -> homelab (homelab source)'], sectionMoved: true },
     { ok: true, value: value('tech'), problems: [] },
   ]);
@@ -789,9 +793,70 @@ it('never repairs a long kicker into a bare place name', () => {
 it('treats a summary that describes a paywall page as missing text', () => {
   assert.deepStrictEqual([
     'The provided text is not a genuine news story and appears to be a paywall or subscription prompt.',
+    'The provided text is a paywalled article with no accessible story content.',
+    'The supplied page is a paywalled story with no accessible article content.',
+    'There is no accessible source content.',
     'Officials said the claims were not a genuine threat.',
-  ].map(summary => missingTextFields({ summary })), [['summary'], []]);
+    'RuneLite announced that plugins with paywalled functionality are no longer allowed.',
+  ].map(summary => missingTextFields({ summary })), [
+    ['summary'], ['summary'], ['summary'], ['summary'], [], [],
+  ]);
   assert.deepStrictEqual(missingTextFields({ kicker: 'Subscription wall' }), ['kicker']);
+});
+
+it('moves world and tech source stories out of local sections only without Australian evidence', () => {
+  const value = (section, headline, summary = `${headline}.`) => ({
+    is_news: true,
+    headline,
+    summary,
+    detail: summary,
+    kicker: 'Court case',
+    section,
+  });
+  const cases = [
+    [value('australia', 'Ex-fiance of Nancy Mace charged with sex crimes'), 'world', 'world'],
+    [value('tasmania', "Why Zelensky's meeting with Burnham matters"), 'world', 'world'],
+    [value('australia', 'Cloud provider changes its pricing'), 'tech', 'world'],
+    [value('tech', 'Cloud provider changes its pricing'), 'tech', 'tech'],
+    [value('australia', 'Sydney cloud provider changes its pricing'), 'world', 'australia'],
+  ];
+  assert.deepStrictEqual(cases.map(([written, category]) => validateWrite(written, {
+    ...geographyItem,
+    title: written.headline,
+    description: written.summary,
+    default_category: category,
+  })), cases.map(([written, category, section]) => ({
+    ok: true,
+    value: { ...written, section },
+    problems: written.section === section ? [] : [
+      `section moved: ${written.section} -> world (${category} source; no Australian evidence)`,
+    ],
+    ...(written.section === section ? {} : { sectionMoved: true }),
+  })));
+});
+
+it('replaces a single-outlet top story without an interest by widest-covered remaining news', () => {
+  const candidates = [
+    { id: 'fine', section: 'australia', coverage: 1, interest_matches: [], rank: 1, sources: [{ name: 'ABC' }] },
+    { id: 'local', section: 'tasmania', coverage: 1, interest_matches: [], rank: 2, sources: [{ name: 'Police' }, { name: 'Local paper' }] },
+    { id: 'interest', section: 'world', coverage: 1, interest_matches: [{ label: 'Federal politics' }], rank: 3, sources: [{ name: 'BBC' }] },
+    { id: 'policy', section: 'australia', coverage: 2, interest_matches: [], rank: 4, sources: [{ name: 'ABC' }, { name: 'Guardian' }] },
+    { id: 'security', section: 'tech', coverage: 2, interest_matches: [], rank: 5, sources: [{ name: 'Wired' }, { name: 'Register' }] },
+    { id: 'pope', section: 'world', coverage: 4, interest_matches: [], rank: 6, sources: [{ name: 'BBC' }, { name: 'Guardian' }] },
+    { id: 'starlink', section: 'world', coverage: 5, interest_matches: [], rank: 7, sources: [{ name: 'BBC' }, { name: 'SMH' }] },
+    { id: 'brand', section: 'world', coverage: 3, interest_matches: [], rank: 8, sources: [{ name: 'ABC' }, { name: 'Guardian' }] },
+  ];
+  assert.deepStrictEqual(validateEdit({
+    top: ['fine', 'local', 'interest', 'policy', 'security'],
+    sections: {},
+  }, candidates, { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
+    top: ['local', 'interest', 'policy', 'security', 'starlink'],
+    sections: { tasmania: [], australia: ['fine'], world: ['pope', 'brand'], tech: [], homelab: [], gaming: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    fallback: 'partial',
+    problems: ['Top story fine was replaced by starlink (single-outlet story without an interest match)'],
+    topReplacements: [{ removed: 'fine', added: 'starlink', reason: 'single-outlet story without an interest match' }],
+  });
 });
 
 it('treats a short Reddit post asking for suggestions in its text as a help request', () => {

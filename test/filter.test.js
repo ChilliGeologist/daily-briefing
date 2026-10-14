@@ -116,16 +116,20 @@ it('filters social-user says and shares filler plus possessive Redditor features
     'Redditors Reveal Their Worst Travel Mistakes',
     "Redditor's First Day in Paris Goes From Fridge Trouble to Scammers",
     'Redditor’s First Day in Paris Goes From Fridge Trouble to Scammers',
+    'Redditor Finally Draws the Line After Neighbor Repeatedly Uses His Private Driveway',
+    'Redditors Find 60 Cars Parked on Their Property for a Local Festival',
   ];
   const keep = [
     "TikToker Are Assigning Their Favorites In The 'Holy Trinity' Meme Trend",
-    'Redditors celebrate a court victory',
   ];
   const candidates = [...titles, ...keep].map(title => item(title, 1));
   const reason = "filler: /^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i";
   assert.deepStrictEqual(filterItems(candidates, opts({ fillerPatterns: settings.getFillerPatterns() })), {
-    kept: candidates.slice(6),
-    dropped: candidates.slice(0, 6).map(value => ({ item: value, reason })),
-    stats: { total: 8, kept: 2, stale: 0, filler: 6 },
+    kept: candidates.slice(8),
+    dropped: [
+      ...candidates.slice(0, 6).map(value => ({ item: value, reason })),
+      ...candidates.slice(6, 8).map(value => ({ item: value, reason: "filler: /^\\s*redditors?(?:['’]s)?\\b/i" })),
+    ],
+    stats: { total: 9, kept: 1, stale: 0, filler: 8 },
   });
 });

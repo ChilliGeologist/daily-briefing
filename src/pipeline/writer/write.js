@@ -13,6 +13,9 @@ const {
 const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
 const SAME_EVENT_SIMILARITY = 0.4;
 const SAME_EVENT_MIN_SHARED_WORDS = 5;
+const HEADLINE_ECHO_SIMILARITY = 0.8;
+const HEADLINE_ECHO_MIN_SHARED_WORDS = 4;
+const HEADLINE_ECHO_PADDING = new Set(['report', 'reportedly']);
 
 // True when the app has nothing but the headline: no article text, and every
 // teaser is just the headline again plus the outlet's name (Google News).
@@ -31,6 +34,24 @@ function isHeadlineOnly(item) {
     .replace(/[\s\p{P}]+/gu, ' ').trim();
   const teasers = [item.description, ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : [])];
   return teasers.every(text => strip(text).length === 0);
+}
+
+function headlineSummaryOverlap(headline, summary) {
+  const headlineWords = new Set(tokenize(headline));
+  const summaryWords = new Set(tokenize(summary).filter(word => !HEADLINE_ECHO_PADDING.has(word)));
+  const shared = [...summaryWords].filter(word => headlineWords.has(word)).length;
+  return {
+    score: summaryWords.size === 0 ? 0 : shared / summaryWords.size,
+    shared,
+    summaryWords: summaryWords.size,
+  };
+}
+
+function isLowTextHeadlineEcho(item, value) {
+  if (String(item.article_content || '').trim().length >= 500) return false;
+  const overlap = headlineSummaryOverlap(value.headline, value.summary);
+  return overlap.shared >= HEADLINE_ECHO_MIN_SHARED_WORDS
+    && overlap.score >= HEADLINE_ECHO_SIMILARITY;
 }
 
 function plural(count, singular, pluralForm = `${singular}s`) {
@@ -248,6 +269,10 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: community question has fewer than two real replies');
       }
+      if (validation.value.is_news && isLowTextHeadlineEcho(item, validation.value)) {
+        validation.value.is_news = false;
+        validation.problems.push('not news: nothing beyond the headline');
+      }
       if (!validation.value.is_news && overrideNotNews && !headlineOnly
         && !validation.problems.includes('not news: nothing beyond the headline')) {
         validation.value.is_news = true;
@@ -332,4 +357,10 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
   return { stories, dropped, stats };
 }
 
-module.exports = { writeStories, writtenStorySimilarity, dropWrittenDuplicates };
+module.exports = {
+  writeStories,
+  headlineSummaryOverlap,
+  isLowTextHeadlineEcho,
+  writtenStorySimilarity,
+  dropWrittenDuplicates,
+};

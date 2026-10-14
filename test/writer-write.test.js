@@ -612,6 +612,38 @@ it('leaves out a story when only its headline is available, but keeps one with a
   ]]);
 });
 
+it('drops a low-text headline echo but keeps a summary that adds a substantive fact', async () => {
+  const items = [
+    {
+      title: 'Suicide rates highest ever among middle-aged men',
+      description: '', article_content: '', source_type: 'hackernews', source_name: 'Hacker News', interest_matches: [],
+    },
+    {
+      title: 'Paywalled plugins banned, Spotify and existing plugins exempt',
+      description: 'RuneLite announced that plugins with paywalled functionality are no longer allowed.',
+      article_content: '', source_name: 'RuneLite', default_category: 'gaming', interest_matches: [],
+    },
+  ];
+  const values = [
+    { is_news: true, headline: items[0].title, summary: 'Suicide rates are reported as the highest ever among middle-aged men.', detail: 'Suicide rates are reported as the highest ever among middle-aged men.', kicker: 'Suicide rates', section: 'world' },
+    { is_news: true, headline: items[1].title, summary: items[1].description, detail: `${items[1].description} Existing free plugins remain available.`, kicker: 'Plugin rules', section: 'gaming' },
+  ];
+  let index = 0;
+  const output = await writeStories(items, {
+    name: 'test', concurrency: 1, async write() { return { json: values[index++] }; },
+  }, retrySettings);
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...items[1], rank: 2, id: 's2', ...values[1], written_by: 'test', write_ok: true, write_problems: [],
+    }],
+    dropped: [{
+      ...items[0], rank: 1, id: 's1', ...values[0], is_news: false,
+      written_by: 'test', write_ok: true, write_problems: ['not news: nothing beyond the headline'],
+    }],
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
 it('keeps a long publisher headline rather than asking for a rewrite', async () => {
   const headline = 'The IMF says we need to make urgent choices but are they choices the Albanese government is willing to make this year';
   let count = 0;

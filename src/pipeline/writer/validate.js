@@ -25,11 +25,11 @@ const TOP_TECH_SECTIONS = new Set(['tech', 'homelab', 'gaming', 'internet']);
 const TOP_NEWS_SECTIONS = new Set(['tasmania', 'australia', 'world']);
 // Only phrasing about the supplied text itself. Ordinary reporting such as
 // "police released no details about the man" must not match.
-const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies)|no\s+(?:further\s+|additional\s+|other\s+)?(?:(?:article|story|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
+const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies)|no\s+accessible\s+(?:(?:article|story|page|source)\s+)(?:text|content|details?|information)|no\s+(?:further\s+|additional\s+|other\s+|accessible\s+)?(?:(?:article|story|page|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
 // The writer describing the page instead of the story: "The provided text is
 // not a genuine news story and appears to be a paywall or subscription
 // prompt" (404 Media, 2026-10-15).
-const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content)\s+(?:is|was)\s+not\b|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
+const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content|article|story)\s+(?:is|was)\s+(?:not\b|(?:a\s+)?paywalled\s+(?:article|page|story)\b)|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
 const META_KICKER = /^(?:headline mystery|no story|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
 
@@ -132,17 +132,18 @@ function sectionEvidence(item, value) {
 function enforceSectionRequirements(value, item, interests, problems) {
   const sourceSection = SECTION_BY_SOURCE_CATEGORY[item.default_category]
     || ((Number(item.coverage) || 1) <= 1 ? SECTION_BY_SINGLE_SOURCE_CATEGORY[item.default_category] : undefined);
-  if (sourceSection && TOP_NEWS_SECTIONS.has(value.section)) {
+  if (sourceSection && (TOP_NEWS_SECTIONS.has(value.section)
+    || (item.default_category === 'gaming' && value.section !== 'gaming'))) {
     problems.push(`section moved: ${value.section} -> ${sourceSection} (${item.default_category} source)`);
     value.section = sourceSection;
     return true;
   }
-  if (item.default_category === 'tech'
+  if ((item.default_category === 'tech' || item.default_category === 'world')
     && (value.section === 'tasmania' || value.section === 'australia')
     && !hasAnyAustralianEvidence([value.headline, value.summary, value.detail].join('\n'))) {
     const from = value.section;
     value.section = 'world';
-    problems.push(`section moved: ${from} -> world (tech source; no Australian evidence)`);
+    problems.push(`section moved: ${from} -> world (${item.default_category} source; no Australian evidence)`);
     return true;
   }
   if (value.section === 'world' && hasAustralianOnlyPlace(
@@ -439,8 +440,20 @@ function hasOnlyCommunitySources(story) {
   return isCommunityItem(story);
 }
 
+function sourceOutletCount(story) {
+  const namedSources = new Set((story.sources || [])
+    .map(source => String(source?.name || '').trim().toLocaleLowerCase('en-AU'))
+    .filter(Boolean));
+  return Math.max(Number(story.coverage) || 0, namedSources.size);
+}
+
+function isSingleOutletWithoutInterest(story) {
+  return sourceOutletCount(story) <= 1 && (story.interest_matches || []).length === 0;
+}
+
 function eligibleTopCandidate(story, techCount) {
   return !hasOnlyCommunitySources(story)
+    && !isSingleOutletWithoutInterest(story)
     && (!TOP_TECH_SECTIONS.has(story.section) || techCount < 2);
 }
 
@@ -453,7 +466,9 @@ function repairTopSelection(initialTop, stories, target) {
     const story = byId.get(id);
     let reason = null;
     if (hasOnlyCommunitySources(story)) reason = 'community-only source';
-    else if (TOP_TECH_SECTIONS.has(story.section) && techCount >= 2) {
+    else if (isSingleOutletWithoutInterest(story)) {
+      reason = 'single-outlet story without an interest match';
+    } else if (TOP_TECH_SECTIONS.has(story.section) && techCount >= 2) {
       reason = 'more than two tech/community sections';
     }
     if (reason) removed.push({ removed: id, added: null, reason });
@@ -463,7 +478,7 @@ function repairTopSelection(initialTop, stories, target) {
     }
   }
 
-  const remaining = storiesByRank(stories).filter(story => !top.includes(story.id));
+  const remaining = deterministicOrder(stories).filter(story => !top.includes(story.id));
   const ordered = [
     ...remaining.filter(story => TOP_NEWS_SECTIONS.has(story.section)),
     ...remaining.filter(story => !TOP_NEWS_SECTIONS.has(story.section)),
