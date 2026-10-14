@@ -742,3 +742,26 @@ it('keeps a single-source internet-culture story in Around the internet, but not
     { ok: true, value: value('australia'), problems: [] },
   ]);
 });
+
+it('never repairs a long kicker into a bare place name', () => {
+  const source = { ...geographyItem, interest_matches: [{ label: 'Tasmania', kind: 'place', weight: 1 }, { label: 'State politics', kind: 'topic', weight: 2 }] };
+  const raw = { is_news: true, headline: 'Firmus IPO flops but the premier still sees opportunity', summary: 'The premier remains confident.', detail: 'The premier remains confident.', kicker: 'Premier backs data centre plans', section: 'tasmania' };
+  assert.strictEqual(validateWrite(raw, source).value.kicker, 'State politics');
+});
+
+it('treats a summary that describes a paywall page as missing text', () => {
+  assert.deepStrictEqual([
+    'The provided text is not a genuine news story and appears to be a paywall or subscription prompt.',
+    'Officials said the claims were not a genuine threat.',
+  ].map(summary => missingTextFields({ summary })), [['summary'], []]);
+  assert.deepStrictEqual(missingTextFields({ kicker: 'Subscription wall' }), ['kicker']);
+});
+
+it('treats a short Reddit post asking for suggestions in its text as a help request', () => {
+  const post = (title, description) => ({ title, description, source_type: 'reddit', source_name: 'r/homelab' });
+  assert.deepStrictEqual([
+    isCommunityHelpRequest(post('My Home Firewall', 'I have installed firewall called Freesense. Please suggest your valuable suggestions to make it more secured.')),
+    isCommunityHelpRequest(post('HBA 240 SMART ERRAY CARD', 'I have 8 SAS hard drives I cannot use. Can someone please help me')),
+    isCommunityHelpRequest(post('My 3D printed rack is finished', 'Here are the parts I used and what I learned printing it.')),
+  ], [true, true, false]);
+});

@@ -25,7 +25,11 @@ const TOP_NEWS_SECTIONS = new Set(['tasmania', 'australia', 'world']);
 // Only phrasing about the supplied text itself. Ordinary reporting such as
 // "police released no details about the man" must not match.
 const MISSING_TEXT = /\b(?:no\s+(?:further\s+|additional\s+|other\s+)?(?:(?:article|story|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
-const META_KICKER = /^(?:headline mystery|no story)$/i;
+// The writer describing the page instead of the story: "The provided text is
+// not a genuine news story and appears to be a paywall or subscription
+// prompt" (404 Media, 2026-10-15).
+const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content)\s+(?:is|was)\s+not\b|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
+const META_KICKER = /^(?:headline mystery|no story|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
 
 function parseObject(raw) {
@@ -59,7 +63,8 @@ function firstSentence(teaser) {
 function missingTextFields(value) {
   return ['summary', 'detail', 'kicker'].filter(field => {
     const text = String(value?.[field] || '').trim();
-    return MISSING_TEXT.test(text) || (field === 'kicker' && META_KICKER.test(text));
+    return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text)
+      || (field === 'kicker' && META_KICKER.test(text));
   });
 }
 
@@ -78,10 +83,14 @@ function isCommunityHelpRequest(item) {
   if (/\bwhich\b.+\bfor\b/i.test(title)) return true;
   if (/\b\S+\s+or\s+.+\s+for\s+(?:a\s+)?(?:server|nas|homelab)\b/i.test(title)) return true;
   if (/\b(?:advice|recommendations?)\b/i.test(title) || /^(?:please\s+)?recommend\b/i.test(title)) return true;
+  if (/\b(?:suggestions?|help|ideas?|input|feedback)\s+(?:sought|needed|wanted|requested|please)\b/i.test(title)) return true;
   if (/^looking for\b/i.test(title) || /\bideas?\s*\??$/i.test(title)) return true;
   if (/^is\b.+\bgood enough for\b/i.test(title) || /^moving to\b.+\bor\b/i.test(title)) return true;
-  return words(title).length <= 5
-    && /\b(?:just bought|good purchase|any advice)\b/i.test(description);
+  // A short, plain title whose post asks for help ("My Home Firewall": "Please
+  // suggest your valuable suggestions"); the writer's retry would otherwise
+  // dress it up as a headline.
+  return words(title).length <= 6
+    && /\b(?:just bought|good purchase|any advice|any suggestions?|please suggest|please help|need(?:s)? help|(?:can|could|would)\s+(?:someone|anyone|somebody)\s+(?:please\s+)?(?:help|explain|tell|suggest)|any ideas|what am i doing wrong)\b/i.test(description);
 }
 
 function isUnansweredCommunityQuestion(item) {
@@ -270,8 +279,10 @@ function repairKicker(value, item, problems) {
   }
   if (value.kicker && (words(value.kicker).length > 3 || value.kicker.length > 24)) {
     problems.push('Kicker exceeded three words or 24 characters');
-    const interestLabel = (item.interest_matches || []).map(match => match.label).find(Boolean);
-    value.kicker = interestLabel || words(value.kicker).slice(0, 2).join(' ').replace(/[^\p{L}\p{N}]+$/u, '');
+    // The same filtered choice as the other repairs: the first interest label
+    // can be a bare place ("Tasmania"), which a kicker must never be.
+    value.kicker = replacementKicker(item, value)
+      || words(value.kicker).slice(0, 2).join(' ').replace(/[^\p{L}\p{N}]+$/u, '');
   }
   if (!namedKickers(item).has(value.kicker)) {
     value.kicker = sentenceCaseKicker(value.kicker, kickerEvidence(item, value));
