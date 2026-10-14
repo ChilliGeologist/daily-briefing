@@ -78,3 +78,49 @@ it('treats a judge that throws as "no" and carries on', async () => {
   });
   assert.deepStrictEqual(result.clusters.map(cluster => cluster.items.length), [1, 1]);
 });
+
+it('does not cluster a short title on title similarity alone', async () => {
+  const asked = [];
+  const pairs = [
+    [makeItem('Tough Decisions', 'https://a.example/1', 'a.example'), makeItem("'Tough': RBA decision", 'https://b.example/2', 'b.example')],
+  ];
+  const results = [];
+  for (const items of pairs) results.push(await clusterItems(items, {
+    high: 0.01,
+    low: 0,
+    judge: async (a, b) => { asked.push([a.title, b.title]); return true; },
+    log,
+  }));
+  assert.deepStrictEqual(results.map(result => result.clusters.map(cluster => cluster.items.map(value => value.title))), [
+    [['Tough Decisions'], ["'Tough': RBA decision"]],
+  ]);
+  assert.deepStrictEqual(asked, []);
+  const shared = await clusterItems([
+    { ...makeItem('RBA decision shifts inflation fight', 'https://story.example/rba', 'reddit.com'), source_type: 'reddit', external_url: 'https://story.example/rba' },
+    makeItem("'Tough': RBA decision shifts inflation fight", 'https://story.example/rba', 'news.example'),
+  ], { judge: never, log });
+  assert.deepStrictEqual(shared.clusters.map(cluster => cluster.items.map(value => value.title)), [[
+    'RBA decision shifts inflation fight', "'Tough': RBA decision shifts inflation fight",
+  ]]);
+});
+
+it('auto-merges only substantial event overlap with a shared fact and proper entity', async () => {
+  const result = await clusterItems([
+    makeItem('Australia defeats South Africa by 214 runs on day five in Durban', 'https://abc.example/result', 'abc.example', 'South Africa was bowled out after losing four wickets.'),
+    makeItem("Selection critics silenced as Australia's old guard wins first Test", 'https://analysis.example/test', 'analysis.example', 'Australia beat South Africa by 214 runs in the first Test.'),
+    makeItem('My small homelab in a 16U rack', 'https://reddit.com/r/homelab/1', 'reddit.com', 'A Dell Optiplex runs the server.'),
+    makeItem('Dell Optiplex micro 3060', 'https://reddit.com/r/homelab/2', 'reddit.com', 'The 16GB server is a Dell Optiplex.'),
+  ], { judge: never, high: 2, low: 2, log });
+  assert.deepStrictEqual(result.clusters.map(cluster => cluster.items.map(value => value.title)), [
+    [
+      'Australia defeats South Africa by 214 runs on day five in Durban',
+      "Selection critics silenced as Australia's old guard wins first Test",
+    ],
+    ['My small homelab in a 16U rack'],
+    ['Dell Optiplex micro 3060'],
+  ]);
+  assert.deepStrictEqual(result.stats, {
+    items: 4, clusters: 3, url_merges: 0, path_merges: 0,
+    similar_merges: 1, judged: 0, judged_yes: 0,
+  });
+});

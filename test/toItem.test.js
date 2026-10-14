@@ -36,6 +36,7 @@ it('converts a ranked extracted cluster to the legacy item shape', () => {
     article_html: '<p>Full article text</p>',
     article_url: 'https://abc.test/final',
     top_comments: ['Useful comment'],
+    interest_matches: [{ label: 'Tasmania', kind: 'place', weight: 1, urgent: false, term: 'Tasmania' }],
   };
 
   assert.deepStrictEqual(toItem(cluster), {
@@ -57,5 +58,8 @@ it('converts a ranked extracted cluster to the legacy item shape', () => {
     article_html: '<p>Full article text</p>',
     article_url: 'https://abc.test/final',
     top_comments: ['Useful comment'],
+    interest_matches: [{ label: 'Tasmania', kind: 'place', weight: 1, urgent: false, term: 'Tasmania' }],
+    coverage: 2,
+    rank: 1,
   });
 });

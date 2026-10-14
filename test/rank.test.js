@@ -2,7 +2,7 @@
 
 const { it } = require('node:test');
 const assert = require('node:assert');
-const { rankClusters } = require('../src/pipeline/rank');
+const { rankClusters, INTEREST_POINTS } = require('../src/pipeline/rank');
 
 const now = Date.parse('2026-10-13T00:00:00Z');
 const cluster = (id, {
@@ -57,4 +57,40 @@ it('gives every source a floor of two even when one source floods', () => {
     ['q1', 'q2']
   );
   assert.strictEqual(result.stats.floor_added, 2);
+});
+
+it('matches interests across cluster items and adds the interest score', () => {
+  const story = cluster('ordinary', { coverage: 1, hoursAgo: 1 });
+  story.items.push({
+    title: 'Alternate angle',
+    description: 'A bushfire warning for Beaconsfield residents',
+    source_name: 'Other',
+    published: new Date(now - 3 * 3600e3).toISOString(),
+  });
+  const interests = [
+    { label: 'Home', kind: 'place', terms: ['Beaconsfield'], weight: 3, urgent: false },
+    { label: 'Emergency', kind: 'topic', terms: ['bushfire'], weight: 3, urgent: true },
+  ];
+
+  const result = rankClusters([story], { now, limit: 10, interests });
+
+  assert.strictEqual(INTEREST_POINTS, 13);
+  assert.strictEqual(result.selected[0].rank_score, 40 + (6 * 13));
+  assert.deepStrictEqual(result.selected[0].interest_matches, [
+    { label: 'Home', kind: 'place', weight: 3, urgent: false, term: 'Beaconsfield' },
+    { label: 'Emergency', kind: 'topic', weight: 3, urgent: true, term: 'bushfire' },
+  ]);
+});
+
+it('keeps keyword boosts and penalties alongside interest scoring', () => {
+  const story = cluster('Plex outage rumour', { coverage: 1, hoursAgo: 1 });
+  story.lead.description = 'clickbait warning';
+  const result = rankClusters([story], {
+    now,
+    limit: 10,
+    boostKeywords: ['outage'],
+    penaltyKeywords: ['clickbait'],
+    interests: [{ label: 'Plex', kind: 'product', terms: ['Plex'], weight: 2, urgent: true }],
+  });
+  assert.strictEqual(result.selected[0].rank_score, 40 + (2 * 13));
 });

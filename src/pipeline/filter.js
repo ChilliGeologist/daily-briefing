@@ -22,10 +22,17 @@ function compilePatterns(patterns) {
   return compiled;
 }
 
-function matchingPattern(title, patterns) {
+function isHackerNewsItem(item) {
+  return /^(?:hacker news|hn)\b/i.test(String(item.source_name || ''))
+    || ['hackernews', 'hacker_news', 'hn'].includes(String(item.source_type || '').toLowerCase());
+}
+
+function matchingPattern(item, patterns) {
+  const title = String(item.title || '');
   const lowerTitle = title.toLowerCase();
 
   for (const candidate of patterns) {
+    if (candidate.pattern === '/\\bis hiring\\b/i' && !isHackerNewsItem(item)) continue;
     if (candidate.regex) {
       candidate.regex.lastIndex = 0;
       if (candidate.regex.test(title)) return candidate.pattern;
@@ -54,7 +61,7 @@ function filterItems(items, { maxAgeHours, fillerPatterns, sourceMaxAge, now }) 
       }
     }
 
-    const filler = matchingPattern(item.title || '', patterns);
+    const filler = matchingPattern(item, patterns);
     if (filler !== null) {
       dropped.push({ item, reason: `filler: ${filler}` });
       stats.filler++;

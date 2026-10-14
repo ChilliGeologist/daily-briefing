@@ -1,5 +1,11 @@
 'use strict';
 
+const { matchInterests, interestScore } = require('./writer/interests');
+
+// Three outlets add 25 * log2(3) = 39.6 coverage points over one outlet.
+// A weight-3 local match adds 39 points, putting those signals roughly level.
+const INTEREST_POINTS = 13;
+
 function recencyScore(item, now = Date.now()) {
   if (!item.published) return 20;
   const ageHours = (now - new Date(item.published).getTime()) / 3600000;
@@ -47,7 +53,7 @@ function positionScore(items) {
   }, 0);
 }
 
-function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords }) {
+function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }) {
   const coverageScore = 25 * Math.log2(Math.max(1, cluster.coverage));
   const recency = recencyScore(newestItem(cluster), now);
   const position = positionScore(cluster.items);
@@ -55,20 +61,26 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords }) {
     boost_keywords: boostKeywords || [],
     penalty_keywords: penaltyKeywords || [],
   });
+  const interestText = cluster.items
+    .map(item => `${item.title || ''} ${item.description || ''}`)
+    .join('\n');
+  const interest_matches = matchInterests(interestText, interests || []);
+  const interestPoints = interestScore(interest_matches) * INTEREST_POINTS;
   const priority = Math.max(...cluster.items.map(item => item.source_priority ?? 1));
-  const rank_score = Math.max(0, (coverageScore + recency + position + keywords) * priority);
-  return { ...cluster, rank_score };
+  const rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);
+  return { ...cluster, interest_matches, rank_score };
 }
 
 function rankClusters(clusters, {
   now = Date.now(),
   boostKeywords = [],
   penaltyKeywords = [],
+  interests = [],
   limit,
   perSourceFloor = 2,
 } = {}) {
   const scored = clusters
-    .map(cluster => scoreCluster(cluster, { now, boostKeywords, penaltyKeywords }))
+    .map(cluster => scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }))
     .sort((a, b) => b.rank_score - a.rank_score);
   const selectionLimit = limit == null ? scored.length : Math.max(0, limit);
   const topIds = new Set(scored.slice(0, selectionLimit).map(cluster => cluster.id));
@@ -117,4 +129,4 @@ function rankClusters(clusters, {
   };
 }
 
-module.exports = { rankClusters, recencyScore, keywordBonus };
+module.exports = { rankClusters, recencyScore, keywordBonus, INTEREST_POINTS };

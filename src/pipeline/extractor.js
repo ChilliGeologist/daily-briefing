@@ -48,6 +48,9 @@ async function extractArticle(url, log, fetchImpl = globalThis.fetch) {
     throw new Error(`Non-HTML content-type: ${contentType}`);
   }
   const finalUrl = response.url || url;
+  if (redirectedToAccessWall(url, finalUrl)) {
+    throw new Error(`Redirected to access wall: ${finalUrl}`);
+  }
   const html = await response.text();
 
   const { document } = parseHTML(html);
@@ -202,6 +205,21 @@ function hostnameOf(url) {
   }
 }
 
+function redirectedToAccessWall(requestUrl, finalUrl) {
+  try {
+    const requested = new URL(requestUrl);
+    const final = new URL(finalUrl);
+    const destinationChanged = requested.hostname.toLowerCase() !== final.hostname.toLowerCase()
+      || requested.pathname !== final.pathname;
+    if (!destinationChanged) return false;
+
+    const wallDestination = `${final.hostname}${final.pathname}`.toLowerCase();
+    return /(?:^|[./_-])(?:no-?cookies?|cookie-?(?:notice|consent)|login|log-in|signin|sign-in|subscribe|subscription|paywall)(?:[./_-]|$)/.test(wallDestination);
+  } catch (_) {
+    return false;
+  }
+}
+
 function makeSemaphore(limit) {
   let active = 0;
   const waiting = [];
@@ -221,12 +239,16 @@ function makeSemaphore(limit) {
   return { run };
 }
 
+function isPaywalledUrl(url, paywalledHosts) {
+  return paywalledHosts.has(hostnameOf(url));
+}
+
 function orderedCandidates(cluster, paywalledHosts) {
-  const paywalled = new Set(paywalledHosts.map(host => host.replace(/^www\./i, '').toLowerCase()));
   return cluster.items
-    .map((item, index) => ({ item, index, paywalled: paywalled.has(hostnameOf(item.canonical_url || item.url)) }))
+    .map((item, index) => ({ item, index }))
     .sort((a, b) =>
-      (Number(a.paywalled) - Number(b.paywalled))
+      (Number(isPaywalledUrl(a.item.canonical_url || a.item.url, paywalledHosts))
+        - Number(isPaywalledUrl(b.item.canonical_url || b.item.url, paywalledHosts)))
       || ((b.item.source_priority ?? 1) - (a.item.source_priority ?? 1))
       || (a.index - b.index)
     )
@@ -244,9 +266,11 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     failures: 0,
     gnews_resolved: 0,
     gnews_failed: 0,
+    boilerplate_discarded: 0,
   };
   const googleSemaphore = makeSemaphore(2);
-  const paywalledHosts = settings.getPaywalledHosts();
+  const paywalledHosts = new Set(settings.getPaywalledHosts()
+    .map(host => host.replace(/^www\./i, '').toLowerCase()));
   let cursor = 0;
   let completed = 0;
 
@@ -265,9 +289,13 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     // separately below.
     const fetchable = orderedCandidates(cluster, paywalledHosts)
       .filter(item => !isRedditUrl(item.canonical_url || item.url));
-    if (fetchable.length === 0) stats.discussions++;
+    if (cluster.items.length > 0
+      && cluster.items.every(item => isRedditUrl(item.canonical_url || item.url))) {
+      stats.discussions++;
+    }
 
-    for (const item of fetchable) {
+    const deferredPaywalledGoogleNews = [];
+    for (const [index, item] of fetchable.entries()) {
       let url = item.canonical_url || item.url;
       if (!url) continue;
 
@@ -279,6 +307,13 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         }
         stats.gnews_resolved++;
         url = resolved;
+        const hasUntriedUnpaywalledCandidate = fetchable
+          .slice(index + 1)
+          .some(candidate => !isPaywalledUrl(candidate.canonical_url || candidate.url, paywalledHosts));
+        if (isPaywalledUrl(url, paywalledHosts) && hasUntriedUnpaywalledCandidate) {
+          deferredPaywalledGoogleNews.push(url);
+          continue;
+        }
       }
 
       try {
@@ -293,6 +328,24 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         break;
       } catch (error) {
         log.warn('pipeline:extract', `Article fetch failed for ${url}: ${error.message}`);
+      }
+    }
+
+    if (!cluster.article_text) {
+      for (const url of deferredPaywalledGoogleNews) {
+        try {
+          const article = await extractArticle(url, log, fetchImpl);
+          if (article.article_content.length < 400) {
+            throw new Error(`Article text too short (${article.article_content.length} characters)`);
+          }
+          cluster.article_text = article.article_content;
+          cluster.article_html = article.article_html;
+          cluster.article_url = article.canonical_url;
+          stats.articles++;
+          break;
+        } catch (error) {
+          log.warn('pipeline:extract', `Article fetch failed for ${url}: ${error.message}`);
+        }
       }
     }
 
@@ -333,8 +386,37 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, () => worker()));
 
+  const leadingTextGroups = new Map();
+  for (const cluster of clusters) {
+    if (!cluster.article_text) continue;
+    const leadingText = cluster.article_text
+      .normalize('NFKC')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .slice(0, 300);
+    const matches = leadingTextGroups.get(leadingText) || [];
+    matches.push(cluster);
+    leadingTextGroups.set(leadingText, matches);
+  }
+
+  for (const matches of leadingTextGroups.values()) {
+    if (matches.length < 2) continue;
+    const host = hostnameOf(matches[0].article_url) || 'unknown host';
+    for (const cluster of matches) {
+      cluster.article_text = null;
+      cluster.article_html = null;
+      cluster.article_url = null;
+    }
+    stats.articles -= matches.length;
+    stats.failures += matches.length;
+    stats.boilerplate_discarded += matches.length;
+    log.warn('pipeline:extract',
+      `Discarded shared page text from ${host} for ${matches.length} stories`);
+  }
+
   log.info('pipeline:extract',
-    `Extracted ${total} stories: ${stats.articles} articles, ${stats.discussions} discussion posts, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed`);
+    `Extracted ${total} stories: ${stats.articles} articles, ${stats.discussions} discussion posts, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed, ${stats.boilerplate_discarded} boilerplate discarded`);
   return { clusters, stats };
 }
 

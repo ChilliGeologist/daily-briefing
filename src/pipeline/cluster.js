@@ -20,6 +20,51 @@ const STOPWORDS = new Set([
 const HIGH_SIMILARITY = 0.42;
 const LOW_SIMILARITY = 0.3;
 
+function wordCount(text) {
+  return (String(text || '').trim().match(/\S+/g) || []).length;
+}
+
+function urlsOf(item) {
+  return new Set([item.canonical_url, item.external_url, item.url]
+    .filter(value => typeof value === 'string' && value.trim()));
+}
+
+function sharesUrl(a, b) {
+  const right = urlsOf(b);
+  return [...urlsOf(a)].some(url => right.has(url));
+}
+
+function nonYearNumbers(text) {
+  return new Set((String(text || '').match(/\b\d[\d,.]*\b/g) || [])
+    .map(number => number.replace(/[,.]/g, ''))
+    .filter(number => !/^(?:19|20)\d{2}$/.test(number)));
+}
+
+function capitalisedEntities(text) {
+  const matches = String(text || '').match(
+    /\b(?:[A-Z][\p{Ll}][\p{L}’'-]*)(?:\s+(?:[A-Z][\p{Ll}][\p{L}’'-]*)){1,3}\b/gu
+  ) || [];
+  return new Set(matches
+    .map(entity => entity.toLocaleLowerCase('en-AU'))
+    .filter(entity => !/^(?:article|comments?) url$/.test(entity)));
+}
+
+function substantialContentOverlap(a, b) {
+  const left = `${a.title || ''}\n${a.description || ''}`;
+  const right = `${b.title || ''}\n${b.description || ''}`;
+  const rightNumbers = nonYearNumbers(right);
+  if (![...nonYearNumbers(left)].some(number => rightNumbers.has(number))) return false;
+  const rightEntities = capitalisedEntities(right);
+  return [...capitalisedEntities(left)].some(entity => rightEntities.has(entity));
+}
+
+function allowsSimilarityMerge(a, b) {
+  if (sharesUrl(a, b) || substantialContentOverlap(a, b)) return true;
+  // A title of three words or fewer ("Tough Decisions") says too little to
+  // match on: an r/2007scape post merged with an RBA story this way.
+  return wordCount(a.title) > 3 && wordCount(b.title) > 3;
+}
+
 function tokenize(text) {
   return String(text || '')
     .toLowerCase()
@@ -184,6 +229,15 @@ async function clusterItems(items, {
     }
   }
 
+  for (let left = 0; left < items.length; left++) {
+    for (let right = left + 1; right < items.length; right++) {
+      if (unionFind.find(left) === unionFind.find(right)) continue;
+      if (substantialContentOverlap(items[left], items[right])) {
+        if (unionFind.union(left, right)) similarMerges++;
+      }
+    }
+  }
+
   const vectors = tfIdfVectors(items);
   const initialGroups = rootGroups(items, unionFind);
   const leads = initialGroups.map(indices => leadIndex(indices, items));
@@ -192,6 +246,7 @@ async function clusterItems(items, {
   for (let left = 0; left < leads.length; left++) {
     for (let right = left + 1; right < leads.length; right++) {
       const similarity = cosine(vectors[leads[left]], vectors[leads[right]]);
+      if (!allowsSimilarityMerge(items[leads[left]], items[leads[right]])) continue;
       if (similarity >= high) {
         if (unionFind.union(leads[left], leads[right])) similarMerges++;
       } else if (similarity >= low) {
@@ -251,4 +306,4 @@ async function clusterItems(items, {
   };
 }
 
-module.exports = { tokenize, clusterItems };
+module.exports = { tokenize, substantialContentOverlap, clusterItems };

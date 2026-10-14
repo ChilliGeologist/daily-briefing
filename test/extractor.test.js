@@ -232,13 +232,32 @@ describe('Extractor', () => {
   });
 
   describe('extractClusters()', () => {
-    const clusterSettings = { getPaywalledHosts: () => ['examiner.com.au'] };
+    const clusterSettings = { getPaywalledHosts: () => ['examiner.com.au', 'themercury.com.au'] };
 
-    it('skips paywalled items even when they have higher priority', async () => {
+    it('fetches a lone paywalled outlet', async () => {
+      const paidUrl = 'https://www.examiner.com.au/story/paid';
       const urls = [];
+      const input = cluster([clusterItem(paidUrl)]);
+      const result = await extractClusters([input], clusterSettings, log, null, {
+        fetchImpl: async url => {
+          urls.push(url);
+          return makeResponse({ body: LONG_HTML, url });
+        },
+      });
+
+      assert.deepStrictEqual(urls, [paidUrl]);
+      assert.deepStrictEqual(
+        [result.clusters[0].article_url, result.stats.articles, result.stats.failures],
+        [paidUrl, 1, 0]);
+    });
+
+    it('fetches an unpaywalled alternative before a paywalled item', async () => {
+      const urls = [];
+      const paidUrl = 'https://www.examiner.com.au/story/paid';
+      const freeUrl = 'https://www.abc.net.au/news/free';
       const input = cluster([
-        clusterItem('https://www.examiner.com.au/story/paid', { source_priority: 2 }),
-        clusterItem('https://www.abc.net.au/news/free', { source_priority: 1 }),
+        clusterItem(paidUrl, { source_priority: 2 }),
+        clusterItem(freeUrl, { source_priority: 1 }),
       ]);
       const result = await extractClusters([input], clusterSettings, log, null, {
         fetchImpl: async url => {
@@ -247,8 +266,10 @@ describe('Extractor', () => {
         },
       });
 
-      assert.deepStrictEqual(urls, ['https://www.abc.net.au/news/free']);
-      assert.strictEqual(result.clusters[0].article_url, 'https://www.abc.net.au/news/free');
+      assert.deepStrictEqual(urls, [freeUrl]);
+      assert.deepStrictEqual(
+        [result.clusters[0].article_url, result.stats.articles, result.stats.failures],
+        [freeUrl, 1, 0]);
     });
 
     it('never fetches a Reddit post page as an article and does not count it as a failure', async () => {
@@ -295,6 +316,39 @@ describe('Extractor', () => {
       ]);
       assert.strictEqual(result.clusters[0].article_url, 'https://publisher.test/story');
       assert.strictEqual(result.stats.gnews_resolved, 1);
+    });
+
+    it('tries a Google News result resolving to a paywalled host after an unpaywalled alternative, and fetches it when the alternative fails', async () => {
+      const googleUrl = 'https://news.google.com/rss/articles/CBMipaid?oc=5';
+      const fallbackUrl = 'https://abc.net.au/news/free-version';
+      const urls = [];
+      const input = cluster([
+        clusterItem(googleUrl, { source_priority: 2 }),
+        clusterItem(fallbackUrl),
+      ]);
+      const result = await extractClusters([input], clusterSettings, log, null, {
+        fetchImpl: async url => {
+          urls.push(url);
+          if (url === 'https://news.google.com/rss/articles/CBMipaid') {
+            return makeResponse({ body: '<i data-n-a-sg="SIG" data-n-a-ts="123"></i>', url });
+          }
+          if (url.includes('batchexecute')) {
+            return makeResponse({ body: `[["x","[\\"garturlres\\",\\"https://www.themercury.com.au/news/paid-story\\"]"]]`, url });
+          }
+          if (url === fallbackUrl) throw new Error('free outlet unavailable');
+          return makeResponse({ body: LONG_HTML, url });
+        },
+      });
+
+      assert.deepStrictEqual(urls, [
+        'https://news.google.com/rss/articles/CBMipaid',
+        'https://news.google.com/_/DotsSplashUi/data/batchexecute',
+        fallbackUrl,
+        'https://www.themercury.com.au/news/paid-story',
+      ]);
+      assert.deepStrictEqual(
+        [result.clusters[0].article_url, result.stats.gnews_resolved, result.stats.articles, result.stats.failures],
+        ['https://www.themercury.com.au/news/paid-story', 1, 1, 0]);
     });
 
     it('falls back after Google News resolution fails', async () => {
@@ -346,6 +400,79 @@ describe('Extractor', () => {
       assert.deepStrictEqual(urls, [shortUrl, longUrl]);
       assert.strictEqual(result.clusters[0].article_url, longUrl);
       assert.strictEqual(result.stats.articles, 1);
+    });
+
+    it('rejects a redirect from an article to a cookie or subscription wall', async () => {
+      const blockedUrl = 'https://publisher.test/news/story';
+      const fallbackUrl = 'https://abc.net.au/news/story';
+      const urls = [];
+      const input = cluster([clusterItem(blockedUrl, { source_priority: 2 }), clusterItem(fallbackUrl)]);
+      const result = await extractClusters([input], clusterSettings, log, null, {
+        fetchImpl: async url => {
+          urls.push(url);
+          if (url === blockedUrl) {
+            return makeResponse({
+              body: LONG_HTML,
+              url: 'https://publisher.test/nocookies?a=story',
+            });
+          }
+          return makeResponse({ body: LONG_HTML.replace('Story', 'Fallback story'), url });
+        },
+      });
+
+      assert.deepStrictEqual(urls, [blockedUrl, fallbackUrl]);
+      assert.strictEqual(result.clusters[0].article_url, fallbackUrl);
+    });
+
+    it('clears shared leading page text from every affected cluster', async () => {
+      const shared = 'This is a generic no-cookies page asking visitors to enable cookies and subscribe. '.repeat(8);
+      const inputs = ['a', 'b', 'c'].map(name => cluster([
+        clusterItem(`https://${name}.test/story`),
+      ]));
+      const warnings = [];
+      const infos = [];
+      const capturingLog = {
+        ...log,
+        warn(scope, message) { warnings.push([scope, message]); },
+        info(scope, message) { infos.push([scope, message]); },
+      };
+
+      const result = await extractClusters(inputs, clusterSettings, capturingLog, null, {
+        fetchImpl: async url => makeResponse({
+          body: `<!doctype html><html><head><title>Wall</title></head><body><article><p>${shared}${url} has a different tail.</p></article></body></html>`,
+          url,
+        }),
+      });
+
+      for (const output of result.clusters) {
+        assert.strictEqual(output.article_text, null);
+        assert.strictEqual(output.article_html, null);
+        assert.strictEqual(output.article_url, null);
+      }
+      assert.strictEqual(result.stats.articles, 0);
+      assert.strictEqual(result.stats.boilerplate_discarded, 3);
+      assert.deepStrictEqual(warnings, [[
+        'pipeline:extract',
+        'Discarded shared page text from a.test for 3 stories',
+      ]]);
+      assert.match(infos[0][1], /^Extracted 3 stories: .*3 boilerplate discarded$/);
+    });
+
+    it('leaves clusters with different leading article text untouched', async () => {
+      const inputs = ['a', 'b'].map(name => cluster([
+        clusterItem(`https://${name}.test/story`),
+      ]));
+      const result = await extractClusters(inputs, clusterSettings, log, null, {
+        fetchImpl: async url => makeResponse({
+          body: `<!doctype html><html><head><title>Story</title></head><body><article><p>${url} ${url.includes('a.test') ? 'Alpha' : 'Bravo'} ${LONG_TEXT}</p></article></body></html>`,
+          url,
+        }),
+      });
+
+      assert.ok(result.clusters[0].article_text);
+      assert.ok(result.clusters[1].article_text);
+      assert.strictEqual(result.stats.articles, 2);
+      assert.strictEqual(result.stats.boilerplate_discarded, 0);
     });
   });
 });
