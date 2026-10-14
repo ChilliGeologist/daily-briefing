@@ -458,3 +458,38 @@ test/curl-geometry.test.js` summary; any plan deviation and why; the browsers,
 viewport widths, input methods and theme/reduced-motion modes Jesse checked;
 the numbered result of every Task 8 item; and any remaining visual or motion
 issue. Include no Playwright evidence.
+
+---
+
+## Follow-ups from Jesse's review (2026-10-14)
+
+Jesse: "Looks and feels okay" on the phone; other functions work. Changes he
+asked for, all part of stage 4:
+
+1. **No More buttons.** Every section shows all its stories (`items` then
+   `more`, in order). Remove the More/Show less control and its state.
+2. **Desktop must not feel like a phone app on a computer.** This replaces
+   the "single readable column" constraint for the briefing (the reader keeps
+   its ~65-character measure). From about 1024 px the briefing becomes a
+   broadsheet: "You should know" as a lead band (first story large across two
+   thirds, the other picks stacked in the remaining third), then the topic
+   sections flowing in three columns with rust labels and column rules; two
+   columns from about 700 px; one column on phones as now. Expansion still
+   unfolds in place inside its column. The curl still turns the whole sheet.
+3. **A more newspaper-like masthead** (Jesse called it polish; done now because
+   it is the same work as the desktop layout): "The Daily Gump" as a heavy,
+   high-contrast serif title (system serif stack, no web fonts), thick-and-thin
+   double rules above and below, and a small-caps edition line beneath with
+   the long date. Scales down cleanly on phones.
+4. **Read in full must never show less than the tap.** With no article body,
+   the reader shows the story's `detail` (falling back to `summary`), never
+   only the summary. For a Reddit or Hacker News story it shows the post's own
+   text and its top replies ("What people said"), as plain text.
+5. **A question post with no real answers is not news.** Pipeline change:
+   ignore bot and moderator boilerplate replies (rules reminders, "Expand the
+   replies to this comment to learn how AI was used…"); a community post whose
+   title asks a question and that has fewer than two real replies is not news
+   (seen: an r/OutOfTheLoop question whose only reply was the rules reminder).
+   Showcases and announcements without replies stay. Add a filler default for
+   standing "Discussion Thread" posts. Keep the post text and top replies on
+   stored community stories so the reader can show them.
