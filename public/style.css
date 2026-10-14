@@ -1580,27 +1580,61 @@ main {
   color: var(--bg);
 }
 
-/* Stage 4 reading route. The full theme token set arrives with stage 4 Task 7;
-   these light Paper values keep Tasks 2–5 usable without affecting panels. */
-#app[data-view="reading"] {
+/* Stage 4 Paper tokens are only consumed by the reading route. */
+:root,
+[data-theme="dark"] {
+  --paper-page: #211e1a;
+  --paper-reader: #28231e;
+  --paper-flap: #332d26;
+  --paper-ink: #f4ede3;
+  --paper-summary: #d2c7b9;
+  --paper-quiet: #b3a697;
+  --paper-rule: #5b5147;
+  --paper-rust: #ee936b;
+  --paper-focus: #ffb08b;
+}
+
+[data-theme="light"] {
   --paper-page: #f7f3ea;
   --paper-reader: #fbf8f1;
+  --paper-flap: #f1ead9;
   --paper-ink: #1d1a16;
   --paper-summary: #57514a;
   --paper-quiet: #8a8174;
   --paper-rule: #d6cfc0;
   --paper-rust: #9a3412;
+  --paper-focus: #9a3412;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --paper-page: #f7f3ea;
+    --paper-reader: #fbf8f1;
+    --paper-flap: #f1ead9;
+    --paper-ink: #1d1a16;
+    --paper-summary: #57514a;
+    --paper-quiet: #8a8174;
+    --paper-rule: #d6cfc0;
+    --paper-rust: #9a3412;
+    --paper-focus: #9a3412;
+  }
+}
+
+#app[data-view="reading"] {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  background: var(--bg);
 }
 
 #app[data-view="reading"] > header {
   position: relative;
   z-index: 10;
+  width: 100%;
   max-width: var(--max-width);
-  padding: 18px 18px 12px;
+  padding: calc(18px + env(safe-area-inset-top)) 18px 12px;
   background: var(--paper-page);
   color: var(--paper-ink);
   border-bottom: 3px double var(--paper-ink);
@@ -1639,17 +1673,21 @@ main {
 }
 
 #app[data-view="reading"] .btn-icon {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   color: var(--paper-summary);
   border-color: transparent;
 }
 
-#app[data-view="reading"] .btn-icon:hover,
 #app[data-view="reading"] .btn-icon.btn-icon--active {
   color: var(--paper-rust);
   border-color: var(--paper-rule);
   background: transparent;
+}
+
+#app[data-view="reading"] .btn-icon:focus-visible {
+  outline: 3px solid var(--paper-focus);
+  outline-offset: 2px;
 }
 
 #app[data-view="reading"] #briefing-headline,
@@ -1688,12 +1726,13 @@ main {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  overscroll-behavior-y: contain;
   overflow-wrap: anywhere;
 }
 
 .reader-page {
   z-index: 1;
-  padding: 18px 20px 48px;
+  padding: 18px 20px calc(48px + env(safe-area-inset-bottom));
   background: var(--paper-reader);
 }
 
@@ -1701,7 +1740,7 @@ main {
 
 .briefing-page {
   z-index: 3;
-  padding: 0 18px 48px;
+  padding: 0 18px calc(48px + env(safe-area-inset-bottom));
   background: var(--paper-page);
   opacity: 1;
   transition: opacity 150ms ease;
@@ -1715,7 +1754,7 @@ main {
   overflow: hidden;
   pointer-events: none;
   transform-origin: 0 0;
-  background: #f1ead9;
+  background: var(--paper-flap);
 }
 
 .curl-layer,
@@ -1733,6 +1772,8 @@ main {
   inset: 0;
   overflow: hidden;
   opacity: 0.09;
+  padding: 0 18px calc(48px + env(safe-area-inset-bottom));
+  background: var(--paper-flap);
 }
 
 .curl-band {
@@ -1746,6 +1787,12 @@ main {
 .reading-stage.reader-active .briefing-page {
   visibility: hidden;
   opacity: 0;
+}
+
+.reading-stage.reduced-turning--forward .briefing-page {
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .reading-sections {
@@ -1909,8 +1956,9 @@ main {
 .read-full-button:focus-visible,
 .reading-more-button:focus-visible,
 .reader-back:focus-visible,
-.reader-original-link:focus-visible {
-  outline: 3px solid var(--paper-rust);
+.reader-original-link:focus-visible,
+.reader-body a:focus-visible {
+  outline: 3px solid var(--paper-focus);
   outline-offset: 3px;
   border-radius: 2px;
 }
@@ -1940,6 +1988,12 @@ main {
   line-height: 1.2;
 }
 
+.reader-header,
+.reader-body {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
 .reader-byline {
   margin: 0 0 14px;
   color: var(--paper-quiet);
@@ -1967,9 +2021,35 @@ main {
   margin: 0 0 14px;
 }
 
+.reader-body h2,
+.reader-body h3,
+.reader-body h4 {
+  color: var(--paper-ink);
+  line-height: 1.25;
+}
+
+.reader-body h2 {
+  margin-top: 1.6em;
+  font-size: 1.45em;
+}
+
+.reader-body h3 {
+  margin-top: 1.45em;
+  font-size: 1.22em;
+}
+
+.reader-body h4 {
+  margin-top: 1.35em;
+  font-size: 1.05em;
+}
+
 .reader-body ul,
 .reader-body ol {
   padding-left: 1.4em;
+}
+
+.reader-body li + li {
+  margin-top: 0.35em;
 }
 
 .reader-body blockquote {
@@ -1984,7 +2064,13 @@ main {
   width: auto;
   max-width: 100%;
   height: auto;
+  max-height: min(60vh, 32rem);
+  object-fit: contain;
   margin: 0 auto 14px;
+}
+
+.reader-body figure {
+  max-width: 100%;
 }
 
 .reader-body figcaption {
@@ -2012,6 +2098,57 @@ main {
   text-decoration: none;
 }
 
+#app[data-view="reading"] .loading,
+#app[data-view="reading"] .empty-state,
+#app[data-view="reading"] .empty-state .muted {
+  color: var(--paper-quiet);
+}
+
+#app[data-view="reading"] .spinner {
+  border-color: var(--paper-rule);
+  border-top-color: var(--paper-rust);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #app[data-view="reading"] .btn-icon:hover {
+    color: var(--paper-rust);
+    border-color: var(--paper-rule);
+    background: transparent;
+  }
+
+  .reading-story-toggle:hover .reading-story-title,
+  .read-full-button:hover,
+  .reading-more-button:hover,
+  .reader-back:hover,
+  .reader-original-link:hover,
+  .reader-body a:hover {
+    color: var(--paper-rust);
+  }
+}
+
+@media (min-width: 601px) {
+  #app[data-view="reading"] > header {
+    padding-right: 28px;
+    padding-left: 28px;
+    box-shadow: -14px 0 28px -24px rgba(0, 0, 0, 0.7), 14px 0 28px -24px rgba(0, 0, 0, 0.7);
+  }
+
+  #reading-stage.reading-stage {
+    box-shadow: -14px 12px 28px -24px rgba(0, 0, 0, 0.7), 14px 12px 28px -24px rgba(0, 0, 0, 0.7);
+  }
+
+  .briefing-page,
+  .curl-ghost {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+
+  .reader-page {
+    padding-right: 32px;
+    padding-left: 32px;
+  }
+}
+
 @media (max-width: 600px) {
   #app[data-view="reading"] > header {
     padding-right: 16px;
@@ -2031,11 +2168,32 @@ main {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (max-width: 430px) {
   .briefing-page,
+  .curl-ghost {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .reader-page {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .reading-story-title,
   .reading-story-detail,
   .reading-story-detail-inner {
     transition: none;
+  }
+
+  .briefing-page {
+    transition: opacity 150ms ease;
+  }
+
+  .curl-layer,
+  .curl-flap {
+    display: none !important;
   }
 }

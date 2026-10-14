@@ -66,3 +66,73 @@ Scope: Tasks 1–5 only. Task 6's interaction and Task 7's complete styling/them
 ## Browser and Task 8 verification
 
 No browser, viewport, pointer, touch, keyboard, theme or reduced-motion checks were performed, and no Playwright/jsdom/browser automation was used. Task 8's eleven checks remain for Jesse after the second dispatch. In particular, unit tests do not verify layout at 360–430 px, scrolling, pointer feel, focus movement in a browser, browser history behaviour, article rendering, route transitions or visual isolation of the three panels.
+
+---
+
+# Stage 4 reading screen — Tasks 6–7 report
+
+Date: 2026-10-14
+
+Scope: Tasks 6 and 7. Task 8 remains Jesse's manual dev-container verification.
+
+## Task 6 — Approved interactive page curl
+
+- Wired the briefing and reader pointer paths to the existing pure `ReadingLogic` and `CurlGeometry` APIs. A gesture remains undecided below 8 px, vertical-first motion is released without pointer capture or cancellation, and only a valid leftward story gesture or rightward reader gesture locks horizontally.
+- Kept the approved curl state and equations: nearer right corner, 0.6 vertical drift, sine lift, perpendicular-bisector crease, complementary half-plane clips and the midpoint-based reflection matrix. Endpoint rendering removes clips and shadows and hides the flap.
+- Applied the mockup's exact curl, crease and reader-cast gradient strengths and widths from helper output on every rendered frame.
+- Built the reverse print by deep-cloning briefing DOM nodes. The clone has ids, links and form/control behaviour removed, stays inert and `aria-hidden`, uses opacity `0.09`, follows briefing scroll, and refreshes after edition rendering, story expansion and More changes. No HTML string is used for the ghost.
+- Added forward and back pointer settling with the one-third and `0.5 px/ms` helper thresholds. Failed forward turns do not touch history; completed forward turns push one story entry only after reaching the reader. Completed back turns perform the existing history return only after reaching the briefing.
+- Programmatic Read in full and Back turns use a grab at 80% of stage height. Settling uses `max(200, 700 × distance)` milliseconds, cubic ease-out and eases vertical drift to zero.
+- Suppressed the post-swipe synthetic click, re-renders geometry after resize/orientation changes, cancels an invalidated story target, and clears active curl state on edition or route changes.
+- Reduced motion preserves gesture decisions and thresholds, skips fold geometry entirely, leaves rejected gestures unchanged, and uses a 150 ms cross-fade for completed navigation. Story expansion motion remains disabled under the same preference.
+
+## Task 7 — Responsive Paper, themes and article typography
+
+- Replaced the provisional reading values with one complete Paper token set. Light uses the approved cream values; dark uses warm charcoal `#211e1a`/`#28231e`, warm off-white ink, taupe supporting text/rules and accessible light rust. Panel tokens and panel route styling remain separate.
+- Finished phone-first Paper sizing and gutters, safe-area padding, 44 px actions, bounded long text, tablet/desktop centring at 800 px, a 65-character article measure, and sheet framing against the surrounding app background.
+- Added reading typography for sanitised headings, paragraphs, lists, blockquotes, figures, captions, links and bounded responsive images. Optional broken hero images retain the existing removal behaviour.
+- Added `100dvh` with `100vh` fallback, momentum scrolling, contained vertical overscroll for the two reading layers, mouse-only hover styles, focus-visible rings and reduced-motion overrides.
+- Theme-colour now follows the active Paper page on `/` and the existing app background on Status, Settings and Archive.
+- Added Settings theme order Auto, System, Light, Dark. `auto` uses the existing `theme` storage key; unknown values resolve to System and existing values are unchanged.
+- Added pure `public/sun-times.js` with NOAA equation-of-time, solar-declination and standard-refraction calculations for 41.30° S, 146.98° E. Dates are resolved in `Australia/Hobart`, including daylight saving. Auto selects dark from sunset through sunrise, schedules one timer for the next boundary, re-evaluates on visibility and clears that timer for every non-Auto choice.
+- Bumped the service-worker cache and precached the three pure helper scripts so an installed app cannot combine an old cached shell with the new `app.js` dependency.
+
+## Test evidence
+
+- Required red run after adding the new sun tests but before `sun-times.js`: `node --test test/reading-logic.test.js test/curl-geometry.test.js test/sun-times.test.js` — 28 tests, 24 passed, 4 failed. Each new sun test failed with `TypeError: sunTimesForDate is not a function`.
+- Sun implementation green run: `node --test test/sun-times.test.js` — 4 passed, 0 failed.
+- Final targeted run: `node --test test/reading-logic.test.js test/curl-geometry.test.js test/sun-times.test.js` — 28 passed, 0 failed.
+- Final full run: `npm test` — 214 tests, 214 passed, 0 failed, 16 suites.
+- Static checks: `node --check` passed for `public/app.js`, `public/reading-logic.js`, `public/curl-geometry.js`, `public/sun-times.js` and `public/sw.js`; `git diff --check` passed.
+
+## Dark Paper contrast
+
+WCAG contrast ratios were calculated from sRGB relative luminance against both dark reading surfaces. Regular text/actions exceed 4.5:1 and the focus indicator exceeds the 3:1 non-text threshold.
+
+| Token | Colour | On page `#211e1a` | On reader `#28231e` |
+| --- | --- | ---: | ---: |
+| Ink | `#f4ede3` | 14.28:1 | 13.39:1 |
+| Muted/quiet | `#b3a697` | 6.97:1 | 6.53:1 |
+| Rust action | `#ee936b` | 7.13:1 | 6.69:1 |
+| Focus ring | `#ffb08b` | 9.35:1 | 8.77:1 |
+
+## Launceston sun-time comparison
+
+Published times are local Launceston times from timeanddate.com: [June 2026](https://www.timeanddate.com/sun/australia/launceston?month=6&year=2026), [December 2026](https://www.timeanddate.com/sun/australia/launceston?month=12&year=2026), and [October 2026](https://www.timeanddate.com/sun/australia/launceston?month=10&year=2026). The October date is the 2026 daylight-saving changeover.
+
+| Date | Computed sunrise | Published sunrise | Computed sunset | Published sunset |
+| --- | ---: | ---: | ---: | ---: |
+| 21 June 2026 | 07:37:49 | 07:37 | 16:49:00 | 16:48 |
+| 21 December 2026 | 05:35:11 | 05:33 | 20:44:38 | 20:44 |
+| 4 October 2026 | 06:41:59 | 06:41 | 19:19:17 | 19:20 |
+
+Every computed boundary is within the required three minutes of the published minute.
+
+## Plan deviations
+
+- No behavioural deviation from Tasks 6–7.
+- `public/index.html` was necessarily changed to add the Auto control and load the pure sun module. `public/sw.js` was also changed to invalidate the installed-app shell and precache all three helper dependencies; otherwise an existing cache could serve a shell that does not load `sun-times.js`.
+
+## Browser verification still required
+
+No browser automation, jsdom or manual browser run was used. Unit tests do not verify layout at 360, 390 or 430 px, tablet/desktop framing, 200% zoom, safe-area rendering, native scrolling, pointer feel, corner choice on screen, reverse-print alignment, gradient appearance, focus movement, browser-history timing, installed-app cache update, theme appearance, live timer switching or reduced-motion cross-fades. Task 8's numbered manual checks remain for Jesse.

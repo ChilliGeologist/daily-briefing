@@ -137,17 +137,56 @@ function createIconElement(name, className) {
 // 3. Theme
 // ============================================================
 
+var VALID_THEMES = ['auto', 'system', 'light', 'dark'];
+var autoThemeTimer = null;
+var selectedTheme = 'system';
+
 function getStoredTheme() {
-  return localStorage.getItem('theme') || 'system';
+  var stored = localStorage.getItem('theme') || 'system';
+  return VALID_THEMES.indexOf(stored) === -1 ? 'system' : stored;
+}
+
+function resolvedTheme(mode, now) {
+  if (mode === 'auto') return window.SunTimes.isDarkAt(now || new Date()) ? 'dark' : 'light';
+  if (mode === 'system') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return mode;
+}
+
+function updateThemeColour() {
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  var reading = $('#app') && $('#app').dataset.view === 'reading';
+  var property = reading ? '--paper-page' : '--bg';
+  var colour = getComputedStyle(document.documentElement).getPropertyValue(property).trim();
+  if (colour) meta.setAttribute('content', colour);
+}
+
+function scheduleAutoTheme(now) {
+  if (autoThemeTimer !== null) clearTimeout(autoThemeTimer);
+  var boundary = window.SunTimes.nextSunBoundary(now);
+  var delay = Math.max(1, boundary.getTime() - now.getTime() + 50);
+  autoThemeTimer = setTimeout(function() {
+    autoThemeTimer = null;
+    if (selectedTheme === 'auto') applyTheme('auto');
+  }, Math.min(delay, 2147483647));
 }
 
 function applyTheme(mode) {
+  if (VALID_THEMES.indexOf(mode) === -1) mode = 'system';
+  selectedTheme = mode;
+  if (autoThemeTimer !== null) {
+    clearTimeout(autoThemeTimer);
+    autoThemeTimer = null;
+  }
   var root = document.documentElement;
+  var now = new Date();
   if (mode === 'system') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', mode);
+  else root.setAttribute('data-theme', resolvedTheme(mode, now));
   $$('.theme-option').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.theme === mode);
   });
+  updateThemeColour();
+  if (mode === 'auto') scheduleAutoTheme(now);
 }
 
 applyTheme(getStoredTheme());
@@ -165,6 +204,14 @@ function bindThemeSwitcher() {
 }
 bindThemeSwitcher();
 
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+  if (selectedTheme === 'system') applyTheme('system');
+});
+
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && selectedTheme === 'auto') applyTheme('auto');
+});
+
 // ============================================================
 // 4. Reading state
 // ============================================================
@@ -179,6 +226,8 @@ var readingControlId = 0;
 var expandedStory = null;
 var briefingLoaded = false;
 var curlState = { progress: 0, cornerY: 0, sign: 1, dragY: 0, animation: null, gesture: null };
+var suppressCurlClick = false;
+var suppressCurlClickTimer = null;
 var readingState = {
   readerOpen: false,
   storyId: null,
@@ -212,8 +261,229 @@ function clearCurlPresentation() {
   });
 }
 
+function cancelCurlAnimation() {
+  if (!curlState.animation) return;
+  if (curlState.animation.type === 'frame') cancelAnimationFrame(curlState.animation.id);
+  else clearTimeout(curlState.animation.id);
+  curlState.animation = null;
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function curlPolygon(points) {
+  if (!points.length) return 'polygon(0 0,0 0,0 0)';
+  return 'polygon(' + points.map(function(point) {
+    return point[0].toFixed(1) + 'px ' + point[1].toFixed(1) + 'px';
+  }).join(',') + ')';
+}
+
+function curlBandWidth(value) {
+  return Math.max(1, value).toFixed(1) + 'px';
+}
+
+function renderCurl() {
+  var stage = $('#reading-stage');
+  var briefingPage = $('#briefing-page');
+  var flap = $('#curl-flap');
+  var curlBand = $('#curl-light-band');
+  var frontBand = $('#front-shadow-band');
+  var readerBand = $('#reader-shadow-band');
+  if (!stage || !briefingPage || !flap || prefersReducedMotion()) {
+    clearCurlPresentation();
+    return;
+  }
+
+  if (curlState.progress <= 0.0005) {
+    clearCurlPresentation();
+    return;
+  }
+  if (curlState.progress >= 0.9995) {
+    clearCurlPresentation();
+    briefingPage.style.visibility = 'hidden';
+    return;
+  }
+
+  var frame = window.CurlGeometry.curlFrame({
+    width: stage.clientWidth,
+    height: stage.clientHeight,
+    progress: curlState.progress,
+    cornerY: curlState.cornerY,
+    sign: curlState.sign,
+    dragY: curlState.dragY
+  });
+  var matrix = frame.reflection.matrix;
+  var translation = frame.reflection.translation;
+  briefingPage.style.visibility = '';
+  briefingPage.style.clipPath = curlPolygon(frame.frontPolygon);
+  flap.style.display = 'block';
+  flap.style.clipPath = curlPolygon(frame.flapPolygon);
+  flap.style.transform = 'matrix(' + [
+    matrix[0], matrix[1], matrix[2], matrix[3], translation[0], translation[1]
+  ].join(',') + ')';
+  $('#curl-ghost').scrollTop = briefingPage.scrollTop;
+
+  [curlBand, frontBand, readerBand].forEach(function(band) {
+    band.style.left = frame.midpoint[0] + 'px';
+    band.style.top = frame.midpoint[1] + 'px';
+    band.style.transform = 'rotate(' + frame.creaseAngle + 'deg)';
+  });
+  var curl = frame.lighting.curl;
+  curlBand.style.opacity = '1';
+  curlBand.style.background = 'linear-gradient(to right,' +
+    'rgba(60,40,20,' + curl.strengths[0] + ') 0px,' +
+    'rgba(255,255,255,' + curl.strengths[1] + ') ' + curlBandWidth(curl.widths[1]) + ',' +
+    'rgba(255,255,255,' + curl.strengths[2] + ') ' + curlBandWidth(curl.widths[2]) + ',' +
+    'rgba(60,40,20,' + curl.strengths[3] + ') ' + curlBandWidth(curl.widths[3]) + ',' +
+    'rgba(60,40,20,' + curl.strengths[4] + ') ' + curlBandWidth(curl.widths[4]) + ')';
+  frontBand.style.opacity = '1';
+  frontBand.style.transform = 'rotate(' + (frame.creaseAngle + 180) + 'deg)';
+  frontBand.style.background = 'linear-gradient(to right,rgba(40,25,10,' +
+    frame.lighting.crease.strength.toFixed(3) + ') 0px,rgba(40,25,10,0) ' +
+    curlBandWidth(frame.lighting.crease.width) + ')';
+  readerBand.style.opacity = '1';
+  readerBand.style.background = 'linear-gradient(to right,rgba(30,20,10,' +
+    frame.lighting.cast.strength.toFixed(3) + ') 0px,rgba(30,20,10,0) ' +
+    curlBandWidth(frame.lighting.cast.width) + ')';
+}
+
+function refreshCurlGhost() {
+  var briefingPage = $('#briefing-page');
+  var ghost = $('#curl-ghost');
+  if (!briefingPage || !ghost) return;
+  var clones = Array.from(briefingPage.childNodes).map(function(node) { return node.cloneNode(true); });
+  ghost.replaceChildren.apply(ghost, clones);
+  ghost.querySelectorAll('[id]').forEach(function(node) { node.removeAttribute('id'); });
+  ghost.querySelectorAll('a').forEach(function(node) {
+    node.removeAttribute('href');
+    node.removeAttribute('target');
+    node.removeAttribute('rel');
+    node.setAttribute('tabindex', '-1');
+  });
+  ghost.querySelectorAll('button,input,select,textarea').forEach(function(node) {
+    node.disabled = true;
+    node.setAttribute('tabindex', '-1');
+    node.removeAttribute('name');
+  });
+  ghost.querySelectorAll('form').forEach(function(node) {
+    node.removeAttribute('action');
+    node.removeAttribute('method');
+  });
+  ghost.scrollTop = briefingPage.scrollTop;
+}
+
+function setCurlCorner(pointerY) {
+  var corner = window.CurlGeometry.nearestCorner(pointerY, $('#reading-stage').clientHeight);
+  curlState.cornerY = corner.cornerY;
+  curlState.sign = corner.sign;
+}
+
+function animateCurlTo(target, complete) {
+  cancelCurlAnimation();
+  var from = curlState.progress;
+  var fromDragY = curlState.dragY;
+  var duration = Math.max(200, 700 * Math.abs(target - from));
+  var started = performance.now();
+
+  function step(now) {
+    var elapsed = Math.min(1, (now - started) / duration);
+    var eased = 1 - Math.pow(1 - elapsed, 3);
+    curlState.progress = from + (target - from) * eased;
+    curlState.dragY = fromDragY * (1 - eased);
+    renderCurl();
+    if (elapsed < 1) {
+      curlState.animation.id = requestAnimationFrame(step);
+    } else {
+      curlState.progress = target;
+      curlState.dragY = 0;
+      curlState.animation = null;
+      renderCurl();
+      if (complete) complete();
+    }
+  }
+
+  curlState.animation = { type: 'frame', id: requestAnimationFrame(step) };
+}
+
+function clearPreparedReader() {
+  if (readingState.readerOpen) return;
+  $('#reader-header').replaceChildren();
+  $('#reader-body').replaceChildren();
+}
+
+function prepareReaderForCurl(key) {
+  var item = readingStories.get(String(key));
+  if (!item) return false;
+  renderReader(item);
+  $('#reader-page').scrollTop = 0;
+  refreshCurlGhost();
+  return true;
+}
+
+function completeReaderReturn() {
+  if (readingState.appHistoryEntry && history.state && history.state.appHistoryEntry) {
+    history.back();
+  } else {
+    history.replaceState({}, '', '/');
+    closeReader();
+  }
+}
+
+function reducedForwardTurn(key) {
+  if (!prepareReaderForCurl(key)) return;
+  var stage = $('#reading-stage');
+  stage.classList.add('reduced-turning', 'reduced-turning--forward');
+  curlState.animation = { type: 'timer', id: setTimeout(function() {
+    curlState.animation = null;
+    curlState.progress = 1;
+    openReaderById(key, true);
+    stage.classList.remove('reduced-turning', 'reduced-turning--forward');
+  }, 150) };
+}
+
+function reducedBackTurn(complete) {
+  var stage = $('#reading-stage');
+  stage.classList.add('reduced-turning', 'reduced-turning--back');
+  void stage.offsetWidth;
+  stage.classList.remove('reader-active');
+  curlState.animation = { type: 'timer', id: setTimeout(function() {
+    curlState.animation = null;
+    curlState.progress = 0;
+    stage.classList.remove('reduced-turning', 'reduced-turning--back');
+    complete();
+  }, 150) };
+}
+
+function startForwardTurn(key) {
+  if (curlState.animation || readingState.readerOpen) return;
+  if (prefersReducedMotion()) {
+    reducedForwardTurn(String(key));
+    return;
+  }
+  if (!prepareReaderForCurl(key)) return;
+  setCurlCorner($('#reading-stage').clientHeight * 0.8);
+  curlState.progress = 0;
+  curlState.dragY = 0;
+  animateCurlTo(1, function() { openReaderById(String(key), true); });
+}
+
+function startBackTurn() {
+  if (!readingState.readerOpen || curlState.animation) return;
+  if (prefersReducedMotion()) {
+    reducedBackTurn(completeReaderReturn);
+    return;
+  }
+  setCurlCorner($('#reading-stage').clientHeight * 0.8);
+  curlState.progress = 1;
+  curlState.dragY = 0;
+  refreshCurlGhost();
+  $('#reading-stage').classList.remove('reader-active');
+  animateCurlTo(0, completeReaderReturn);
+}
+
 function resetReadingStage() {
-  if (curlState.animation !== null) cancelAnimationFrame(curlState.animation);
+  cancelCurlAnimation();
   curlState.progress = 0;
   curlState.cornerY = 0;
   curlState.sign = 1;
@@ -225,7 +495,7 @@ function resetReadingStage() {
   var stage = $('#reading-stage');
   var briefingPage = $('#briefing-page');
   var readerPage = $('#reader-page');
-  if (stage) stage.classList.remove('reader-active');
+  if (stage) stage.classList.remove('reader-active', 'reduced-turning', 'reduced-turning--forward', 'reduced-turning--back');
   setInert(briefingPage, false);
   setInert(readerPage, true);
   if (readerPage) readerPage.setAttribute('aria-hidden', 'true');
@@ -330,6 +600,7 @@ async function loadBriefing(id) {
       if (group.shown.length === 0 && group.hidden.length === 0) return;
       container.appendChild(renderReadingSection(group));
     });
+    refreshCurlGhost();
     briefingLoaded = true;
     syncReaderFromLocation();
   } catch (err) {
@@ -457,7 +728,10 @@ function closeExpandedStory() {
 function toggleReadingStory(story) {
   var wasExpanded = story === expandedStory;
   closeExpandedStory();
-  if (wasExpanded) return;
+  if (wasExpanded) {
+    refreshCurlGhost();
+    return;
+  }
   expandedStory = story;
   story.classList.add('expanded');
   var toggle = story.querySelector('.reading-story-toggle');
@@ -467,6 +741,7 @@ function toggleReadingStory(story) {
     detail.setAttribute('aria-hidden', 'false');
     setInert(detail, false);
   }
+  refreshCurlGhost();
 }
 
 function toggleMoreStories(button) {
@@ -483,6 +758,7 @@ function toggleMoreStories(button) {
     hiddenList.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     button.textContent = 'Show less';
+    refreshCurlGhost();
     return;
   }
 
@@ -492,6 +768,7 @@ function toggleMoreStories(button) {
   button.setAttribute('aria-expanded', 'false');
   button.textContent = 'More (' + hiddenList._readingItems.length + ')';
   if (focusWasInside) button.focus();
+  refreshCurlGhost();
 }
 
 $('#briefing-page').addEventListener('click', function(event) {
@@ -505,7 +782,7 @@ $('#briefing-page').addEventListener('click', function(event) {
     toggleMoreStories(button);
   } else if (action === 'read') {
     event.stopPropagation();
-    openReaderById(button.dataset.storyId, true);
+    startForwardTurn(button.dataset.storyId);
   }
 });
 
@@ -595,6 +872,9 @@ function showReader(item, key, appHistoryEntry) {
   setInert($('#briefing-page'), true);
   setInert($('#reader-page'), false);
   $('#reader-page').setAttribute('aria-hidden', 'false');
+  curlState.progress = 1;
+  curlState.dragY = 0;
+  renderCurl();
   $('#reading-stage').classList.add('reader-active');
   requestAnimationFrame(function() { $('#reader-back').focus(); });
 }
@@ -626,6 +906,9 @@ function closeReader() {
   readingState.storyId = null;
   readingState.appHistoryEntry = false;
   $('#reading-stage').classList.remove('reader-active');
+  curlState.progress = 0;
+  curlState.dragY = 0;
+  renderCurl();
   setInert($('#reader-page'), true);
   $('#reader-page').setAttribute('aria-hidden', 'true');
   setInert($('#briefing-page'), false);
@@ -638,20 +921,33 @@ function closeReader() {
 }
 
 function returnFromReader() {
+  startBackTurn();
+}
+
+function closeReaderFromHistory() {
   if (!readingState.readerOpen) return;
-  if (readingState.appHistoryEntry && history.state && history.state.appHistoryEntry) {
-    history.back();
-  } else {
-    history.replaceState({}, '', '/');
+  if (curlState.progress <= 0.0005) {
     closeReader();
+    return;
   }
+  cancelCurlAnimation();
+  if (prefersReducedMotion()) {
+    reducedBackTurn(closeReader);
+    return;
+  }
+  refreshCurlGhost();
+  setCurlCorner($('#reading-stage').clientHeight * 0.8);
+  curlState.progress = 1;
+  curlState.dragY = 0;
+  $('#reading-stage').classList.remove('reader-active');
+  animateCurlTo(0, closeReader);
 }
 
 function syncReaderFromLocation() {
   if (!briefingLoaded || location.pathname !== '/') return;
   var key = new URLSearchParams(location.search).get('story');
   if (!key) {
-    closeReader();
+    closeReaderFromHistory();
     return;
   }
   var state = history.state || {};
@@ -666,6 +962,163 @@ function syncReaderFromLocation() {
 }
 
 $('#reader-back').addEventListener('click', returnFromReader);
+
+function pointerPosition(event) {
+  var rect = $('#reading-stage').getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+function markCurlClickSuppressed() {
+  suppressCurlClick = true;
+  if (suppressCurlClickTimer !== null) clearTimeout(suppressCurlClickTimer);
+  suppressCurlClickTimer = setTimeout(function() {
+    suppressCurlClick = false;
+    suppressCurlClickTimer = null;
+  }, 0);
+}
+
+function finishCurlGesture(cancelled) {
+  var gesture = curlState.gesture;
+  if (!gesture) return;
+  curlState.gesture = null;
+  if (!gesture.direction) return;
+  markCurlClickSuppressed();
+  var target = cancelled
+    ? (gesture.direction === 'forward' ? 0 : 1)
+    : window.ReadingLogic.settleGesture({
+      direction: gesture.direction,
+      progress: curlState.progress,
+      velocityX: gesture.velocityX
+    });
+
+  if (gesture.direction === 'forward') {
+    if (target === 1) {
+      if (prefersReducedMotion()) reducedForwardTurn(gesture.storyId);
+      else animateCurlTo(1, function() { openReaderById(gesture.storyId, true); });
+    } else if (prefersReducedMotion()) {
+      curlState.progress = 0;
+      curlState.dragY = 0;
+      clearPreparedReader();
+    } else {
+      animateCurlTo(0, clearPreparedReader);
+    }
+    return;
+  }
+
+  if (target === 0) {
+    if (prefersReducedMotion()) reducedBackTurn(completeReaderReturn);
+    else animateCurlTo(0, completeReaderReturn);
+  } else if (prefersReducedMotion()) {
+    curlState.progress = 1;
+    curlState.dragY = 0;
+  } else {
+    animateCurlTo(1, function() { $('#reading-stage').classList.add('reader-active'); });
+  }
+}
+
+function onCurlPointerDown(event) {
+  if (!event.isPrimary || curlState.animation || curlState.gesture) return;
+  var side = event.currentTarget.id === 'briefing-page' ? 'briefing' : 'reader';
+  if ((side === 'briefing' && readingState.readerOpen) || (side === 'reader' && !readingState.readerOpen)) return;
+  var point = pointerPosition(event);
+  var story = side === 'briefing' && event.target.closest ? event.target.closest('.reading-story') : null;
+  curlState.gesture = {
+    pointerId: event.pointerId,
+    source: event.currentTarget,
+    side: side,
+    story: story,
+    storyId: story ? story.dataset.storyId : null,
+    startX: point.x,
+    startY: point.y,
+    lastX: point.x,
+    lastTime: performance.now(),
+    velocityX: 0,
+    direction: null
+  };
+}
+
+function onCurlPointerMove(event) {
+  var gesture = curlState.gesture;
+  if (!gesture || gesture.pointerId !== event.pointerId) return;
+  var point = pointerPosition(event);
+  var dx = point.x - gesture.startX;
+  var dy = point.y - gesture.startY;
+
+  if (!gesture.direction) {
+    var decision = window.ReadingLogic.decideGesture({
+      dx: dx,
+      dy: dy,
+      side: gesture.side,
+      startedOnStory: Boolean(gesture.story)
+    });
+    if (decision === 'wait') return;
+    if (decision === 'vertical' || decision === 'ignore') {
+      curlState.gesture = null;
+      return;
+    }
+    gesture.direction = decision;
+    if (decision === 'forward' && !prepareReaderForCurl(gesture.storyId)) {
+      curlState.gesture = null;
+      return;
+    }
+    if (decision === 'back') {
+      refreshCurlGhost();
+      if (!prefersReducedMotion()) $('#reading-stage').classList.remove('reader-active');
+    }
+    setCurlCorner(gesture.startY);
+    try { gesture.source.setPointerCapture(event.pointerId); } catch (_) { /* pointer capture is best effort */ }
+  }
+
+  var now = performance.now();
+  gesture.velocityX = (point.x - gesture.lastX) / Math.max(1, now - gesture.lastTime);
+  gesture.lastX = point.x;
+  gesture.lastTime = now;
+  var width = Math.max(1, $('#reading-stage').clientWidth);
+  curlState.progress = gesture.direction === 'forward'
+    ? Math.max(0, Math.min(1, -dx / width))
+    : Math.max(0, Math.min(1, 1 - dx / width));
+  curlState.dragY = dy * 0.6;
+  if (!prefersReducedMotion()) renderCurl();
+  event.preventDefault();
+}
+
+function onCurlPointerUp(event) {
+  if (!curlState.gesture || curlState.gesture.pointerId !== event.pointerId) return;
+  finishCurlGesture(false);
+}
+
+function onCurlPointerCancel(event) {
+  if (!curlState.gesture || curlState.gesture.pointerId !== event.pointerId) return;
+  finishCurlGesture(true);
+}
+
+function suppressMovedPointerClick(event) {
+  if (!suppressCurlClick) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  suppressCurlClick = false;
+  if (suppressCurlClickTimer !== null) clearTimeout(suppressCurlClickTimer);
+  suppressCurlClickTimer = null;
+}
+
+[$('#briefing-page'), $('#reader-page')].forEach(function(page) {
+  page.addEventListener('pointerdown', onCurlPointerDown);
+  page.addEventListener('pointermove', onCurlPointerMove, { passive: false });
+  page.addEventListener('pointerup', onCurlPointerUp);
+  page.addEventListener('pointercancel', onCurlPointerCancel);
+  page.addEventListener('click', suppressMovedPointerClick, true);
+});
+
+function rerenderCurlAfterResize() {
+  if (curlState.gesture && curlState.gesture.story && !curlState.gesture.story.isConnected) {
+    finishCurlGesture(true);
+    return;
+  }
+  renderCurl();
+}
+
+window.addEventListener('resize', rerenderCurlAfterResize);
+window.addEventListener('orientationchange', rerenderCurlAfterResize);
 
 // ============================================================
 // 6. Archive
@@ -2608,6 +3061,7 @@ var router = (function() {
 
     var appRoot = document.getElementById('app');
     if (appRoot) appRoot.dataset.view = path === '/' ? 'reading' : path.slice(1);
+    updateThemeColour();
 
     // Toggle view visibility
     Object.keys(ROUTES).forEach(function(p) {

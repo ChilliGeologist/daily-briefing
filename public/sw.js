@@ -1,5 +1,13 @@
-const CACHE_NAME = 'daily-briefing-v2';
-const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json'];
+const CACHE_NAME = 'daily-briefing-v3';
+const PRECACHE = [
+  '/',
+  '/style.css',
+  '/reading-logic.js',
+  '/curl-geometry.js',
+  '/sun-times.js',
+  '/app.js',
+  '/manifest.json'
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(PRECACHE)));
