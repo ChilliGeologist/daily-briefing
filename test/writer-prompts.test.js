@@ -39,7 +39,7 @@ Choose exactly one section:
 - tech — General technology, privacy and security news.
 - homelab — Homelab, self-hosting, servers, networking and related products.
 - gaming — Video games and gaming communities.
-- internet — Reddit and Hacker News culture, online communities and oddities.
+- internet — internet culture: viral trends, memes, platform drama, online communities and oddities.
 
 The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. Overseas sport, entertainment and celebrity stories are world unless an Australian team, player or event is central.
 

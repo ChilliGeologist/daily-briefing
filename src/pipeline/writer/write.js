@@ -11,10 +11,6 @@ const {
 
 const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
 
-// Clickbait that only an article could explain ("Huge update after boy shot
-// dead"); with nothing but the headline it tells the reader nothing.
-const CLICKBAIT = /\b(?:huge update|bombshell|you won['’]?t believe|here['’]?s why|what we know)\b/i;
-
 // True when the app has nothing but the headline: no article text, and every
 // teaser is just the headline again plus the outlet's name (Google News).
 // Reddit link and photo posts have no body either, but are written from their
@@ -181,21 +177,20 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: community question has fewer than two real replies');
       }
-      if (!validation.value.is_news && overrideNotNews
-        && !(headlineOnly && CLICKBAIT.test(validation.value.headline))) {
+      if (!validation.value.is_news && overrideNotNews && !headlineOnly) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');
         stats.not_news_overridden++;
       }
       if (headlineOnly) {
-        // Anything written beyond the headline would be made up.
+        // Anything written beyond the headline would be made up, and a bare
+        // title behind a paywall is no use to the reader (Jesse, 2026-10-15),
+        // so the story is left out. A cluster with another outlet's teaser or
+        // text is not headline-only and stays.
         validation.value.summary = '';
         validation.value.detail = '';
-        validation.problems.push('headline only: summary and detail left empty');
-        if (validation.value.is_news && CLICKBAIT.test(validation.value.headline)) {
-          validation.value.is_news = false;
-          validation.problems.push('not news: clickbait headline with no article text');
-        }
+        validation.value.is_news = false;
+        validation.problems.push('not news: only the headline is available');
       }
       if (!validation.ok) {
         stats.fallbacks++;
