@@ -40,7 +40,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   const items = [
     { title: 'Publisher one', description: 'Teaser one.', coverage: 3, interest_matches: [], source_name: 'One' },
     { title: 'Publisher two', description: 'Teaser two. More.', coverage: 1, interest_matches: [{ label: 'Plex', kind: 'product', weight: 2 }], source_name: 'Two' },
-    { title: 'Publisher three', description: 'Teaser three.', coverage: 1, interest_matches: [], source_name: 'Three' },
+    { title: 'Publisher three', description: 'Teaser three.', article_content: 'x'.repeat(500), coverage: 1, interest_matches: [], source_name: 'Three' },
   ];
   const logs = [];
   const progress = [];
@@ -80,6 +80,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
       repairs: 1,
       fallbacks: 1,
       not_news: 1,
+      not_news_overridden: 0,
       section_moves: 0,
       facts_removed: 0,
       numbers_unsupported: 0,
@@ -94,7 +95,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:writer', 'Writer output invalid for "Publisher two", using fallback', { problems: ['Headline was empty', 'Unknown section: unknown'] }],
     ['info', 'pipeline:writer', 'Not news: "Publisher three"'],
-    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 1 fallback, 1 not news, 0 section moves, 0 facts removed, 0 unsupported numbers'],
+    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 1 fallback, 1 not news, 0 not-news overrides, 0 section moves, 0 facts removed, 0 unsupported numbers'],
   ]);
 });
 
@@ -114,7 +115,7 @@ it('turns a thrown story call into a publisher fallback', async () => {
       written_by: 'ollama:qwen', write_ok: false, write_problems: ['Writer output was not valid JSON'],
     }],
     dropped: [],
-    stats: { written: 1, repairs: 0, fallbacks: 1, not_news: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 1, repairs: 0, fallbacks: 1, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [['pipeline:writer', 'Writer failed for "Publisher", using fallback: model stopped']]);
 });
@@ -164,11 +165,11 @@ it('moves unsupported local sections using configured place interests and counts
       },
     ],
     dropped: [],
-    stats: { written: 3, repairs: 1, fallbacks: 0, not_news: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 3, repairs: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [
     ['debug', 'pipeline:writer', 'section moved: tasmania -> australia (no Tasmanian place named)'],
-    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 fallbacks, 0 not news, 1 section move, 0 facts removed, 0 unsupported numbers'],
+    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 fallbacks, 0 not news, 0 not-news overrides, 1 section move, 0 facts removed, 0 unsupported numbers'],
   ]);
 });
 
@@ -193,11 +194,68 @@ it('counts removed facts and unsupported numbers in writer statistics and loggin
   );
 
   assert.deepStrictEqual(output.stats, {
-    written: 1, repairs: 1, fallbacks: 0, not_news: 0, section_moves: 0,
+    written: 1, repairs: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0,
     facts_removed: 1, numbers_unsupported: 2, input_tokens: 0, output_tokens: 0, duration_ms: 0,
   });
   assert.deepStrictEqual(logs, [[
     'pipeline:writer',
-    'Wrote 1 stories: 1 repair, 0 fallbacks, 0 not news, 0 section moves, 1 fact removed, 2 unsupported numbers',
+    'Wrote 1 stories: 1 repair, 0 fallbacks, 0 not news, 0 not-news overrides, 0 section moves, 1 fact removed, 2 unsupported numbers',
   ]]);
+});
+
+it('overrides not-news only for non-community stories without substantial article text', async () => {
+  const items = [
+    { title: 'Team handed 3-0 loss over jersey slogan in Hobart', description: 'A team was penalised.', article_content: '', source_name: 'The Mercury', interest_matches: [], coverage: 1 },
+    { title: 'Can someone help with my server?', description: 'A beginner asks for help.', article_content: '', source_type: 'reddit', source_name: 'Reddit', interest_matches: [], coverage: 1 },
+    { title: 'Long-form advertorial', description: 'A promotional feature.', article_content: 'x'.repeat(500), source_name: 'Publisher', interest_matches: [], coverage: 1 },
+  ];
+  let index = 0;
+  const outputs = [
+    { is_news: false, headline: 'Team handed 3-0 loss over jersey slogan in Hobart', summary: 'A team was penalised.', detail: 'A team was penalised over a jersey slogan.', kicker: 'Sport', section: 'tasmania' },
+    { is_news: false, headline: 'Can someone help with my server?', summary: 'A beginner asks for help.', detail: 'A beginner asks the community for help.', kicker: 'Help', section: 'homelab' },
+    { is_news: false, headline: 'Long-form advertorial', summary: 'A promotional feature.', detail: 'The supplied article is promotional.', kicker: 'Advert', section: 'australia' },
+  ];
+  const logs = [];
+  const output = await writeStories(items, {
+    name: 'ollama:test',
+    concurrency: 1,
+    async write() { return result(outputs[index++], 'ollama:test', 'test', {}, 0); },
+  }, { getWriterArticleChars: () => 6000 }, {
+    info: (...args) => logs.push(args),
+    warn() {},
+  });
+
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...items[0], rank: 1, id: 's1', is_news: true,
+      headline: 'Team handed 3-0 loss over jersey slogan in Hobart',
+      summary: 'A team was penalised.', detail: 'A team was penalised over a jersey slogan.',
+      kicker: 'Sport', section: 'tasmania', written_by: 'ollama:test', write_ok: true,
+      write_problems: ['kept: no article text, not-news ignored'],
+    }],
+    dropped: [
+      {
+        ...items[1], rank: 2, id: 's2', is_news: false,
+        headline: 'Can someone help with my server?', summary: 'A beginner asks for help.',
+        detail: 'A beginner asks the community for help.', kicker: 'Help', section: 'homelab',
+        written_by: 'ollama:test', write_ok: true, write_problems: [],
+      },
+      {
+        ...items[2], rank: 3, id: 's3', is_news: false,
+        headline: 'Long-form advertorial', summary: 'A promotional feature.',
+        detail: 'The supplied article is promotional.', kicker: 'Advert', section: 'australia',
+        written_by: 'ollama:test', write_ok: true, write_problems: [],
+      },
+    ],
+    stats: {
+      written: 1, repairs: 1, fallbacks: 0, not_news: 2, not_news_overridden: 1,
+      section_moves: 0, facts_removed: 0, numbers_unsupported: 0,
+      input_tokens: 0, output_tokens: 0, duration_ms: 0,
+    },
+  });
+  assert.deepStrictEqual(logs, [
+    ['pipeline:writer', 'Not news: "Can someone help with my server?"'],
+    ['pipeline:writer', 'Not news: "Long-form advertorial"'],
+    ['pipeline:writer', 'Wrote 1 stories: 1 repair, 0 fallbacks, 2 not news, 1 not-news override, 0 section moves, 0 facts removed, 0 unsupported numbers'],
+  ]);
 });

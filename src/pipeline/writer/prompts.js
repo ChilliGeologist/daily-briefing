@@ -130,6 +130,7 @@ function editUserPrompt(stories, { sectionSize }) {
 module.exports = {
   WRITE_SCHEMA,
   editSchema,
+  isCommunityItem,
   writeSystemPrompt,
   writeUserPrompt,
   editSystemPrompt,

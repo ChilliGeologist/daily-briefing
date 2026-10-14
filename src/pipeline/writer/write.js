@@ -1,6 +1,6 @@
 'use strict';
 
-const { WRITE_SCHEMA, writeSystemPrompt, writeUserPrompt } = require('./prompts');
+const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = require('./prompts');
 const { validateWrite } = require('./validate');
 
 function plural(count, singular, pluralForm = `${singular}s`) {
@@ -15,6 +15,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     repairs: 0,
     fallbacks: 0,
     not_news: 0,
+    not_news_overridden: 0,
     section_moves: 0,
     facts_removed: 0,
     numbers_unsupported: 0,
@@ -48,6 +49,13 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       validation = validateWrite(response.json, item, interests);
       stats.facts_removed += validation.facts_removed || 0;
       stats.numbers_unsupported += validation.numbers_unsupported || 0;
+      if (!validation.value.is_news
+        && !isCommunityItem(item)
+        && String(item.article_content || '').trim().length < 500) {
+        validation.value.is_news = true;
+        validation.problems.push('kept: no article text, not-news ignored');
+        stats.not_news_overridden++;
+      }
       if (!validation.ok) {
         stats.fallbacks++;
         if (log && log.warn) {
@@ -107,7 +115,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   if (log && log.info) {
     log.info('pipeline:writer',
-      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}, ${stats.facts_removed} ${plural(stats.facts_removed, 'fact', 'facts')} removed, ${stats.numbers_unsupported} unsupported ${plural(stats.numbers_unsupported, 'number')}`);
+      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.not_news_overridden} ${plural(stats.not_news_overridden, 'not-news override')}, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}, ${stats.facts_removed} ${plural(stats.facts_removed, 'fact', 'facts')} removed, ${stats.numbers_unsupported} unsupported ${plural(stats.numbers_unsupported, 'number')}`);
   }
   return { stories, dropped, stats };
 }

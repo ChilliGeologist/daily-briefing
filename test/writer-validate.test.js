@@ -238,6 +238,89 @@ it('chooses fallback sections from section mapping data', () => {
   ], ['tasmania', 'homelab', 'gaming', 'australia']);
 });
 
+it('uses the Tasmanian gazetteer only to enforce the Tasmania section', () => {
+  const written = section => ({
+    is_news: true,
+    headline: 'Gift shop question',
+    summary: 'A visitor asks about a souvenir.',
+    detail: 'A visitor asks why the gift shop does not sell a particular shirt.',
+    kicker: 'Gift shop',
+    section,
+  });
+  const local = { ...item, title: "Why isn't there a 'I busted a nut climbing The Nut' t-shirt at the giftshop?", description: '', interest_matches: [] };
+  const interstate = { ...item, title: 'Housing changes proposed for Perth', description: 'The WA government announced the proposal.', interest_matches: [] };
+
+  assert.deepStrictEqual(validateWrite(written('tasmania'), local), {
+    ok: true,
+    value: { ...written('tasmania'), headline: 'Gift shop question' },
+    problems: [],
+  });
+  assert.deepStrictEqual(validateWrite(written('tasmania'), interstate), {
+    ok: true,
+    value: { ...written('australia'), headline: 'Gift shop question' },
+    problems: ['section moved: tasmania -> australia (no Tasmanian place named)'],
+    sectionMoved: true,
+  });
+});
+
+it('rejects the four observed false Tasmanian place matches', () => {
+  const written = {
+    is_news: true,
+    headline: 'Neutral headline',
+    summary: 'Neutral summary.',
+    detail: 'Neutral detail.',
+    kicker: 'News',
+    section: 'tasmania',
+  };
+  const falseMatches = [
+    'trusting the bounce on day five is always a risky prospect',
+    'a disjointed back-and-forth between prison officials',
+    'go back and forth with natural, rich conversation',
+    'Queensland MP Garth Hamilton',
+  ];
+
+  assert.deepStrictEqual(falseMatches.map(title => validateWrite(written, {
+    ...item,
+    title,
+    description: '',
+    interest_matches: [],
+  })), falseMatches.map(() => ({
+    ok: true,
+    value: { ...written, section: 'australia' },
+    problems: ['section moved: tasmania -> australia (no Tasmanian place named)'],
+    sectionMoved: true,
+  })));
+});
+
+it('enforces companion-required Tasmanian places against the whole story text', () => {
+  const written = title => ({
+    is_news: true,
+    headline: title,
+    summary: 'A local update.',
+    detail: 'More details are available.',
+    kicker: 'Local update',
+    section: 'tasmania',
+  });
+  const cases = [
+    ['Garth Hamilton', 'Garth Hamilton', 'australia', true],
+    ["Hamilton, in Tasmania's Central Highlands", 'Hamilton update', 'tasmania', false],
+    ['Stanley', 'Stanley update', 'australia', true],
+    ['The Nut at Stanley', 'Stanley landmark update', 'tasmania', false],
+  ];
+
+  assert.deepStrictEqual(cases.map(([title, headline]) => validateWrite(written(headline), {
+    ...item,
+    title,
+    description: '',
+    interest_matches: [],
+  })), cases.map(([, headline, section, moved]) => ({
+    ok: true,
+    value: { ...written(headline), section },
+    problems: moved ? ['section moved: tasmania -> australia (no Tasmanian place named)'] : [],
+    ...(moved ? { sectionMoved: true } : {}),
+  })));
+});
+
 function stories() {
   return [
     { id: 's1', section: 'world', coverage: 4, interest_matches: [], rank: 1 },

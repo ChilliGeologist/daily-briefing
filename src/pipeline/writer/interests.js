@@ -47,9 +47,12 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function hasWholeTerm(text, term) {
+function hasWholeTerm(text, term, caseSensitive = false) {
   const escaped = escapeRegExp(String(term));
-  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'iu');
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`,
+    caseSensitive ? 'u' : 'iu'
+  );
   return pattern.test(text);
 }
 
@@ -58,7 +61,9 @@ function matchInterests(text, interests = DEFAULT_INTERESTS) {
   const candidates = [];
 
   for (const entry of interests || []) {
-    const term = (entry.terms || []).find(candidate => hasWholeTerm(haystack, candidate));
+    const term = (entry.terms || []).find(candidate =>
+      hasWholeTerm(haystack, candidate, entry.kind === 'place')
+    );
     if (term === undefined) continue;
     candidates.push({ entry, term });
   }
@@ -79,4 +84,4 @@ function interestScore(matches) {
   return (matches || []).reduce((total, match) => total + (Number(match.weight) || 0), 0);
 }
 
-module.exports = { DEFAULT_INTERESTS, matchInterests, interestScore };
+module.exports = { DEFAULT_INTERESTS, matchInterests, interestScore, hasWholeTerm };

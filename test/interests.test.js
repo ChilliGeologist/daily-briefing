@@ -74,6 +74,22 @@ it('matches whole words and phrases case-insensitively once per interest', () =>
   assert.deepStrictEqual(matchInterests('Nicoles and anecdotal', interests), []);
 });
 
+it('matches place interests with listed casing while topics and products remain case-insensitive', () => {
+  const interests = [
+    { label: 'West Tamar', kind: 'place', terms: ['Riverside', 'Exeter'], weight: 3, urgent: false },
+    { label: 'Council', kind: 'topic', terms: ['mayor'], weight: 2, urgent: false },
+    { label: 'Plex', kind: 'product', terms: ['Plex'], weight: 2, urgent: true },
+  ];
+
+  assert.deepStrictEqual(matchInterests('A riverside walk near exeter with the MAYOR and PLEX', interests), [
+    { label: 'Council', kind: 'topic', weight: 2, urgent: false, term: 'mayor' },
+    { label: 'Plex', kind: 'product', weight: 2, urgent: true, term: 'Plex' },
+  ]);
+  assert.deepStrictEqual(matchInterests('Riverside bakery', interests), [
+    { label: 'West Tamar', kind: 'place', weight: 3, urgent: false, term: 'Riverside' },
+  ]);
+});
+
 it('adds the weights of matched interests', () => {
   assert.strictEqual(interestScore([
     { weight: 3 },

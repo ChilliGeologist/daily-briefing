@@ -13,6 +13,7 @@ it('returns defaults when unset', () => {
   assert.deepStrictEqual(settings.getFillerPatterns(), [
     'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
     'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
+    'everybody appearing at', 'in case you missed it',
   ]);
   assert.deepStrictEqual(settings.getPaywalledHosts(), [
     'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',

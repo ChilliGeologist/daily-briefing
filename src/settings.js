@@ -5,6 +5,7 @@ const { DEFAULT_INTERESTS } = require('./pipeline/writer/interests');
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
+  'everybody appearing at', 'in case you missed it',
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',

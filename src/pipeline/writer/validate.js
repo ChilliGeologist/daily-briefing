@@ -1,7 +1,8 @@
 'use strict';
 
-const { interestScore, matchInterests } = require('./interests');
+const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interests');
 const { guardFacts } = require('./facts');
+const { matchTasmanianPlaces } = require('./tasmanian-places');
 const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
@@ -69,8 +70,18 @@ function enforceSectionRequirements(value, item, interests, problems) {
   if (!requirement) return false;
 
   const requiredKinds = new Set(requirement.kinds || []);
-  const matched = matchInterests(sectionEvidence(item, value), interests);
-  if (matched.some(match => requiredKinds.has(match.kind))) return false;
+  const configuredInterests = interests === undefined ? DEFAULT_INTERESTS : interests;
+  const evidence = sectionEvidence(item, value);
+  if (value.section === 'tasmania') {
+    const placeTerms = configuredInterests
+      .filter(entry => entry.kind === 'place')
+      .flatMap(entry => entry.terms || []);
+    const places = matchTasmanianPlaces(evidence, placeTerms);
+    if (places.unambiguous.length > 0 || places.needsCompanion.length > 0) return false;
+  } else {
+    const matched = matchInterests(evidence, configuredInterests);
+    if (matched.some(match => requiredKinds.has(match.kind))) return false;
+  }
 
   const from = value.section;
   value.section = requirement.fallback;
