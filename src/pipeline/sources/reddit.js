@@ -1,82 +1,124 @@
 'use strict';
 
-function extractImage(data) {
-  // Check preview images first
-  if (data.preview && data.preview.images && data.preview.images[0] &&
-      data.preview.images[0].source && data.preview.images[0].source.url) {
-    return data.preview.images[0].source.url.replace(/&amp;/g, '&');
+const RSSParser = require('rss-parser');
+const { redditRequestQueue } = require('../../reddit-request-queue');
+
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const parser = new RSSParser({
+  customFields: {
+    item: [
+      ['id', 'id'],
+      ['media:thumbnail', 'media:thumbnail'],
+    ],
+  },
+});
+
+function subredditName(source) {
+  return (source.url || '').replace(/^\/?r\//, '').trim();
+}
+
+function isRedditUrl(url) {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url, 'https://www.reddit.com').hostname;
+    return /(^|\.)reddit\.com$/i.test(hostname) || /(^|\.)redd\.it$/i.test(hostname);
+  } catch (_) {
+    return false;
   }
-  // Check thumbnail, skip special values
-  const skipThumbs = ['self', 'default', 'nsfw', 'spoiler', ''];
-  if (data.thumbnail && !skipThumbs.includes(data.thumbnail)) {
-    return data.thumbnail;
+}
+
+function decodeAttribute(value) {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;|&#x27;/g, "'");
+}
+
+function extractExternalUrl(item) {
+  const content = item.content || '';
+  const matches = [...content.matchAll(/<a\s+[^>]*href="([^"]+)"[^>]*>\s*\[link\]\s*<\/a>/gi)];
+  if (matches.length === 0) return null;
+
+  try {
+    const href = decodeAttribute(matches[matches.length - 1][1]);
+    const url = new URL(href, 'https://www.reddit.com').href;
+    return isRedditUrl(url) ? null : url;
+  } catch (_) {
+    return null;
   }
-  return null;
+}
+
+function extractDescription(item) {
+  const text = item.contentSnippet || '';
+  return text
+    .replace(/\s*submitted by\s+[\s\S]*?\[link\]\s+\[comments\]\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 500);
+}
+
+function extractImage(item) {
+  const thumbnail = item && item['media:thumbnail'];
+  return thumbnail && thumbnail.$ && thumbnail.$.url ? thumbnail.$.url : null;
+}
+
+function publishedDate(item) {
+  const value = item.isoDate || item.pubDate;
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function parseRedditFeed(xml, source, now = Date.now()) {
+  const feed = await parser.parseString(xml);
+  const sub = subredditName(source);
+  const cutoff = now - MAX_AGE_MS;
+  const items = [];
+
+  for (const item of (feed.items || [])) {
+    const published = publishedDate(item);
+    if (published && Date.parse(published) < cutoff) continue;
+
+    items.push({
+      title: item.title || '',
+      url: item.link || '',
+      external_url: extractExternalUrl(item),
+      description: extractDescription(item),
+      image: extractImage(item),
+      published,
+      score: null,
+      comment_count: null,
+      source_name: `r/${sub}`,
+      source_type: 'reddit',
+      default_category: source.default_category,
+    });
+  }
+
+  return items;
 }
 
 async function fetchReddit(source, log) {
   const start = Date.now();
+  const sub = subredditName(source);
 
   try {
-    // Normalise subreddit name
-    let sub = source.url || '';
-    sub = sub.replace(/^r\//, '').replace(/^\/r\//, '').trim();
-
     const sort = (source.config && source.config.sort) || 'hot';
     const limit = (source.config && source.config.limit) || 25;
-
-    const url = `https://www.reddit.com/r/${sub}/${sort}.json?limit=${limit}&raw_json=1`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    let response;
-    try {
-      response = await fetch(url, {
-        headers: { 'User-Agent': 'DailyBriefing/2.0' },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const url = `https://www.reddit.com/r/${sub}/${sort}/.rss?limit=${limit}`;
+    const response = await redditRequestQueue.fetch(url, { log, timeoutMs: 15000 });
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const json = await response.json();
-    const children = (json.data && json.data.children) || [];
-    const items = [];
-
-    for (const child of children) {
-      const post = child.data;
-      if (!post) continue;
-
-      // Filter stickied posts and low-score posts
-      if (post.stickied) continue;
-      if (post.score < 1) continue;
-
-      const normalised = {
-        title: post.title || '',
-        url: `https://www.reddit.com${post.permalink}`,
-        external_url: post.is_self ? null : (post.url || null),
-        description: (post.selftext || '').substring(0, 500),
-        image: extractImage(post),
-        published: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null,
-        score: post.score != null ? post.score : null,
-        comment_count: post.num_comments != null ? post.num_comments : null,
-        source_name: `r/${sub}`,
-        source_type: 'reddit',
-        default_category: source.default_category,
-      };
-
-      log.debug('reddit', `Parsed post: ${normalised.title}`, { score: post.score });
-      items.push(normalised);
+    const items = await parseRedditFeed(await response.text(), source, Date.now());
+    for (const item of items) {
+      log.debug('reddit', `Parsed post: ${item.title}`, { url: item.url });
     }
 
     const duration = Date.now() - start;
     log.info('reddit', `Fetched ${items.length} items from r/${sub}`, { duration_ms: duration });
-
     return { items, error: null };
   } catch (err) {
     const duration = Date.now() - start;
@@ -85,4 +127,10 @@ async function fetchReddit(source, log) {
   }
 }
 
-module.exports = { fetchReddit, extractImage };
+module.exports = {
+  fetchReddit,
+  extractImage,
+  extractExternalUrl,
+  extractDescription,
+  parseRedditFeed,
+};

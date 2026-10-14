@@ -59,12 +59,33 @@ function ensureISO(dateStr) {
 
 async function fetchRSS(source, log) {
   const start = Date.now();
-  const parser = new RSSParser({
-    requestOptions: { timeout: 15000 },
-  });
+  const parser = new RSSParser();
 
   try {
-    const feed = await parser.parseURL(source.url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(source.url, {
+        headers: { 'User-Agent': 'DailyBriefing/2.0' },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const body = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (/\b(?:text\/html|application\/xhtml\+xml)\b/i.test(contentType) ||
+        /^\s*\ufeff?\s*(?:<!doctype\s+html\b|<html\b)/i.test(body)) {
+      throw new Error('This address returns a web page, not a news feed');
+    }
+
+    const feed = await parser.parseString(body);
     const items = [];
 
     for (const item of (feed.items || [])) {
