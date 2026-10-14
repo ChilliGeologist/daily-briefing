@@ -105,7 +105,21 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-function matchTasmanianPlaces(text, additionalTerms = []) {
+// A Tasmanian subreddit (r/tasmania, r/hobart, r/launceston) vouches for shared
+// names such as Kingston or Claremont: its posts are written by locals about the
+// state. News outlets never count, whatever their name - ABC Tasmania, The Mercury
+// and The Examiner all carry national copy (checked on a real day, 2026-10-14).
+const TASMANIAN_SUBREDDIT = /^r\/(tasmania|hobart|launceston|tassie)$/i;
+
+function isTasmanianSource(item) {
+  const names = [
+    item && item.source_name,
+    ...((item && Array.isArray(item.sources)) ? item.sources.map(source => source && source.name) : []),
+  ];
+  return names.some(name => typeof name === 'string' && TASMANIAN_SUBREDDIT.test(name.trim()));
+}
+
+function matchTasmanianPlaces(text, additionalTerms = [], { tasmanianSource = false } = {}) {
   const haystack = typeof text === 'string' ? text : '';
   const extra = unique((additionalTerms || []).map(String));
   const unambiguous = unique([
@@ -117,7 +131,7 @@ function matchTasmanianPlaces(text, additionalTerms = []) {
     ...extra.filter(name => needsCompanionSet.has(name) && hasWholePlace(haystack, name)),
   ]);
   const companions = TASMANIAN_COMPANIONS.filter(name => hasWholePlace(haystack, name));
-  const hasCompanion = unambiguous.length > 0 || companions.length > 0;
+  const hasCompanion = tasmanianSource || unambiguous.length > 0 || companions.length > 0;
 
   return {
     unambiguous,
@@ -132,5 +146,6 @@ module.exports = {
   TASMANIAN_COMPANIONS,
   TASMANIAN_PLACES,
   UNAMBIGUOUS,
+  isTasmanianSource,
   matchTasmanianPlaces,
 };

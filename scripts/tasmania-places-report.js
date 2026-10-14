@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DEFAULT_INTERESTS } = require('../src/pipeline/writer/interests');
-const { matchTasmanianPlaces } = require('../src/pipeline/writer/tasmanian-places');
+const { isTasmanianSource, matchTasmanianPlaces } = require('../src/pipeline/writer/tasmanian-places');
 
 function storyText(story) {
   return [
@@ -35,7 +35,7 @@ function analyseCandidates(candidates) {
   const interestTerms = placeInterestTerms();
 
   candidates.forEach((story, index) => {
-    const places = matchTasmanianPlaces(storyText(story), interestTerms);
+    const places = matchTasmanianPlaces(storyText(story), interestTerms, { tasmanianSource: isTasmanianSource(story) });
     const result = {
       index: index + 1,
       title: String(story.title || ''),

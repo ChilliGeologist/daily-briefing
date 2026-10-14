@@ -50,3 +50,31 @@ it('accepts companion-required names only with Tasmanian evidence in the same te
     companions: [],
   });
 });
+
+it('treats a Tasmanian source as the companion for shared names', () => {
+  assert.deepStrictEqual(matchTasmanianPlaces('Moving to Claremont or Kingston?', [], { tasmanianSource: true }), {
+    unambiguous: [],
+    needsCompanion: ['Claremont', 'Kingston'],
+    rejected: [],
+    companions: [],
+  });
+  assert.deepStrictEqual(matchTasmanianPlaces('Moving to Claremont or Kingston?'), {
+    unambiguous: [],
+    needsCompanion: [],
+    rejected: ['Claremont', 'Kingston'],
+    companions: [],
+  });
+});
+
+it('recognises only Tasmanian subreddits as Tasmanian sources', () => {
+  const { isTasmanianSource } = require('../src/pipeline/writer/tasmanian-places');
+  assert.deepStrictEqual([
+    isTasmanianSource({ sources: [{ name: 'r/tasmania' }] }),
+    isTasmanianSource({ source_name: 'r/Hobart' }),
+    isTasmanianSource({ source_name: 'r/launceston' }),
+    isTasmanianSource({ sources: [{ name: 'ABC Tasmania' }, { name: '7NEWS' }] }),
+    isTasmanianSource({ source_name: 'Pulse Tasmania' }),
+    isTasmanianSource({ sources: [{ name: 'The Mercury (Google News)' }, { name: 'The Examiner' }] }),
+    isTasmanianSource({}),
+  ], [true, true, true, false, false, false, false]);
+});

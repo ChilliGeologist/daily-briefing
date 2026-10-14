@@ -2,7 +2,7 @@
 
 const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interests');
 const { guardFacts } = require('./facts');
-const { matchTasmanianPlaces } = require('./tasmanian-places');
+const { isTasmanianSource, matchTasmanianPlaces } = require('./tasmanian-places');
 const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
@@ -76,7 +76,7 @@ function enforceSectionRequirements(value, item, interests, problems) {
     const placeTerms = configuredInterests
       .filter(entry => entry.kind === 'place')
       .flatMap(entry => entry.terms || []);
-    const places = matchTasmanianPlaces(evidence, placeTerms);
+    const places = matchTasmanianPlaces(evidence, placeTerms, { tasmanianSource: isTasmanianSource(item) });
     if (places.unambiguous.length > 0 || places.needsCompanion.length > 0) return false;
   } else {
     const matched = matchInterests(evidence, configuredInterests);
