@@ -37,8 +37,9 @@ step, browser-test runner or new npm dependency.
 **Spec:** `docs/superpowers/specs/2026-10-13-overhaul-design.md`, the "For
 Jesse" sections "How it looks" and "How it moves", and "Reading screen
 (stage 4)". Visual and motion references are the approved `look.html`,
-`paper-labels.html`, `motion.html`, and especially `page-curl.html`; the last
-one is the source of truth for fold geometry and lighting.
+`paper-labels.html`, `motion.html`, and especially `page-curl.html`, copied
+into `docs/superpowers/mockups/stage4/`; the last one is the source of truth
+for fold geometry and lighting.
 
 ## Global Constraints
 
@@ -56,6 +57,12 @@ one is the source of truth for fold geometry and lighting.
   and story `{ id, title, kicker, summary, detail, image, sources,
   canonical_url, article_url, article_html, coverage, interest_labels }`.
   Do not change pipeline, database or API code for this stage.
+- Since the stage 3 tuning (2026-10-14), `kicker`, `summary` and `detail` may
+  be empty strings by design: a story whose outlet blocks reading (the Mercury)
+  is headline-only, and a meaningless kicker is blanked. Render no empty
+  element, no stray separator and no blank line for them. A headline-only story
+  still expands, showing its source and the "Read in full" button; its reader
+  shows the headline and "Open on <site>" with no empty body.
 - "You should know" is always rendered first. Other sections show the ordered
   `items` list, capped at five defensively, and reveal overflow plus the
   ordered `more` list in place. Do not duplicate, re-rank or discard stories.
@@ -354,7 +361,7 @@ if needed).
   mockups: page `#f7f3ea`, reader `#fbf8f1`, ink `#1d1a16`, summary
   `#57514a`, quiet text `#8a8174`, rule `#d6cfc0`, rust `#9a3412`.
   Do not replace the existing panel tokens.
-- [ ] Pending Jesse's answer, define the proposed dark Paper values as warm
+- [ ] Define the dark Paper values (approved by Jesse 2026-10-14) as warm
   charcoal page/reader surfaces, warm off-white ink, taupe quiet text/rules
   and a lighter accessible rust. Keep the same serif hierarchy and restrained
   rules—do not switch to the Night magazine's sans serif, numbering or yellow

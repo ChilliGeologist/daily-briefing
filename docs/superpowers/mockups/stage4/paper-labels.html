@@ -1,0 +1,70 @@
+<h2>Paper it is — how should the top stories be marked?</h2>
+<p class="subtitle">Same look, three ways to handle the little line above each headline. Tap the one you like.</p>
+
+<style>
+  .phones { display:flex; gap:24px; flex-wrap:wrap; justify-content:center; }
+  .phone { width:340px; border-radius:28px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.25); cursor:pointer; border:3px solid transparent; transition:transform .2s, border-color .2s; }
+  .phone.selected { border-color:#3b82f6; }
+  .pick { text-align:center; font-weight:600; margin:10px 0 0; }
+  .pick small { display:block; font-weight:400; opacity:.7; }
+  .pa { background:#f7f3ea; color:#1d1a16; font-family: Georgia, 'Times New Roman', serif; padding:20px 18px 26px; }
+  .pa .mast { text-align:center; border-bottom:3px double #1d1a16; padding-bottom:8px; }
+  .pa .mast h1 { font-size:28px; margin:0; letter-spacing:.5px; }
+  .pa .mast p { font-size:11px; margin:4px 0 0; text-transform:uppercase; letter-spacing:2px; font-family: -apple-system, sans-serif; }
+  .pa .lbl { font: 700 11px -apple-system, sans-serif; letter-spacing:2px; text-transform:uppercase; color:#9a3412; margin:16px 0 6px; }
+  .pa .lead h3 { font-size:22px; line-height:1.2; margin:0 0 6px; }
+  .pa .lead p { font-size:15px; line-height:1.45; margin:0; }
+  .pa .row { border-top:1px solid #d6cfc0; padding:10px 0; }
+  .pa .row h4 { font-size:16px; margin:0 0 3px; line-height:1.25; }
+  .pa .row p { font-size:13px; margin:0; color:#57514a; line-height:1.4; }
+  .pa .kick { font: 600 10px -apple-system, sans-serif; color:#8a8174; text-transform:uppercase; letter-spacing:1px; }
+  .pa .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#9a3412; margin-right:6px; vertical-align:middle; }
+  .pa .row.mine { border-left:3px solid #9a3412; padding-left:10px; margin-left:-13px; }
+</style>
+
+<div class="phones">
+  <div>
+    <div class="phone" data-choice="none" onclick="toggleSelect(this)">
+      <div class="pa">
+        <div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>
+        <div class="lbl">You should know</div>
+        <div class="lead"><h3>Supermarket giant's systems shut down after cyberattack</h3><p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed and stock was lost.</p></div>
+        <div class="row"><h4>Plex warns of a serious flaw in its media server</h4><p>An update is out; older versions can be taken over remotely.</p></div>
+        <div class="row"><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div>
+        <div class="lbl">Tasmania</div>
+        <div class="row"><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div>
+      </div>
+    </div>
+    <p class="pick">A · No labels<small>Headlines speak for themselves</small></p>
+  </div>
+
+  <div>
+    <div class="phone" data-choice="topic" onclick="toggleSelect(this)">
+      <div class="pa">
+        <div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>
+        <div class="lbl">You should know</div>
+        <div class="lead"><div class="kick">World</div><h3>Supermarket giant's systems shut down after cyberattack</h3><p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed and stock was lost.</p></div>
+        <div class="row"><div class="kick">Plex</div><h4>Plex warns of a serious flaw in its media server</h4><p>An update is out; older versions can be taken over remotely.</p></div>
+        <div class="row"><div class="kick">State politics</div><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div>
+        <div class="lbl">Tasmania</div>
+        <div class="row"><div class="kick">Basketball</div><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div>
+      </div>
+    </div>
+    <p class="pick">B · One plain word<small>A quiet grey topic word, like a newspaper kicker</small></p>
+  </div>
+
+  <div>
+    <div class="phone" data-choice="mark" onclick="toggleSelect(this)">
+      <div class="pa">
+        <div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>
+        <div class="lbl">You should know</div>
+        <div class="lead"><h3>Supermarket giant's systems shut down after cyberattack</h3><p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed and stock was lost.</p></div>
+        <div class="row mine"><h4>Plex warns of a serious flaw in its media server</h4><p>An update is out; older versions can be taken over remotely.</p></div>
+        <div class="row"><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div>
+        <div class="lbl">Tasmania</div>
+        <div class="row"><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div>
+      </div>
+    </div>
+    <p class="pick">C · A quiet mark<small>No words; a thin rust line marks stories that are about your own stuff</small></p>
+  </div>
+</div>

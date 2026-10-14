@@ -1,0 +1,107 @@
+<h2>How should a story open?</h2>
+<p class="subtitle">These ones work — tap a story, then tap "Read in full", then "Back". Same stories, two styles of movement. Tell me which feels nicer in your hand (or what to change).</p>
+
+<style>
+  .phones { display:flex; gap:28px; flex-wrap:wrap; justify-content:center; }
+  .pick { text-align:center; font-weight:600; margin:10px 0 0; }
+  .pick small { display:block; font-weight:400; opacity:.7; max-width:320px; margin:0 auto; }
+  .ph { position:relative; width:340px; height:640px; border-radius:28px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.25);
+        background:#f7f3ea; color:#1d1a16; font-family: Georgia, 'Times New Roman', serif; }
+  .scroll { position:absolute; inset:0; overflow-y:auto; padding:20px 18px 40px; -webkit-overflow-scrolling:touch; }
+  .mast { text-align:center; border-bottom:3px double #1d1a16; padding-bottom:8px; }
+  .mast h1 { font-size:28px; margin:0; }
+  .mast p { font-size:11px; margin:4px 0 0; text-transform:uppercase; letter-spacing:2px; font-family:-apple-system,sans-serif; }
+  .lbl { font:700 11px -apple-system,sans-serif; letter-spacing:2px; text-transform:uppercase; color:#9a3412; margin:16px 0 4px; }
+  .kick { font:600 10px -apple-system,sans-serif; color:#8a8174; text-transform:uppercase; letter-spacing:1px; }
+  .st { border-top:1px solid #d6cfc0; padding:11px 0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .st h4 { font-size:17px; margin:2px 0 3px; line-height:1.25; transition:font-size .35s ease; }
+  .st > p { font-size:13.5px; margin:0; color:#57514a; line-height:1.4; }
+  .more { display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s cubic-bezier(.2,.8,.2,1); }
+  .more > div { overflow:hidden; }
+  .more .inner { opacity:0; transform:translateY(-6px); transition:opacity .35s ease .1s, transform .35s ease .1s; padding-top:8px; font-size:14.5px; line-height:1.5; }
+  .st.open .more { grid-template-rows:1fr; }
+  .st.open .more .inner { opacity:1; transform:none; }
+  .st.open h4 { font-size:19px; }
+  .btn { display:inline-block; margin-top:10px; font:600 13px -apple-system,sans-serif; color:#9a3412; border:1px solid #9a3412; border-radius:999px; padding:6px 14px; }
+  .src { font:12px -apple-system,sans-serif; color:#8a8174; margin-top:8px; }
+
+  /* reader view */
+  .reader { position:absolute; inset:0; background:#fbf8f1; overflow-y:auto; padding:18px 20px 40px; z-index:5; }
+  .reader .back { font:600 13px -apple-system,sans-serif; color:#9a3412; cursor:pointer; display:inline-block; margin-bottom:12px; }
+  .reader h2 { font-size:25px; line-height:1.2; margin:4px 0 8px; font-family:Georgia,serif; }
+  .reader .by { font:12px -apple-system,sans-serif; color:#8a8174; margin-bottom:14px; }
+  .reader .img { height:150px; border-radius:6px; background:linear-gradient(135deg,#c9bfae,#a89c86); margin-bottom:14px; }
+  .reader p { font-size:16px; line-height:1.6; margin:0 0 12px; }
+  .reader .orig { font:600 13px -apple-system,sans-serif; color:#9a3412; margin-top:16px; }
+
+  /* style 1: page slides in from the right, list eases back */
+  .s1 .scroll { transition:transform .45s cubic-bezier(.2,.8,.2,1), filter .45s; }
+  .s1.reading .scroll { transform:translateX(-25%); filter:brightness(.92); }
+  .s1 .reader { transform:translateX(100%); transition:transform .45s cubic-bezier(.2,.8,.2,1); box-shadow:-8px 0 24px rgba(0,0,0,.12); }
+  .s1.reading .reader { transform:none; }
+
+  /* style 2: story lifts up into a sheet; others dim */
+  .s2 .scroll { transition:transform .5s cubic-bezier(.2,.8,.2,1), filter .5s; }
+  .s2.reading .scroll { transform:scale(.94); filter:brightness(.8) blur(1px); }
+  .s2 .reader { top:28px; border-radius:18px 18px 0 0; transform:translateY(105%); transition:transform .5s cubic-bezier(.2,.9,.25,1.05); box-shadow:0 -8px 30px rgba(0,0,0,.2); }
+  .s2 .reader::before { content:''; display:block; width:40px; height:4px; border-radius:2px; background:#d6cfc0; margin:0 auto 12px; }
+  .s2.reading .reader { transform:none; }
+</style>
+
+<div class="phones">
+  <div>
+    <div class="ph s1" id="p1"></div>
+    <p class="pick">1 · Turn the page<small>The story unfolds in place; the full copy slides in from the right like turning to a page, and back slides it away</small></p>
+  </div>
+  <div>
+    <div class="ph s2" id="p2"></div>
+    <p class="pick">2 · Lift it out<small>The story unfolds in place; the full copy rises up as a sheet over the dimmed paper, and back drops it down</small></p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const stories = [
+    {lbl:'You should know'},
+    {k:'World', h:"Supermarket giant's systems shut down after cyberattack", s:'Ahold Delhaize took systems offline; fridges in French stores failed and stock was lost.',
+     d:'The owner of several European supermarket chains shut down parts of its network after attackers got in over the weekend. In France, store refrigeration controlled from the same systems stopped, and some stores threw out chilled food. The company says payments still work and it does not yet know whether customer data was taken.', src:'ABC News · Guardian · Bleeping Computer'},
+    {k:'Plex', h:'Plex warns of a serious flaw in its media server', s:'An update is out; older versions can be taken over remotely.',
+     d:'Plex says a flaw in older versions of its server lets someone on the internet run their own code on the machine. The fix is in the latest release. Servers reachable from outside the home are most at risk.', src:'Bleeping Computer'},
+    {k:'State politics', h:'Labor attacks Premier over "dodgy" deals', s:'The row is set to dominate parliament this week.',
+     d:'The Opposition says two recent government contracts were handed out without proper process and wants them referred to the Integrity Commission. The Premier says both followed the rules. Parliament sits again on Tuesday.', src:'The Examiner · The Mercury'},
+    {lbl:'Tasmania'},
+    {k:'Basketball', h:'JackJumpers fan favourite retires without warning', s:'The club confirmed the news on Monday night.',
+     d:'The guard, who joined in the club\'s first season, told teammates before training. He leaves as one of the most popular players in the club\'s short history.', src:'ABC Tasmania'},
+    {k:'Launceston', h:'Tamar bridge works to close a lane for three weeks', s:'Expect delays on the West Tamar Highway from Monday.',
+     d:'Resurfacing on the bridge starts Monday and runs for about three weeks. One lane will stay open each way outside peak hours; at peak times traffic will be controlled by lights.', src:'The Examiner'},
+  ];
+  function build(root){
+    let html = '<div class="scroll"><div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>';
+    stories.forEach((x,i)=>{
+      if (x.lbl) { html += '<div class="lbl">'+x.lbl+'</div>'; return; }
+      html += '<div class="st" data-i="'+i+'"><div class="kick">'+x.k+'</div><h4>'+x.h+'</h4><p>'+x.s+'</p>'+
+              '<div class="more"><div><div class="inner">'+x.d+'<div class="src">'+x.src+'</div><span class="btn">Read in full</span></div></div></div></div>';
+    });
+    html += '</div><div class="reader"></div>';
+    root.innerHTML = html;
+    root.querySelectorAll('.st').forEach(st=>{
+      st.addEventListener('click', e=>{
+        if (e.target.classList.contains('btn')) { openReader(root, stories[+st.dataset.i]); return; }
+        const wasOpen = st.classList.contains('open');
+        root.querySelectorAll('.st.open').forEach(o=>o.classList.remove('open'));
+        if (!wasOpen) st.classList.add('open');
+      });
+    });
+  }
+  function openReader(root, x){
+    const r = root.querySelector('.reader');
+    r.innerHTML = '<span class="back">‹ Back</span><div class="kick">'+x.k+'</div><h2>'+x.h+'</h2><div class="by">'+x.src.split(' · ')[0]+' · 4 min read</div><div class="img"></div>'+
+      '<p>'+x.d+'</p><p>This is where the rest of the article would sit — the publisher\'s own words, with ads, pop-ups and sign-up boxes stripped out, set in the same type as the briefing.</p><p>Long articles scroll here. Paywalled ones show what the site gives away, then a link.</p><div class="orig">Open on '+x.src.split(' · ')[0]+' ›</div>';
+    r.scrollTop = 0;
+    r.querySelector('.back').addEventListener('click', ()=>root.classList.remove('reading'));
+    requestAnimationFrame(()=>root.classList.add('reading'));
+  }
+  build(document.getElementById('p1'));
+  build(document.getElementById('p2'));
+})();
+</script>
