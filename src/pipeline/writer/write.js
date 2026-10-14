@@ -10,6 +10,29 @@ const {
 
 const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
 
+// Clickbait that only an article could explain ("Huge update after boy shot
+// dead"); with nothing but the headline it tells the reader nothing.
+const CLICKBAIT = /\b(?:huge update|bombshell|you won['’]?t believe|here['’]?s why|what we know)\b/i;
+
+// True when the app has nothing but the headline: no article text, and every
+// teaser is just the headline again plus the outlet's name (Google News).
+// Reddit link and photo posts have no body either, but are written from their
+// comment threads, so only news outlets qualify.
+function isHeadlineOnly(item) {
+  if (isCommunityItem(item)) return false;
+  if (String(item.article_content || '').trim().length >= 200) return false;
+  const names = [item.source_name, item.outlet, item.publisher]
+    .filter(value => typeof value === 'string')
+    // "The Mercury (Google News)" signs its teasers "The Mercury".
+    .flatMap(value => [value, value.replace(/\s*\([^)]*\)\s*$/, '')]);
+  const strip = text => [item.title, ...names]
+    .filter(value => typeof value === 'string' && value.trim())
+    .reduce((rest, value) => rest.split(value.trim()).join(' '), String(text || ''))
+    .replace(/[\s\p{P}]+/gu, ' ').trim();
+  const teasers = [item.description, ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : [])];
+  return teasers.every(text => strip(text).length === 0);
+}
+
 function plural(count, singular, pluralForm = `${singular}s`) {
   return count === 1 ? singular : pluralForm;
 }
@@ -95,13 +118,14 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     }
     const overrideNotNews = !isCommunityItem(item)
       && String(item.article_content || '').trim().length < 500;
+    const headlineOnly = isHeadlineOnly(item);
 
     try {
       const userPrompt = writeUserPrompt(item, { articleChars: settings.getWriterArticleChars() });
       const first = await request(userPrompt);
       validation = first.validation;
       writtenBy = first.backend;
-      if (validation.ok && (validation.value.is_news || overrideNotNews)
+      if (!headlineOnly && validation.ok && (validation.value.is_news || overrideNotNews)
         && (validation.missingTextFields || []).length > 0) {
         try {
           const retry = await request(`${userPrompt}\n\n${MISSING_TEXT_RETRY_NOTE}`);
@@ -116,7 +140,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         }
         applyMissingTextFallback(validation, item);
       }
-      const retryReason = validation.ok && (validation.value.is_news || overrideNotNews)
+      const retryReason = !headlineOnly && validation.ok && (validation.value.is_news || overrideNotNews)
         ? headlineRetryReason(validation.value.headline, item)
         : null;
       if (retryReason) {
@@ -147,10 +171,21 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: community help or buying request');
       }
-      if (!validation.value.is_news && overrideNotNews) {
+      if (!validation.value.is_news && overrideNotNews
+        && !(headlineOnly && CLICKBAIT.test(validation.value.headline))) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');
         stats.not_news_overridden++;
+      }
+      if (headlineOnly) {
+        // Anything written beyond the headline would be made up.
+        validation.value.summary = '';
+        validation.value.detail = '';
+        validation.problems.push('headline only: summary and detail left empty');
+        if (validation.value.is_news && CLICKBAIT.test(validation.value.headline)) {
+          validation.value.is_news = false;
+          validation.problems.push('not news: clickbait headline with no article text');
+        }
       }
       if (!validation.ok) {
         stats.fallbacks++;

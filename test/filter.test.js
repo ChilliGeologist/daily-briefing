@@ -97,3 +97,12 @@ it('filters HN hiring ads and liquidator appointment lists using upgraded defaul
     stats: { total: 5, kept: 1, stale: 0, filler: 4 },
   });
 });
+
+it('filters video, podcast and audio pages by their title suffix', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = ['Decoding America: Everything you need to know about the midterms – video', 'The week in politics - podcast', 'Morning briefing — audio'];
+  const keep = ['Video game prices rise again', 'Podcast host sued over interview'];
+  const result = filterItems([...titles, ...keep].map(title => item(title, 1)), opts({ fillerPatterns: settings.getFillerPatterns() }));
+  assert.deepStrictEqual(result.dropped.map(drop => drop.item.title), titles);
+  assert.deepStrictEqual(result.kept.map(value => value.title), keep);
+});

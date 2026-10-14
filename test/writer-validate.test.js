@@ -666,3 +666,31 @@ it('moves clean overseas club and entertainment stories out of Australia without
     { ok: true, value: { ...values[4], kicker: 'Tennis quarterfinal' }, problems: [] },
   ]);
 });
+
+it('keeps stories from a gaming or homelab source out of the news sections', () => {
+  const value = section => ({ is_news: true, headline: 'Australia misses out on the collector edition', summary: 'The edition is sold elsewhere.', detail: 'The edition is sold elsewhere.', kicker: 'Collector edition', section });
+  assert.deepStrictEqual([
+    validateWrite(value('world'), { ...geographyItem, default_category: 'gaming' }),
+    validateWrite(value('australia'), { ...geographyItem, default_category: 'homelab' }),
+    validateWrite(value('tech'), { ...geographyItem, default_category: 'homelab' }),
+  ], [
+    { ok: true, value: value('gaming'), problems: ['section moved: world -> gaming (gaming source)'], sectionMoved: true },
+    { ok: true, value: value('homelab'), problems: ['section moved: australia -> homelab (homelab source)'], sectionMoved: true },
+    { ok: true, value: value('tech'), problems: [] },
+  ]);
+});
+
+it('sentence-cases kickers whose only capitals are in a Title Case headline, and keeps acronyms', () => {
+  const source = { ...geographyItem, title: 'Grace Hopper Celebration Cancelled', description: 'Grace Hopper Celebration Cancelled', article_content: 'The mini NAS build uses two drives.' };
+  const raw = kicker => ({ is_news: true, headline: 'Grace Hopper Celebration Cancelled', summary: 'The event was cancelled.', detail: 'Funding fell short.', kicker, section: 'tech' });
+  assert.deepStrictEqual(['Celebration Cancelled', 'Mini Nas'].map(kicker => validateWrite(raw(kicker), source).value.kicker), ['Celebration cancelled', 'Mini NAS']);
+});
+
+it('leads a section with stories three or more outlets carried, ahead of the editor order', () => {
+  const list = [
+    { id: 's1', section: 'tech', coverage: 1, interest_matches: [], rank: 1 },
+    { id: 's2', section: 'tech', coverage: 7, interest_matches: [], rank: 2 },
+    { id: 's3', section: 'tech', coverage: 1, interest_matches: [], rank: 3 },
+  ];
+  assert.deepStrictEqual(validateEdit({ top: [], sections: { tech: ['s1', 's3', 's2'] } }, list, { sectionSize: 2, topSize: { min: 0, max: 7 } }).sections.tech, ['s2', 's1']);
+});

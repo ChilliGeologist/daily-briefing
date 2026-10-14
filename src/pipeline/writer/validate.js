@@ -13,6 +13,7 @@ const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
+  SECTION_BY_SOURCE_CATEGORY,
   SECTION_REQUIRES_PLACE,
   isSectionId,
 } = require('./sections');
@@ -107,6 +108,12 @@ function sectionEvidence(item, value) {
 }
 
 function enforceSectionRequirements(value, item, interests, problems) {
+  const sourceSection = SECTION_BY_SOURCE_CATEGORY[item.default_category];
+  if (sourceSection && TOP_NEWS_SECTIONS.has(value.section)) {
+    problems.push(`section moved: ${value.section} -> ${sourceSection} (${item.default_category} source)`);
+    value.section = sourceSection;
+    return true;
+  }
   if (value.section === 'world' && hasAustralianOnlyPlace(
     value.headline,
     value.summary,
@@ -180,15 +187,24 @@ function isSectionKicker(kicker, sectionId) {
 }
 
 function kickerEvidence(item, value) {
+  // Titles are often in Title Case, so a capital there proves nothing; Google
+  // News teasers repeat the title, so strip it from them too.
+  const title = String(item.title || '').trim();
+  const teasers = [item.description, ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : [])]
+    .map(text => (title && typeof text === 'string' ? text.split(title).join(' ') : text));
   return [
-    item.title,
-    value.headline,
     value.summary,
     value.detail,
-    item.description,
-    ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : []),
+    ...teasers,
     item.article_content,
   ].filter(text => typeof text === 'string' && text.trim()).join('\n');
+}
+
+// "Nas" in a kicker is "NAS" when the story spells it that way.
+function acronymForm(word, evidence) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = evidence.match(new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'giu'));
+  return (match || []).find(found => /^[A-Z0-9]{2,}$/.test(found)) || null;
 }
 
 function capitalisedMidSentence(word, evidence) {
@@ -210,6 +226,8 @@ function sentenceCaseKicker(kicker, evidence) {
     if (!match) return part.toLocaleLowerCase('en-AU');
     const [, prefix, word, suffix] = match;
     if (/^[A-Z0-9]{2,}$/.test(word) || capitalisedMidSentence(word, evidence)) return part;
+    const acronym = acronymForm(word, evidence);
+    if (acronym) return `${prefix}${acronym}${suffix}`;
     return `${prefix}${word.toLocaleLowerCase('en-AU')}${suffix}`;
   }).join('');
 }
@@ -437,7 +455,12 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
   const placed = new Set(top);
 
   for (const sectionId of SECTION_IDS) {
-    for (const id of preferred[sectionId] || []) {
+    // Stories three or more outlets carried lead their section: the editor
+    // put a small "Show HN" app above a story seven outlets ran.
+    const wide = deterministicOrder(stories)
+      .filter(story => story.section === sectionId && (Number(story.coverage) || 0) >= 3)
+      .map(story => story.id);
+    for (const id of [...wide, ...(preferred[sectionId] || [])]) {
       const story = byId.get(id);
       if (!story || story.section !== sectionId || placed.has(id) || sections[sectionId].length >= sectionSize) continue;
       sections[sectionId].push(id);

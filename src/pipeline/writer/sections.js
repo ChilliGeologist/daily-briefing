@@ -34,6 +34,10 @@ const SECTION_REQUIRES_PLACE = Object.freeze({
   tasmania: Object.freeze({ kinds: Object.freeze(['place']), fallback: 'australia', placeName: 'Tasmanian' }),
 });
 
+// A source whose whole feed is one topic (a game's subreddit, a gaming news
+// site, r/homelab) never lands in a news section, whatever the writer chose.
+const SECTION_BY_SOURCE_CATEGORY = Object.freeze({ gaming: 'gaming', homelab: 'homelab' });
+
 function isSectionId(id) {
   return SECTION_IDS.has(id);
 }
@@ -43,6 +47,7 @@ module.exports = {
   TOP_SECTION,
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
+  SECTION_BY_SOURCE_CATEGORY,
   SECTION_REQUIRES_PLACE,
   isSectionId,
 };

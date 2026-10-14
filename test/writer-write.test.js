@@ -440,3 +440,20 @@ it('retries over-18-word and quote-only Reddit headlines once', async () => {
   }
   assert.deepStrictEqual(calls, [cases[0][0], cases[0][0], cases[1][0], cases[1][0]]);
 });
+
+it('leaves summary and detail empty when only the headline is available, and drops clickbait', async () => {
+  const mercury = title => ({ title, description: `${title} The Mercury`, source_name: 'The Mercury (Google News)', article_content: '' });
+  const items = [mercury('Hobart now dearest capital for petrol'), mercury('Huge update after boy shot dead')];
+  const written = { is_news: true, summary: 'Prices rose as part of a new government venture.', detail: 'Invented context about a venture.', kicker: 'Petrol prices', section: 'tasmania' };
+  let call = 0;
+  const output = await writeStories(items, { name: 'test', async write() {
+    return { json: { ...written, headline: items[call++].title } };
+  } }, retrySettings);
+  assert.deepStrictEqual(output.stories.map(story => [story.headline, story.summary, story.detail, story.write_problems]), [[
+    'Hobart now dearest capital for petrol', '', '', ['headline only: summary and detail left empty'],
+  ]]);
+  assert.deepStrictEqual(output.dropped.map(story => [story.headline, story.write_problems]), [[
+    'Huge update after boy shot dead',
+    ['section moved: tasmania -> australia (no Tasmanian place named)', 'headline only: summary and detail left empty', 'not news: clickbait headline with no article text'],
+  ]]);
+});
