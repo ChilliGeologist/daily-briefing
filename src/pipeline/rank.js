@@ -78,6 +78,7 @@ function rankClusters(clusters, {
   interests = [],
   limit,
   perSourceFloor = 2,
+  perCategoryFloor = 12,
 } = {}) {
   const scored = clusters
     .map(cluster => scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }))
@@ -94,6 +95,20 @@ function rankClusters(clusters, {
       .filter(cluster => cluster.items.some(item => item.source_name === source))
       .slice(0, perSourceFloor);
     for (const cluster of sourceClusters) floorSelection.set(cluster.id, cluster);
+  }
+
+  // Each source category (gaming, trending, homelab...) keeps its best stories
+  // too. One global ranking let national news and Hacker News fill every
+  // place: on 2026-10-15 the internet-culture feeds reached the writer only
+  // at ranks 106-120 and Around the internet ended with two stories.
+  const categories = [...new Set(scored.flatMap(cluster =>
+    cluster.items.map(item => item.default_category).filter(Boolean)
+  ))];
+  for (const category of categories) {
+    const categoryClusters = scored
+      .filter(cluster => cluster.items.some(item => item.default_category === category))
+      .slice(0, perCategoryFloor);
+    for (const cluster of categoryClusters) floorSelection.set(cluster.id, cluster);
   }
 
   let selected = [...floorSelection.values()]

@@ -14,6 +14,7 @@ const {
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
   SECTION_BY_SOURCE_CATEGORY,
+  SECTION_BY_SINGLE_SOURCE_CATEGORY,
   SECTION_REQUIRES_PLACE,
   isSectionId,
 } = require('./sections');
@@ -113,7 +114,8 @@ function sectionEvidence(item, value) {
 }
 
 function enforceSectionRequirements(value, item, interests, problems) {
-  const sourceSection = SECTION_BY_SOURCE_CATEGORY[item.default_category];
+  const sourceSection = SECTION_BY_SOURCE_CATEGORY[item.default_category]
+    || ((Number(item.coverage) || 1) <= 1 ? SECTION_BY_SINGLE_SOURCE_CATEGORY[item.default_category] : undefined);
   if (sourceSection && TOP_NEWS_SECTIONS.has(value.section)) {
     problems.push(`section moved: ${value.section} -> ${sourceSection} (${item.default_category} source)`);
     value.section = sourceSection;

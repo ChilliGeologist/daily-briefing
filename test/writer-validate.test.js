@@ -731,3 +731,14 @@ it('does not lift a Reddit-only post about a product in a news section', () => {
   ];
   assert.deepStrictEqual(validateEdit({ top: [], sections: { australia: ['s1', 's2', 's3'] } }, list, { sectionSize: 3, topSize: { min: 0, max: 7 } }).sections.australia, ['s3', 's1', 's2']);
 });
+
+it('keeps a single-source internet-culture story in Around the internet, but not one other outlets carried', () => {
+  const value = section => ({ is_news: true, headline: 'What is going on with the new Narnia movie', summary: 'Fans are debating the casting.', detail: 'Fans are debating the casting.', kicker: 'Film casting', section });
+  assert.deepStrictEqual([
+    validateWrite(value('australia'), { ...geographyItem, default_category: 'trending', coverage: 1 }),
+    validateWrite(value('australia'), { ...geographyItem, default_category: 'trending', coverage: 3 }),
+  ], [
+    { ok: true, value: value('internet'), problems: ['section moved: australia -> internet (trending source)'], sectionMoved: true },
+    { ok: true, value: value('australia'), problems: [] },
+  ]);
+});

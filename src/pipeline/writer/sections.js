@@ -37,6 +37,10 @@ const SECTION_REQUIRES_PLACE = Object.freeze({
 // A source whose whole feed is one topic (a game's subreddit, a gaming news
 // site, r/homelab) never lands in a news section, whatever the writer chose.
 const SECTION_BY_SOURCE_CATEGORY = Object.freeze({ gaming: 'gaming', homelab: 'homelab' });
+// An internet-culture feed's story stays in Around the internet unless other
+// outlets carried it too (then it is news, e.g. a Lifeblood appeal that
+// r/popular also posted).
+const SECTION_BY_SINGLE_SOURCE_CATEGORY = Object.freeze({ trending: 'internet' });
 
 function isSectionId(id) {
   return SECTION_IDS.has(id);
@@ -48,6 +52,7 @@ module.exports = {
   SECTION_BY_INTEREST_KIND,
   SECTION_BY_INTEREST_LABEL,
   SECTION_BY_SOURCE_CATEGORY,
+  SECTION_BY_SINGLE_SOURCE_CATEGORY,
   SECTION_REQUIRES_PLACE,
   isSectionId,
 };
