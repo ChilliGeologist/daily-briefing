@@ -45,7 +45,7 @@ it('repairs editor ids and reports measured edit stats', async () => {
       'Story s1 was already selected for top',
       'Story s3 was already selected for top',
     ],
-    stats: { input_tokens: 1000000, output_tokens: 1000000, duration_ms: 42, edit_fallback: 'partial' },
+    stats: { input_tokens: 1000000, output_tokens: 1000000, duration_ms: 42, edit_fallback: 'partial', top_replacements: 0 },
   });
   assert.deepStrictEqual(logs, [
     ['info', 'pipeline:editor', 'Editor output needed repair', { problems: [
@@ -70,10 +70,35 @@ it('uses the deterministic edit entirely when the editor throws', async () => {
     sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
     more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
     problems: [],
-    stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: 'full' },
+    stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: 'full', top_replacements: 0 },
   });
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:editor', 'Editor failed, using deterministic order: editor offline'],
     ['info', 'pipeline:editor', 'Edited: 5 top, 2 in sections'],
   ]);
+});
+
+it('records deterministic top-story replacements in edit stats', async () => {
+  const candidates = [
+    { id: 's1', section: 'tech', coverage: 1, interest_matches: [], rank: 1, kicker: 'One', headline: 'One', summary: 'One.', sources: [{ name: 'Reddit' }] },
+    { id: 's2', section: 'tech', coverage: 1, interest_matches: [], rank: 2, kicker: 'Two', headline: 'Two', summary: 'Two.', sources: [{ name: 'Wired' }] },
+    { id: 's3', section: 'homelab', coverage: 1, interest_matches: [], rank: 3, kicker: 'Three', headline: 'Three', summary: 'Three.', sources: [{ name: 'The Register' }] },
+    { id: 's4', section: 'gaming', coverage: 1, interest_matches: [], rank: 4, kicker: 'Four', headline: 'Four', summary: 'Four.', sources: [{ name: 'Games Industry' }] },
+    { id: 's5', section: 'world', coverage: 1, interest_matches: [], rank: 5, kicker: 'Five', headline: 'Five', summary: 'Five.', sources: [{ name: 'Reuters' }] },
+    { id: 's6', section: 'tasmania', coverage: 1, interest_matches: [], rank: 6, kicker: 'Six', headline: 'Six', summary: 'Six.', sources: [{ name: 'ABC Tasmania' }] },
+    { id: 's7', section: 'australia', coverage: 1, interest_matches: [], rank: 7, kicker: 'Seven', headline: 'Seven', summary: 'Seven.', sources: [{ name: 'ABC News' }] },
+  ];
+  const output = await editStories(candidates, {
+    async edit() { return { json: { top: ['s1', 's2', 's3', 's4', 's5'], sections: {} } }; },
+  }, settings, { info() {}, warn() {} });
+  assert.deepStrictEqual(output, {
+    top: ['s2', 's3', 's5', 's6', 's7'],
+    sections: { tasmania: [], australia: [], world: [], tech: ['s1'], homelab: [], gaming: ['s4'], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    problems: [
+      'Top story s1 was replaced by s6 (community-only source)',
+      'Top story s4 was replaced by s7 (more than two tech/community sections)',
+    ],
+    stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: 'partial', top_replacements: 2 },
+  });
 });

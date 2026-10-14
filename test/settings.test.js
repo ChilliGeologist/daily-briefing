@@ -53,7 +53,7 @@ it('returns stored values when set', () => {
     settings.getPaywalledHosts(),
     settings.getMaxSameStoryChecks(),
     settings.getMaxCandidates(),
-  ], [24, ['x'], [], 5, 135]);
+  ], [24, ['x', ...newFillerPatterns.slice(-3)], [], 5, 135]);
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),
@@ -70,6 +70,9 @@ const newFillerPatterns = [
   'ask away', 'megathread',
   '/\\b(?:daily|weekly|monthly)\\s+(?:discussion|questions?)(?:\\s+(?:discussion|questions?))?\\s+threads?\\b/i',
   '/^\\s*(?:(?:hardware|quick)\\s+question|question|help|need\\s+advice)\\s*\\??\\s*$/i',
+  '/\\(YC [WS]\\d{2}\\) is hiring/i',
+  '/\\bis hiring\\b/i',
+  '/^\\s*revealed:\\s*liquidator appointments for businesses in the .+ council area\\b/i',
 ];
 
 it('upgrades stored filler patterns once without restoring deleted defaults or losing custom patterns', () => {
@@ -78,10 +81,10 @@ it('upgrades stored filler patterns once without restoring deleted defaults or l
   const settings = createSettings(db);
   const expected = ['my custom pattern', 'ask away', 'superquiz', ...newFillerPatterns.slice(1)];
   assert.deepStrictEqual(settings.getFillerPatterns(), expected);
-  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 1 });
+  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 2 });
   settings.set('filler_patterns', ['my custom pattern']);
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), ['my custom pattern']);
-  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 1 });
+  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 2 });
 });
 
 it('seeds fresh filler defaults once and respects an empty list after editing', () => {

@@ -63,7 +63,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(written, {
     stories: [
       {
-        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world',
+        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: '', section: 'world',
         written_by: 'ollama:qwen3:8b', write_ok: true, write_problems: ['Kicker repeated the section name'],
       },
       {
@@ -343,4 +343,100 @@ it('keeps the not-news override on a retried unread publisher story', async () =
   assert.strictEqual(output.stats.not_news_overridden, 1);
   assert.deepStrictEqual(output.stories[0], { ...retryItem, rank: 1, id: 's1', ...retryValue, headline: 'RBA minutes discuss inflation again', written_by: 'test', write_ok: true, write_problems: ['kept: no article text, not-news ignored'] });
   assert.deepStrictEqual(output.dropped, []);
+});
+
+it('retries missing-text meta writing once and falls back to the teaser sentence if it persists', async () => {
+  const source = {
+    title: 'Hobart CBD jobs face cuts',
+    description: 'Job cuts are expected in the Hobart CBD. A decision is due next week.',
+    source_name: 'The Mercury',
+    interest_matches: [],
+  };
+  const bad = {
+    is_news: true,
+    headline: 'Hobart CBD jobs face cuts',
+    summary: 'No article text was provided, so no summary can be written.',
+    detail: 'No further details were available in the supplied text.',
+    kicker: 'Jobs',
+    section: 'tasmania',
+  };
+  const calls = [];
+  const output = await writeStories([source], {
+    name: 'test',
+    async write(...args) { calls.push(args); return { json: bad }; },
+  }, retrySettings);
+  const { writeSystemPrompt, writeUserPrompt, WRITE_SCHEMA } = require('../src/pipeline/writer/prompts');
+  const prompt = writeUserPrompt(source, { articleChars: 6000 });
+  assert.deepStrictEqual(calls, [
+    [writeSystemPrompt(), prompt, WRITE_SCHEMA],
+    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
+  ]);
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...source,
+      rank: 1,
+      id: 's1',
+      ...bad,
+      summary: 'Job cuts are expected in the Hobart CBD.',
+      detail: 'Job cuts are expected in the Hobart CBD.',
+      written_by: 'test',
+      write_ok: true,
+      write_problems: [
+        'Missing-text retry still referred to unavailable source text',
+        'Summary replaced with the first teaser sentence',
+        'Detail replaced with the first teaser sentence',
+      ],
+    }],
+    dropped: [],
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
+it('forces deterministic community help requests to not-news but keeps highly engaged posts', async () => {
+  const items = [
+    { title: 'Help me pick a rack please', source_type: 'reddit', source_name: 'r/homelab', article_content: 'x'.repeat(500), interest_matches: [] },
+    { title: 'Hardware question', source_type: 'reddit', source_name: 'r/homelab', score: 500, comment_count: 80, article_content: 'x'.repeat(500), interest_matches: [] },
+  ];
+  const written = headline => ({ is_news: true, headline, summary: 'A user asks for advice.', detail: 'A user asks the community for advice about homelab hardware.', kicker: 'Hardware Help', section: 'homelab' });
+  const outputs = [written(items[0].title), written('Community discusses homelab hardware choices')];
+  let index = 0;
+  const output = await writeStories(items, {
+    name: 'test', async write() { return { json: outputs[index++] }; },
+  }, retrySettings);
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...items[1], rank: 2, id: 's2', ...outputs[1], kicker: 'Hardware help',
+      written_by: 'test', write_ok: true, write_problems: [],
+    }],
+    dropped: [{
+      ...items[0], rank: 1, id: 's1', ...written(items[0].title), is_news: false, kicker: 'Hardware help',
+      written_by: 'test', write_ok: true,
+      write_problems: ['not news: community help or buying request'],
+    }],
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
+it('retries over-18-word and quote-only Reddit headlines once', async () => {
+  const cases = [
+    ['Kernel Summit says the time has come to make it harder for new people to contribute code after AI submission flood', 'Linus Torvalds calls for tighter kernel contribution rules'],
+    ['“I am joining the biggest club in the land” — Lachie Whitfield', 'Lachie Whitfield completes move to Carlton football club'],
+  ];
+  const calls = [];
+  for (const [headline, replacement] of cases) {
+    let count = 0;
+    const output = await writeStories([{
+      title: headline, source_type: 'reddit', source_name: 'Reddit', description: 'The move was announced.', interest_matches: [],
+    }], {
+      name: 'test', async write() {
+        count++;
+        calls.push(headline);
+        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced.', detail: 'The move was announced by the parties.', kicker: 'Code Rules', section: 'tech' } };
+      },
+    }, retrySettings);
+    assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {
+      count: 2, headline: replacement, retries: 1,
+    });
+  }
+  assert.deepStrictEqual(calls, [cases[0][0], cases[0][0], cases[1][0], cases[1][0]]);
 });

@@ -14,6 +14,7 @@ async function editStories(stories, writer, settings, log) {
     output_tokens: 0,
     duration_ms: 0,
     edit_fallback: 'none',
+    top_replacements: 0,
   };
 
   try {
@@ -29,6 +30,7 @@ async function editStories(stories, writer, settings, log) {
       output_tokens: Number(usage.output_tokens) || 0,
       duration_ms: Number(response.duration_ms) || 0,
       edit_fallback: edited.fallback,
+      top_replacements: (edited.topReplacements || []).length,
     };
     if (edited.fallback === 'full' && log && log.warn) {
       log.warn('pipeline:editor', 'Editor output was unusable, using deterministic order', { problems: edited.problems });
@@ -38,6 +40,7 @@ async function editStories(stories, writer, settings, log) {
   } catch (error) {
     edited = deterministicEdit(stories, options);
     stats.edit_fallback = 'full';
+    stats.top_replacements = (edited.topReplacements || []).length;
     if (log && log.warn) {
       log.warn('pipeline:editor', `Editor failed, using deterministic order: ${error.message}`);
     }

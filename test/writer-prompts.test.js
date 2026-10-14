@@ -39,13 +39,13 @@ Choose exactly one section:
 - gaming — Video games and gaming communities.
 - internet — Reddit and Hacker News culture, online communities and oddities.
 
-The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech.
+The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. Overseas sport, entertainment and celebrity stories are world unless an Australian team, player or event is central.
 
 Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
-Use only facts stated in the supplied text; never add a cause of death, illness, diagnosis, criminal charge, age, number, place, name or quote that the text does not state. If the text says a cause is unknown or under investigation, say exactly that.
+Use only facts stated in the supplied text; never add a cause of death, illness, diagnosis, criminal charge, age, number, place, name or quote that the text does not state. If the text says a cause is unknown or under investigation, say exactly that. Describe proposals, polls and rumours as proposals, polls and rumours, never as settled facts. Write whole sentences that make sense alone.
 
-If the article text is missing, short or is clearly not the story (a cookie notice, a login or subscribe page), write from the headline and teasers. Never mark a story not news because the article text is missing.
+If the article text is missing, short or is clearly not the story (a cookie notice, a login or subscribe page), write plain news from the headline and teasers. Never mention missing or unavailable text, content, information or details, and never mark a story not news because article text is missing.
 
 Never mention the reader, where they live, or what the text does not say about them.
 
@@ -105,7 +105,7 @@ it('defines an edit schema constrained to the supplied story ids and fixed edito
       },
     },
   });
-  assert.strictEqual(editSystemPrompt(), `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`);
+  assert.strictEqual(editSystemPrompt(), `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Public safety and deaths in Tasmania, and major world events, outrank technology news unless the technology story is a security hole in something the reader runs. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. Include at most two stories from tech, homelab, gaming and internet combined, and never include a story whose only sources are Reddit or Hacker News. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`);
 });
 
 it('formats every story for the editor on one line', () => {

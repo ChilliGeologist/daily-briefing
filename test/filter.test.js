@@ -74,3 +74,26 @@ it('filters standing threads and whole generic labels while keeping specific sto
   assert.deepStrictEqual(result.kept.map(value => value.title), keep);
   assert.deepStrictEqual(result.stats, { total: 18, kept: 6, stale: 0, filler: 12 });
 });
+
+it('filters HN hiring ads and liquidator appointment lists using upgraded defaults', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = [
+    'Coris (YC S22) Is Hiring Back End Engineer',
+    'PostEra (YC W20) Is Hiring AI Researchers for Drug Discovery',
+    'Acme Is Hiring Engineers',
+    'REVEALED: Liquidator appointments for businesses in the Northern Midlands council area for October 14',
+  ];
+  const candidates = titles.map(title => item(title, 1, 'Hacker News (RSS)'));
+  const hiringNews = item('Factory is hiring 200 workers after expansion', 1, 'ABC');
+  const result = filterItems([...candidates, hiringNews], opts({ fillerPatterns: settings.getFillerPatterns() }));
+  assert.deepStrictEqual(result, {
+    kept: [hiringNews],
+    dropped: [
+      { item: candidates[0], reason: 'filler: /\\(YC [WS]\\d{2}\\) is hiring/i' },
+      { item: candidates[1], reason: 'filler: /\\(YC [WS]\\d{2}\\) is hiring/i' },
+      { item: candidates[2], reason: 'filler: /\\bis hiring\\b/i' },
+      { item: candidates[3], reason: 'filler: /^\\s*revealed:\\s*liquidator appointments for businesses in the .+ council area\\b/i' },
+    ],
+    stats: { total: 5, kept: 1, stale: 0, filler: 4 },
+  });
+});

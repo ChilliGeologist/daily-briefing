@@ -1,10 +1,59 @@
 'use strict';
 
 const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = require('./prompts');
-const { isVagueHeadline, validateWrite } = require('./validate');
+const {
+  isVagueHeadline,
+  isCommunityHelpRequest,
+  missingTextFields,
+  validateWrite,
+} = require('./validate');
+
+const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return count === 1 ? singular : pluralForm;
+}
+
+function firstSentence(item) {
+  const teaser = String(item.description || item.merged_descriptions?.[0] || '').trim();
+  const match = teaser.match(/^.*?[.!?](?=\s|$)/s);
+  return (match ? match[0] : teaser).slice(0, 200).trim();
+}
+
+function isQuoteOnlyHeadline(headline) {
+  return /^\s*["“‘][^"”’]+["”’](?:\s*(?:[-–—]{1,2}\s*)?[\p{L}][^.]*)?\s*$/u.test(String(headline || ''));
+}
+
+function headlineRetryReason(headline, item) {
+  if (isVagueHeadline(headline)) return 'too vague';
+  if ((String(headline || '').trim().match(/\S+/g) || []).length > 18) return 'longer than 18 words';
+  if (isCommunityItem(item) && isQuoteOnlyHeadline(headline)) return 'only a quote';
+  return null;
+}
+
+function applyMissingTextFallback(validation, item) {
+  const fields = validation.missingTextFields || [];
+  if (fields.length === 0) return;
+  const teaser = firstSentence(item);
+  validation.problems.push('Missing-text retry still referred to unavailable source text');
+  for (const field of ['summary', 'detail']) {
+    if (!fields.includes(field)) continue;
+    const label = `${field[0].toUpperCase()}${field.slice(1)}`;
+    // Keep the sentences that are real news; drop only the ones about the text.
+    const kept = (String(validation.value[field]).match(/[^.!?]+(?:[.!?]+|$)/g) || [])
+      .map(sentence => sentence.trim())
+      .filter(sentence => sentence && missingTextFields({ [field]: sentence }).length === 0)
+      .join(' ');
+    if (kept) {
+      validation.value[field] = kept;
+      validation.problems.push(`${label}: sentences about unavailable text removed`);
+    } else {
+      validation.value[field] = teaser;
+      validation.problems.push(teaser
+        ? `${label} replaced with the first teaser sentence`
+        : `${label} left empty because no teaser was available`);
+    }
+  }
 }
 
 async function writeStories(items, writer, settings, log, emitProgress, checkCancelled) {
@@ -53,15 +102,37 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       validation = first.validation;
       writtenBy = first.backend;
       if (validation.ok && (validation.value.is_news || overrideNotNews)
-        && isVagueHeadline(validation.value.headline)) {
+        && (validation.missingTextFields || []).length > 0) {
+        try {
+          const retry = await request(`${userPrompt}\n\n${MISSING_TEXT_RETRY_NOTE}`);
+          if (retry.validation.ok) {
+            validation = retry.validation;
+            writtenBy = retry.backend;
+          } else {
+            validation.problems.push('Missing-text retry was invalid');
+          }
+        } catch (error) {
+          validation.problems.push(`Missing-text retry failed: ${error.message}`);
+        }
+        applyMissingTextFallback(validation, item);
+      }
+      const retryReason = validation.ok && (validation.value.is_news || overrideNotNews)
+        ? headlineRetryReason(validation.value.headline, item)
+        : null;
+      if (retryReason) {
         stats.headline_retries++;
-        const note = `Headline "${validation.value.headline}" is too vague; write a specific headline of 6–14 words saying what happened, from the supplied text only.`;
+        const note = `Headline "${validation.value.headline}" is ${retryReason}; write a specific headline of 6–14 words saying what happened, from the supplied text only.`;
         try {
           const retry = await request(`${userPrompt}\n\n${note}`);
           if (!retry.validation.ok) {
             validation.problems.push('Headline retry was invalid');
-          } else if (isVagueHeadline(retry.validation.value.headline)) {
-            validation.problems.push(`Headline retry was still vague: "${retry.validation.value.headline}"`);
+          } else if (headlineRetryReason(retry.validation.value.headline, item)) {
+            const stillReason = headlineRetryReason(retry.validation.value.headline, item);
+            validation.problems.push(stillReason === 'too vague'
+              ? `Headline retry was still vague: "${retry.validation.value.headline}"`
+              : `Headline retry was still unsuitable: "${retry.validation.value.headline}"`);
+          } else if ((retry.validation.missingTextFields || []).length > 0) {
+            validation.problems.push('Headline retry referred to unavailable source text');
           } else {
             validation = retry.validation;
             writtenBy = retry.backend;
@@ -72,6 +143,10 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       }
       stats.facts_removed += validation.facts_removed || 0;
       stats.numbers_unsupported += validation.numbers_unsupported || 0;
+      if (isCommunityHelpRequest(item) && validation.value.is_news) {
+        validation.value.is_news = false;
+        validation.problems.push('not news: community help or buying request');
+      }
       if (!validation.value.is_news && overrideNotNews) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');

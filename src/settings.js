@@ -9,11 +9,17 @@ const FILLER_PATTERNS_ADDED_V1 = [
   '/\\b(?:daily|weekly|monthly)\\s+(?:discussion|questions?)(?:\\s+(?:discussion|questions?))?\\s+threads?\\b/i',
   '/^\\s*(?:(?:hardware|quick)\\s+question|question|help|need\\s+advice)\\s*\\??\\s*$/i',
 ];
+const FILLER_PATTERNS_ADDED_V2 = [
+  '/\\(YC [WS]\\d{2}\\) is hiring/i',
+  '/\\bis hiring\\b/i',
+  '/^\\s*revealed:\\s*liquidator appointments for businesses in the .+ council area\\b/i',
+];
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
   'everybody appearing at', 'in case you missed it',
   ...FILLER_PATTERNS_ADDED_V1,
+  ...FILLER_PATTERNS_ADDED_V2,
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
@@ -22,12 +28,17 @@ const DEFAULT_PAYWALLED_HOSTS = [
 function createSettings(db) {
   // Run once at app startup so the settings UI and pipeline see the same list.
   // Write the revision last: if startup is interrupted, appending is idempotent.
-  if (Number(db.getSetting('filler_patterns_revision')) < 1) {
+  const fillerRevision = Number(db.getSetting('filler_patterns_revision'));
+  if (fillerRevision < 2) {
     const stored = db.getSetting('filler_patterns');
     const patterns = stored === null ? [...DEFAULT_FILLER_PATTERNS]
-      : [...stored, ...FILLER_PATTERNS_ADDED_V1.filter(pattern => !stored.includes(pattern))];
+      : [
+        ...stored,
+        ...(fillerRevision < 1 ? FILLER_PATTERNS_ADDED_V1 : []),
+        ...FILLER_PATTERNS_ADDED_V2,
+      ].filter((pattern, index, all) => all.indexOf(pattern) === index);
     db.setSetting('filler_patterns', patterns);
-    db.setSetting('filler_patterns_revision', 1);
+    db.setSetting('filler_patterns_revision', 2);
   }
   return {
     getAppTitle() {
