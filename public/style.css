@@ -1579,3 +1579,463 @@ main {
   background: var(--text-muted, #888);
   color: var(--bg);
 }
+
+/* Stage 4 reading route. The full theme token set arrives with stage 4 Task 7;
+   these light Paper values keep Tasks 2–5 usable without affecting panels. */
+#app[data-view="reading"] {
+  --paper-page: #f7f3ea;
+  --paper-reader: #fbf8f1;
+  --paper-ink: #1d1a16;
+  --paper-summary: #57514a;
+  --paper-quiet: #8a8174;
+  --paper-rule: #d6cfc0;
+  --paper-rust: #9a3412;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app[data-view="reading"] > header {
+  position: relative;
+  z-index: 10;
+  max-width: var(--max-width);
+  padding: 18px 18px 12px;
+  background: var(--paper-page);
+  color: var(--paper-ink);
+  border-bottom: 3px double var(--paper-ink);
+}
+
+#app[data-view="reading"] .header-content {
+  display: block;
+  text-align: center;
+}
+
+#app[data-view="reading"] .header-left {
+  min-width: 0;
+}
+
+#app[data-view="reading"] header h1 {
+  color: var(--paper-ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: 0.5px;
+}
+
+#app[data-view="reading"] .date {
+  margin-top: 4px;
+  color: var(--paper-summary);
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 1.7px;
+  text-transform: uppercase;
+}
+
+#app[data-view="reading"] .header-right {
+  justify-content: center;
+  margin-top: 9px;
+}
+
+#app[data-view="reading"] .btn-icon {
+  min-width: 40px;
+  min-height: 40px;
+  color: var(--paper-summary);
+  border-color: transparent;
+}
+
+#app[data-view="reading"] .btn-icon:hover,
+#app[data-view="reading"] .btn-icon.btn-icon--active {
+  color: var(--paper-rust);
+  border-color: var(--paper-rule);
+  background: transparent;
+}
+
+#app[data-view="reading"] #briefing-headline,
+#app[data-view="reading"] #suggestion-banner,
+#app[data-view="reading"] #app-footer {
+  display: none;
+}
+
+#reading-stage.reading-stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: var(--max-width);
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  background: var(--paper-reader);
+  color: var(--paper-ink);
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.reader-page,
+.briefing-page,
+.curl-layer,
+.curl-flap {
+  position: absolute;
+  inset: 0;
+}
+
+.reader-page,
+.briefing-page {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overflow-wrap: anywhere;
+}
+
+.reader-page {
+  z-index: 1;
+  padding: 18px 20px 48px;
+  background: var(--paper-reader);
+}
+
+.reader-shadow { z-index: 2; }
+
+.briefing-page {
+  z-index: 3;
+  padding: 0 18px 48px;
+  background: var(--paper-page);
+  opacity: 1;
+  transition: opacity 150ms ease;
+}
+
+.front-crease-shadow { z-index: 4; }
+
+.curl-flap {
+  z-index: 5;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  transform-origin: 0 0;
+  background: #f1ead9;
+}
+
+.curl-layer,
+.curl-ghost,
+.curl-band {
+  pointer-events: none;
+}
+
+.curl-layer {
+  overflow: hidden;
+}
+
+.curl-ghost {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.09;
+}
+
+.curl-band {
+  position: absolute;
+  width: 3000px;
+  height: 6000px;
+  margin-top: -3000px;
+  transform-origin: 0 50%;
+}
+
+.reading-stage.reader-active .briefing-page {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.reading-sections {
+  width: 100%;
+}
+
+.reading-section {
+  margin: 0 0 24px;
+}
+
+.reading-section-label {
+  margin: 18px 0 5px;
+  color: var(--paper-rust);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.reading-story {
+  border-top: 1px solid var(--paper-rule);
+}
+
+.reading-section--top .reading-story:first-child {
+  border-top: 0;
+}
+
+.reading-story-toggle {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reading-story-kicker,
+.reading-story-title,
+.reading-story-summary {
+  display: block;
+}
+
+.reading-story-kicker {
+  margin-bottom: 2px;
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.reading-story-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  transition: font-size 350ms ease;
+}
+
+.reading-story--lead .reading-story-title {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.reading-story-summary {
+  margin-top: 4px;
+  color: var(--paper-summary);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.reading-story-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 450ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.reading-story-detail-overflow {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.reading-story-detail-inner {
+  padding: 0 0 12px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 350ms ease 100ms, transform 350ms ease 100ms;
+}
+
+.reading-story.expanded .reading-story-detail {
+  grid-template-rows: 1fr;
+}
+
+.reading-story.expanded .reading-story-detail-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reading-story.expanded:not(.reading-story--lead) .reading-story-title {
+  font-size: 19px;
+}
+
+.reading-story-detail-text {
+  color: var(--paper-ink);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.reading-story-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 8px;
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.read-full-button,
+.reading-more-button,
+.reader-back {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--paper-rust);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.read-full-button {
+  margin-top: 6px;
+  padding: 7px 0;
+}
+
+.reading-more-button {
+  display: block;
+  padding: 7px 0;
+  text-align: left;
+}
+
+.reader-back {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 4px 0;
+}
+
+.reading-story-toggle:focus-visible,
+.read-full-button:focus-visible,
+.reading-more-button:focus-visible,
+.reader-back:focus-visible,
+.reader-original-link:focus-visible {
+  outline: 3px solid var(--paper-rust);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+#reading-stage .reader-header {
+  max-width: 65ch;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.reader-kicker {
+  margin: 0 0 4px;
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.reader-title {
+  margin: 0 0 8px;
+  color: var(--paper-ink);
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.reader-byline {
+  margin: 0 0 14px;
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.reader-body {
+  max-width: 65ch;
+  margin: 0 auto;
+  color: var(--paper-ink);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.reader-body p,
+.reader-body ul,
+.reader-body ol,
+.reader-body blockquote,
+.reader-body figure,
+.reader-body h2,
+.reader-body h3,
+.reader-body h4 {
+  margin: 0 0 14px;
+}
+
+.reader-body ul,
+.reader-body ol {
+  padding-left: 1.4em;
+}
+
+.reader-body blockquote {
+  padding-left: 14px;
+  border-left: 3px solid var(--paper-rule);
+  color: var(--paper-summary);
+}
+
+.reader-body img,
+.reader-hero {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 14px;
+}
+
+.reader-body figcaption {
+  margin-top: -8px;
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.reader-body a {
+  color: var(--paper-rust);
+  overflow-wrap: anywhere;
+}
+
+.reader-original-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 6px;
+  color: var(--paper-rust);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 600px) {
+  #app[data-view="reading"] > header {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  #reading-stage.reading-stage { padding: 0; }
+
+  .briefing-page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .reader-page {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .briefing-page,
+  .reading-story-title,
+  .reading-story-detail,
+  .reading-story-detail-inner {
+    transition: none;
+  }
+}

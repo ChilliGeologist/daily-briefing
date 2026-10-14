@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Briefing</title>
+  <title>The Daily Gump</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0f1117">
@@ -16,7 +16,7 @@
     <header>
       <div class="header-content">
         <div class="header-left">
-          <h1 id="app-title">Daily Briefing</h1>
+          <h1 id="app-title">The Daily Gump</h1>
           <p class="date" id="briefing-date"></p>
         </div>
         <div class="header-right">
@@ -107,14 +107,32 @@
       <div id="pipeline-content"></div>
     </div>
 
-    <main id="sections-container" class="view view--active">
-      <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <p>Loading briefing...</p>
+    <main id="reading-stage" class="reading-stage view view--active">
+      <article id="reader-page" class="reader-page" inert aria-hidden="true">
+        <button type="button" id="reader-back" class="reader-back">Back</button>
+        <header id="reader-header" class="reader-header"></header>
+        <div id="reader-body" class="reader-body"></div>
+      </article>
+      <div class="curl-layer reader-shadow" aria-hidden="true">
+        <div id="reader-shadow-band" class="curl-band"></div>
       </div>
-      <div class="empty-state hidden" id="empty-state">
-        <p>No briefing available yet.</p>
-        <p class="muted">Run the pipeline or wait for the next scheduled run.</p>
+      <div id="briefing-page" class="briefing-page">
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Loading briefing...</p>
+        </div>
+        <div class="empty-state hidden" id="empty-state">
+          <p>No briefing available yet.</p>
+          <p class="muted">Run the pipeline or wait for the next scheduled run.</p>
+        </div>
+        <div id="sections-container" class="reading-sections"></div>
+      </div>
+      <div class="curl-layer front-crease-shadow" aria-hidden="true">
+        <div id="front-shadow-band" class="curl-band"></div>
+      </div>
+      <div id="curl-flap" class="curl-flap" aria-hidden="true">
+        <div id="curl-ghost" class="curl-ghost" inert aria-hidden="true"></div>
+        <div id="curl-light-band" class="curl-band"></div>
       </div>
     </main>
     <footer id="app-footer" class="app-footer">
@@ -126,6 +144,8 @@
       </div>
     </footer>
   </div>
+  <script src="/reading-logic.js"></script>
+  <script src="/curl-geometry.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
