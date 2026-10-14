@@ -84,6 +84,43 @@ it('uses the first written story then the product name as headline fallbacks', (
   ], ['First written', 'The Daily Gump']);
 });
 
+it('stores capped post text and real top replies only for community stories', () => {
+  const community = story('s1', 'internet', 'Community post', 'Detail', {
+    source_type: 'reddit',
+    source_name: 'Reddit',
+    description: 'p'.repeat(6005),
+    top_comments: [
+      'Expand the replies to this comment to learn how AI was used in this post/project.',
+      'a'.repeat(1005), 'Two', 'Three', 'Four', 'Five', 'Six',
+    ],
+  });
+  const regular = story('s2', 'world', 'Regular story', 'Detail', {
+    description: 'Publisher teaser', top_comments: ['Not a community reply'],
+  });
+  const result = assemble({
+    top: [], sections: { internet: ['s1'], world: ['s2'] }, more: {},
+  }, new Map([['s1', community], ['s2', regular]]));
+  const communityItem = result.sections.find(section => section.id === 'internet').items[0];
+  const regularItem = result.sections.find(section => section.id === 'world').items[0];
+
+  assert.deepStrictEqual({
+    community: communityItem,
+    regular: regularItem,
+  }, {
+    community: {
+      id: 's1', title: 'Community post', kicker: 's1 topic', summary: 's1 summary', detail: 'Detail', significance: 'medium', image: null,
+      sources: [{ name: 's1 outlet', url: 'https://s1.test' }], canonical_url: 'https://s1.test/canonical', article_url: 'https://s1.test/article',
+      article_html: '<p>s1</p>', coverage: 2, interest_labels: ['s1 interest'], written_by: 'ollama:qwen3:8b', reading_time: 1,
+      description: 'p'.repeat(6000), top_comments: ['a'.repeat(1000), 'Two', 'Three', 'Four', 'Five'],
+    },
+    regular: {
+      id: 's2', title: 'Regular story', kicker: 's2 topic', summary: 's2 summary', detail: 'Detail', significance: 'medium', image: null,
+      sources: [{ name: 's2 outlet', url: 'https://s2.test' }], canonical_url: 'https://s2.test/canonical', article_url: 'https://s2.test/article',
+      article_html: '<p>s2</p>', coverage: 2, interest_labels: ['s2 interest'], written_by: 'ollama:qwen3:8b', reading_time: 1,
+    },
+  });
+});
+
 it('counts regular and more items when a briefing is inserted', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daily-gump-db-'));
   const db = initDB(path.join(dir, 'briefings.db'));

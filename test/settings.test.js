@@ -53,7 +53,7 @@ it('returns stored values when set', () => {
     settings.getPaywalledHosts(),
     settings.getMaxSameStoryChecks(),
     settings.getMaxCandidates(),
-  ], [24, ['x', ...newFillerPatterns.slice(-4)], [], 5, 135]);
+  ], [24, ['x', ...newFillerPatterns.slice(-5)], [], 5, 135]);
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),
@@ -74,6 +74,7 @@ const newFillerPatterns = [
   '/\\bis hiring\\b/i',
   '/^\\s*revealed:\\s*liquidator appointments for businesses in the .+ council area\\b/i',
   '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
+  '/\\bdiscussion\\s+threads?\\b/i',
 ];
 
 it('upgrades stored filler patterns once without restoring deleted defaults or losing custom patterns', () => {
@@ -82,10 +83,10 @@ it('upgrades stored filler patterns once without restoring deleted defaults or l
   const settings = createSettings(db);
   const expected = ['my custom pattern', 'ask away', 'superquiz', ...newFillerPatterns.slice(1)];
   assert.deepStrictEqual(settings.getFillerPatterns(), expected);
-  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 3 });
+  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 4 });
   settings.set('filler_patterns', ['my custom pattern']);
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), ['my custom pattern']);
-  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 3 });
+  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 4 });
 });
 
 it('seeds fresh filler defaults once and respects an empty list after editing', () => {
@@ -97,11 +98,18 @@ it('seeds fresh filler defaults once and respects an empty list after editing', 
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), []);
 });
 
-it('upgrades a revision 2 install with only the newest patterns, keeping its deletions', () => {
+it('upgrades a revision 2 install with only the later patterns, keeping its deletions', () => {
   const vals = { filler_patterns: ['my custom pattern', 'megathread'], filler_patterns_revision: 2 };
   const settings = createSettings(fakeDb(vals));
   assert.deepStrictEqual(settings.getFillerPatterns(), [
-    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
+    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i', '/\\bdiscussion\\s+threads?\\b/i',
   ]);
-  assert.strictEqual(vals.filler_patterns_revision, 3);
+  assert.strictEqual(vals.filler_patterns_revision, 4);
+});
+
+it('upgrades a revision 3 install with the Discussion Thread filler only', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 3 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', '/\\bdiscussion\\s+threads?\\b/i']);
+  assert.strictEqual(vals.filler_patterns_revision, 4);
 });

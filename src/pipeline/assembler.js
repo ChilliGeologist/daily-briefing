@@ -1,6 +1,11 @@
 'use strict';
 
 const { SECTIONS, TOP_SECTION } = require('./writer/sections');
+const { communityReplies, isCommunityItem } = require('./writer/prompts');
+
+const COMMUNITY_POST_CHARS = 6000;
+const COMMUNITY_REPLY_COUNT = 5;
+const COMMUNITY_REPLY_CHARS = 1000;
 
 function valuesOf(storiesById) {
   return storiesById instanceof Map ? [...storiesById.values()] : Object.values(storiesById || {});
@@ -16,7 +21,7 @@ function readingTime(detail) {
 }
 
 function readerStory(story, significance) {
-  return {
+  const output = {
     id: story.id,
     title: story.headline,
     kicker: story.kicker,
@@ -33,6 +38,11 @@ function readerStory(story, significance) {
     written_by: story.written_by,
     reading_time: readingTime(story.detail),
   };
+  if (isCommunityItem(story)) {
+    output.description = String(story.description || '').trim().slice(0, COMMUNITY_POST_CHARS);
+    output.top_comments = communityReplies(story, COMMUNITY_REPLY_COUNT, COMMUNITY_REPLY_CHARS);
+  }
+  return output;
 }
 
 function storiesForIds(ids, storiesById, significance, excluded = new Set()) {

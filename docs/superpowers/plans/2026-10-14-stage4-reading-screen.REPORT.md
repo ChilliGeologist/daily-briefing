@@ -136,3 +136,107 @@ Every computed boundary is within the required three minutes of the published mi
 ## Browser verification still required
 
 No browser automation, jsdom or manual browser run was used. Unit tests do not verify layout at 360, 390 or 430 px, tablet/desktop framing, 200% zoom, safe-area rendering, native scrolling, pointer feel, corner choice on screen, reverse-print alignment, gradient appearance, focus movement, browser-history timing, installed-app cache update, theme appearance, live timer switching or reduced-motion cross-fades. Task 8's numbered manual checks remain for Jesse.
+
+---
+
+# Follow-ups from Jesse's review (2026-10-14)
+
+## Outcome
+
+- Removed More/Show less entirely. `prepareSections` now keeps first-occurrence de-duplication and top-first ordering while putting every `items` story followed by every `more` story in `shown`; `hidden` is always empty.
+- Added a two-column briefing at 700 px and a three-column broadsheet at 1024 px. At the desktop breakpoint, You should know spans the sheet: its lead takes two thirds and the remaining picks stack in the final third. Topic sections use three columns and rules; expansion remains inside its story column. The article reader remains 65ch.
+- Restyled the masthead with the system serif stack, a heavy high-contrast title, double rules above and below, and a small-caps long-date edition line. No font or other network request was added.
+- The no-article reader fallback now uses `detail`, then `summary`. Stored community stories also carry capped plain-text post text and up to five cleaned replies; the reader renders them with `textContent` under “What people said”. The only HTML parsing boundary remains sanitised `article_html`.
+- Centralised four community-boilerplate reply patterns. Cleaned replies now feed the writer prompt, unanswered-question rule and stored reader shape. A community title containing a question mark is not news below two real replies. Settings filler revision 4 adds a standing Discussion Thread pattern.
+- Bumped the service-worker cache to v4 so installed copies receive the changed scripts and styles together.
+
+Community storage caps are 6,000 characters for post text and five replies of 1,000 characters each.
+
+## Files changed
+
+- `public/app.js` — removed More state/rendering and added safe detail/community reader rendering.
+- `public/reading-logic.js` — all-story section preparation and pure reader-content selection.
+- `public/style.css` — masthead polish, community reader styles and 700/1024 px newspaper layouts.
+- `public/sw.js` — cache version bump.
+- `src/pipeline/assembler.js` — community-only post/reply storage with caps.
+- `src/pipeline/writer/prompts.js` — shared boilerplate patterns/reply cleaner and cleaned writer comments.
+- `src/pipeline/writer/validate.js` — unanswered community-question predicate.
+- `src/pipeline/writer/write.js` — deterministic enforcement of the new predicate.
+- `src/settings.js` — filler revision 4 and Discussion Thread default.
+- `test/assembler.test.js` — community storage boundary and cap coverage.
+- `test/reading-logic.test.js` — complete-section and reader-content whole-value coverage.
+- `test/settings.test.js` — revision 4 seed and upgrade coverage.
+- `test/writer-prompts.test.js` — shared-pattern and cleaned-prompt coverage.
+- `test/writer-validate.test.js` — reply-counting boundary coverage.
+- `test/writer-write.test.js` — writer-stage enforcement coverage.
+- `docs/superpowers/plans/2026-10-14-stage4-reading-screen.REPORT.md` — this follow-up record.
+
+## Test evidence
+
+- Red run after adding/changing the focused assertions and before implementation: `node --test test/reading-logic.test.js test/writer-prompts.test.js test/writer-validate.test.js test/writer-write.test.js test/assembler.test.js test/settings.test.js` — 88 tests, 71 passed, 17 failed. Every new test failed on its absent behaviour; the changed all-story/revision assertions failed on the old behaviour.
+- Focused green run: the same command — 88 passed, 0 failed.
+- Full green run: `npm test` — 221 passed, 0 failed, 16 suites.
+- `node --check` passed for every changed JavaScript source and `git diff --check` passed.
+
+## Real-data check: all eight mornings
+
+The read-only pass covered 287 community-candidate occurrences: 102 unique community posts and 27 unique question-mark titles. Reply totals below are after boilerplate removal; occurrence counts show repeats across the eight snapshots.
+
+### Questions caught
+
+- `Anyone using Domoticz over HA? Curious to hear your experiences.` — 1 real reply; 3 occurrences.
+- `What's the deal with an AI-generated meme character ending up in a federal lawsuit?` — 0 real replies; 2 occurrences.
+- `“No database required” sounds simpler—but when is a JSON file actually the better choice?` — 1 real reply; 1 occurrence.
+
+### Questions kept by the reply threshold
+
+- `Tasmanian council refused to waive a parking fine despite a medical emergency. Is this normal?` — 8 real replies; 8 occurrences.
+- `BUG: Game Stuttering & Graphic Bugged Since Trove Of Terror Dropped?` — 7 real replies; 1 occurrence.
+- `Have a question about the game or the subreddit? Ask away!` — 8 real replies; 6 occurrences.
+- `Proxmox Home lab ideas?` — 8 real replies; 1 occurrence.
+- `What is happening over at SparkyFitness? Dev wants us to stop paying him 😅` — 7 real replies; 4 occurrences.
+- `These are the kind of reactions I get when I recommend Anubis to deal with bots at work, what alternatives are there?` — 7 real replies; 5 occurrences.
+- `Moving to Claremont or Kingston?` — 8 real replies; 4 occurrences.
+- `Why isn't there a 'I busted a nut climbing The Nut' t-shirt at the giftshop?` — 8 real replies; 4 occurrences.
+- `What's going on with Jennifer Meyers?` — 5 real replies; 4 occurrences.
+- `Is wireguard good enough for personal remote access to home network?` — 8 real replies; 4 occurrences.
+- `How many containers is your media stack at now?` — 7 real replies; 2 occurrences.
+- `Running a Debian home server on an old laptop what should I self-host next?` — 6 real replies; 2 occurrences.
+- `Is rhis good for a beginner?` — 8 real replies; 4 occurrences.
+- `What's going on with Susan Dell?` — 7 real replies; 2 occurrences.
+- `Whats up with canceling Metallica?` — 7 real replies; 5 occurrences.
+- `16x16px Dota 2 Heroes – Can You Recognize Them? (Pt. 2)` — 8 real replies; 1 occurrence.
+- `How much are Coles and Woolworths making from 30c paper bags?` — 8 real replies; 1 occurrence.
+- `Always on dev server + jellyfin (+ bitwarden) on mac mini. How do I secure it?` — 8 real replies; 3 occurrences.
+- `Dota is really chill and fun now???` — 8 real replies; 3 occurrences.
+- `Found while dumpster diving. Keep, Use, Salvage or sell?` — 8 real replies; 3 occurrences.
+- `If a remote site's cellular drops for days, how would you get a heartbeat out? (just curious)` — 8 real replies; 3 occurrences.
+- `Why do you NOT use IPv6?` — 8 real replies; 3 occurrences.
+- `Why aren't 12V DC UPs more common?` — 8 real replies; 3 occurrences.
+- `What do you think was the biggest turning point in Linux desktop history?` — 8 real replies; 2 occurrences.
+
+This section reports the new reply threshold only; the existing help-request and filler rules can still reject a kept title independently. Both named non-question showcases stayed: `My small homelab: one Proxmox host and a NAS in a 16U rack` and `Honey, I shrunk the homelab`. The revision-4 filter caught `[no-politics] Everything overpriced Discussion Thread 14/Oct/2026` in all 3 occurrences with `filler: /\bdiscussion\s+threads?\b/i`.
+
+### Boilerplate pattern hits, verbatim
+
+The four patterns hit 79 reply occurrences. Each distinct matching reply is reproduced here once, verbatim, with its occurrence count.
+
+- 60 occurrences:
+
+  > Expand the replies to this comment to learn how AI was used in this post/project.
+
+- 13 occurrences:
+
+  > Friendly reminder that all top level comments must: start with "Answer: ", including the space after the colon (or "Question: " if you have an on-topic follow up question to ask), attempt to answer the question, and be unbiased Please review Rule 4 and this post before making a top level comment: http://redd.it/b1hct4/ Join the OOTL Discord for further discussion: https://discord.gg/ejDF4mdjnh I am a bot, and this action was performed automatically. Please contact the moderators of this subreddit if you have any questions or concerns.
+
+- 3 occurrences:
+
+  > This post has been marked as non-political. Please respect this by keeping the discussion on topic, and devoid of any political material. I am a bot, and this action was performed automatically. Please contact the moderators of this subreddit if you have any questions or concerns.
+
+- 3 occurrences:
+
+  > Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker and Tracker for Linux and Mac PLEASE THROUGHLY CHECK IF YOUR BUG HAS ALREADY BEEN REPORTED. Duplicate issues can slow the dev team when resolving a bug. If you find an existing issue for your bug, please upvote the thread. You can also provide additional information and match IDs to further assist the development team. If not, create a new issue (general tracker / Linux & Mac) with as much information as possible: A detailed description of the bug System info (i.e. operating system) Match IDs (if applicable) Screenshots or video (if applicable)" I am a bot, and this action was performed automatically. Please contact the moderators of this subreddit if you have any questions or concerns.
+
+## Browser verification still required
+
+No browser automation, jsdom or manual browser run was used. Pure-function and server tests do not verify the masthead's visual weight, real column flow and rules at 700/1024 px, expansion reflow inside columns, whole-sheet curl appearance at the wider stage width, 200% zoom, community text appearance, touch/pointer feel, focus movement or installed service-worker refresh. Jesse should check those in the dev container.

@@ -4,6 +4,7 @@ const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = re
 const {
   isVagueHeadline,
   isCommunityHelpRequest,
+  isUnansweredCommunityQuestion,
   missingTextFields,
   validateWrite,
 } = require('./validate');
@@ -175,6 +176,10 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       if (isCommunityHelpRequest(item) && validation.value.is_news) {
         validation.value.is_news = false;
         validation.problems.push('not news: community help or buying request');
+      }
+      if (isUnansweredCommunityQuestion(item) && validation.value.is_news) {
+        validation.value.is_news = false;
+        validation.problems.push('not news: community question has fewer than two real replies');
       }
       if (!validation.value.is_news && overrideNotNews
         && !(headlineOnly && CLICKBAIT.test(validation.value.headline))) {

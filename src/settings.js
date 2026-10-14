@@ -17,6 +17,9 @@ const FILLER_PATTERNS_ADDED_V2 = [
 const FILLER_PATTERNS_ADDED_V3 = [
   '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
 ];
+const FILLER_PATTERNS_ADDED_V4 = [
+  '/\\bdiscussion\\s+threads?\\b/i',
+];
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
@@ -24,6 +27,7 @@ const DEFAULT_FILLER_PATTERNS = [
   ...FILLER_PATTERNS_ADDED_V1,
   ...FILLER_PATTERNS_ADDED_V2,
   ...FILLER_PATTERNS_ADDED_V3,
+  ...FILLER_PATTERNS_ADDED_V4,
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
@@ -33,17 +37,18 @@ function createSettings(db) {
   // Run once at app startup so the settings UI and pipeline see the same list.
   // Write the revision last: if startup is interrupted, appending is idempotent.
   const fillerRevision = Number(db.getSetting('filler_patterns_revision'));
-  if (fillerRevision < 3) {
+  if (fillerRevision < 4) {
     const stored = db.getSetting('filler_patterns');
     const patterns = stored === null ? [...DEFAULT_FILLER_PATTERNS]
       : [
         ...stored,
         ...(fillerRevision < 1 ? FILLER_PATTERNS_ADDED_V1 : []),
         ...(fillerRevision < 2 ? FILLER_PATTERNS_ADDED_V2 : []),
-        ...FILLER_PATTERNS_ADDED_V3,
+        ...(fillerRevision < 3 ? FILLER_PATTERNS_ADDED_V3 : []),
+        ...FILLER_PATTERNS_ADDED_V4,
       ].filter((pattern, index, all) => all.indexOf(pattern) === index);
     db.setSetting('filler_patterns', patterns);
-    db.setSetting('filler_patterns_revision', 3);
+    db.setSetting('filler_patterns_revision', 4);
   }
   return {
     getAppTitle() {

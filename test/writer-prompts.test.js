@@ -4,6 +4,8 @@ const { it } = require('node:test');
 const assert = require('node:assert');
 const {
   WRITE_SCHEMA,
+  COMMUNITY_BOILERPLATE_REPLY_PATTERNS,
+  communityReplies,
   editSchema,
   writeSystemPrompt,
   writeUserPrompt,
@@ -52,7 +54,7 @@ Never mention the reader, where they live, or what the text does not say about t
 The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
 });
 
-it('builds a complete per-story prompt with capped article and five community comments', () => {
+it('builds a complete per-story prompt with capped article and five real community comments', () => {
   const prompt = writeUserPrompt({
     title: 'Original headline',
     source_type: 'reddit',
@@ -61,7 +63,10 @@ it('builds a complete per-story prompt with capped article and five community co
     interest_matches: [{ label: 'West Tamar' }, { label: 'Emergencies' }],
     merged_descriptions: ['Teaser one.', 'Teaser two.'],
     article_content: '123456789',
-    top_comments: ['One', 'Two', 'Three', 'Four', 'Five', 'Six'],
+    top_comments: [
+      'Expand the replies to this comment to learn how AI was used in this post/project.',
+      'One', 'Two', 'Three', 'Four', 'Five', 'Six',
+    ],
   }, { articleChars: 5 });
 
   assert.strictEqual(prompt, `ORIGINAL HEADLINE: Original headline
@@ -79,6 +84,28 @@ COMMUNITY COMMENTS:
 3. Three
 4. Four
 5. Five`);
+});
+
+it('keeps boilerplate reply patterns in one list and removes only matching replies', () => {
+  const replies = [
+    'Expand the replies to this comment to learn how AI was used in this post/project.',
+    'Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.',
+    'This post has been marked as non-political. Please respect this by keeping the discussion on topic.',
+    'Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker and Tracker for Linux and Mac.',
+    'A real answer from another person.',
+  ];
+  assert.deepStrictEqual({
+    patterns: COMMUNITY_BOILERPLATE_REPLY_PATTERNS.map(pattern => pattern.source),
+    replies: communityReplies({ top_comments: replies }),
+  }, {
+    patterns: [
+      '^Expand the replies to this comment to learn how AI was used in this post\\/project\\.?$',
+      '^Friendly reminder that all top level comments must:',
+      '^This post has been marked as non-political\\.',
+      '^Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker',
+    ],
+    replies: ['A real answer from another person.'],
+  });
 });
 
 it('defines an edit schema constrained to the supplied story ids and fixed editor prompt', () => {

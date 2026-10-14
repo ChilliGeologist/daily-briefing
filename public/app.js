@@ -616,7 +616,6 @@ function renderReadingSection(group) {
   var section = group.section;
   var sectionId = section.id || sectionFallbackId(section);
   var isTop = isTopReadingSection(section);
-  var sectionDomId = 'reading-section-' + domToken(sectionId) + '-' + (++readingControlId);
   var sectionEl = el('section', {
     className: 'reading-section' + (isTop ? ' reading-section--top' : ''),
     'data-section-id': sectionId
@@ -630,30 +629,6 @@ function renderReadingSection(group) {
     shownList.appendChild(renderReadingStory(item, isTop && index === 0));
   });
   sectionEl.appendChild(shownList);
-
-  if (group.hidden.length > 0) {
-    group.hidden.forEach(storyKey);
-    var hiddenId = sectionDomId + '-more';
-    var moreButtonId = sectionDomId + '-more-button';
-    var hiddenList = el('div', {
-      className: 'reading-story-list reading-more-stories',
-      id: hiddenId,
-      role: 'region',
-      'aria-labelledby': moreButtonId,
-      hidden: ''
-    });
-    hiddenList._readingItems = group.hidden;
-    var moreButton = el('button', {
-      type: 'button',
-      className: 'reading-more-button',
-      id: moreButtonId,
-      'data-reading-action': 'more',
-      'aria-controls': hiddenId,
-      'aria-expanded': 'false',
-      textContent: 'More (' + group.hidden.length + ')'
-    });
-    sectionEl.append(hiddenList, moreButton);
-  }
   return sectionEl;
 }
 
@@ -744,33 +719,6 @@ function toggleReadingStory(story) {
   refreshCurlGhost();
 }
 
-function toggleMoreStories(button) {
-  var hiddenList = document.getElementById(button.getAttribute('aria-controls'));
-  if (!hiddenList) return;
-  var opening = button.getAttribute('aria-expanded') !== 'true';
-  if (opening) {
-    if (hiddenList.dataset.rendered !== 'true') {
-      hiddenList._readingItems.forEach(function(item) {
-        hiddenList.appendChild(renderReadingStory(item, false));
-      });
-      hiddenList.dataset.rendered = 'true';
-    }
-    hiddenList.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
-    button.textContent = 'Show less';
-    refreshCurlGhost();
-    return;
-  }
-
-  var focusWasInside = hiddenList.contains(document.activeElement);
-  if (expandedStory && hiddenList.contains(expandedStory)) closeExpandedStory();
-  hiddenList.hidden = true;
-  button.setAttribute('aria-expanded', 'false');
-  button.textContent = 'More (' + hiddenList._readingItems.length + ')';
-  if (focusWasInside) button.focus();
-  refreshCurlGhost();
-}
-
 $('#briefing-page').addEventListener('click', function(event) {
   var button = event.target.closest('button[data-reading-action]');
   if (!button || !event.currentTarget.contains(button)) return;
@@ -778,8 +726,6 @@ $('#briefing-page').addEventListener('click', function(event) {
   if (action === 'toggle') {
     var story = button.closest('.reading-story');
     if (story) toggleReadingStory(story);
-  } else if (action === 'more') {
-    toggleMoreStories(button);
   } else if (action === 'read') {
     event.stopPropagation();
     startForwardTurn(button.dataset.storyId);
@@ -846,7 +792,23 @@ function renderReader(item) {
     hasArticle = Boolean(template.content.textContent.trim() || template.content.querySelector('img'));
     if (hasArticle) body.appendChild(template.content.cloneNode(true));
   }
-  if (!hasArticle && item.summary) body.appendChild(el('p', { className: 'reader-fallback', textContent: item.summary }));
+  var readerContent = window.ReadingLogic.prepareReaderContent(item, hasArticle);
+  if (readerContent.fallback) {
+    body.appendChild(el('p', { className: 'reader-fallback', textContent: readerContent.fallback }));
+  }
+  if (readerContent.post) {
+    body.appendChild(el('p', { className: 'reader-community-post', textContent: readerContent.post }));
+  }
+  if (readerContent.replies.length) {
+    var replies = el('section', { className: 'reader-replies' });
+    replies.appendChild(el('h3', { textContent: 'What people said' }));
+    var replyList = el('ul');
+    readerContent.replies.forEach(function(reply) {
+      replyList.appendChild(el('li', { textContent: reply }));
+    });
+    replies.appendChild(replyList);
+    body.appendChild(replies);
+  }
 
   var url = originalUrl(item);
   if (url) {

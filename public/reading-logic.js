@@ -11,10 +11,8 @@
     return Boolean(section) && (section.id === 'top' || (!section.id && String(section.title || '').toLowerCase() === 'you should know'));
   }
 
-  function prepareSections(sections, visibleLimit) {
+  function prepareSections(sections) {
     var input = Array.isArray(sections) ? sections : [];
-    var requestedLimit = visibleLimit === undefined ? 5 : Number(visibleLimit);
-    var limit = Number.isFinite(requestedLimit) ? Math.max(0, Math.min(5, Math.floor(requestedLimit))) : 5;
     var ordered = input.filter(isTopSection)
       .concat(input.filter(function(section) { return section && !isTopSection(section); }));
     var seenIds = new Set();
@@ -32,14 +30,25 @@
 
       var items = unique(section.items);
       var more = unique(section.more);
-      var shownCount = isTopSection(section) ? items.length : limit;
 
       return {
         section: section,
-        shown: items.slice(0, shownCount),
-        hidden: items.slice(shownCount).concat(more)
+        shown: items.concat(more),
+        hidden: []
       };
     });
+  }
+
+  function prepareReaderContent(item, hasArticle) {
+    var story = item || {};
+    var replies = (Array.isArray(story.top_comments) ? story.top_comments : [])
+      .filter(function(reply) { return typeof reply === 'string' && reply.trim(); })
+      .map(function(reply) { return reply.trim(); });
+    return {
+      fallback: hasArticle ? '' : String(story.detail || story.summary || '').trim(),
+      post: typeof story.description === 'string' ? story.description.trim() : '',
+      replies: replies
+    };
   }
 
   function decideGesture(options) {
@@ -72,6 +81,7 @@
 
   return Object.freeze({
     prepareSections: prepareSections,
+    prepareReaderContent: prepareReaderContent,
     decideGesture: decideGesture,
     settleGesture: settleGesture
   });

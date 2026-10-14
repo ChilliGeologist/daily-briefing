@@ -3,6 +3,12 @@
 const { SECTIONS } = require('./sections');
 
 const SECTION_IDS = SECTIONS.map(section => section.id);
+const COMMUNITY_BOILERPLATE_REPLY_PATTERNS = Object.freeze([
+  /^Expand the replies to this comment to learn how AI was used in this post\/project\.?$/i,
+  /^Friendly reminder that all top level comments must:/i,
+  /^This post has been marked as non-political\./i,
+  /^Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker/i,
+]);
 const WRITE_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
@@ -72,6 +78,17 @@ function isCommunityItem(item) {
   return distinctOutlets(item).some(name => /^(reddit|hacker news|hn)$/i.test(name));
 }
 
+function communityReplies(item, limit = Infinity, maxChars = Infinity) {
+  const count = Number.isFinite(Number(limit)) ? Math.max(0, Number(limit)) : Infinity;
+  const chars = Number.isFinite(Number(maxChars)) ? Math.max(0, Number(maxChars)) : Infinity;
+  return (Array.isArray(item?.top_comments) ? item.top_comments : [])
+    .filter(comment => typeof comment === 'string' && comment.trim())
+    .map(comment => comment.trim())
+    .filter(comment => !COMMUNITY_BOILERPLATE_REPLY_PATTERNS.some(pattern => pattern.test(comment)))
+    .slice(0, count)
+    .map(comment => comment.slice(0, chars));
+}
+
 function writeSystemPrompt() {
   return WRITE_SYSTEM_PROMPT;
 }
@@ -94,9 +111,7 @@ function writeUserPrompt(item, { articleChars }) {
   ];
 
   if (isCommunityItem(item)) {
-    const comments = (item.top_comments || [])
-      .filter(comment => typeof comment === 'string' && comment.trim())
-      .slice(0, 5);
+    const comments = communityReplies(item, 5);
     if (comments.length > 0) {
       lines.push('COMMUNITY COMMENTS:');
       comments.forEach((comment, index) => lines.push(`${index + 1}. ${comment.trim()}`));
@@ -129,8 +144,10 @@ function editUserPrompt(stories, { sectionSize }) {
 
 module.exports = {
   WRITE_SCHEMA,
+  COMMUNITY_BOILERPLATE_REPLY_PATTERNS,
   editSchema,
   isCommunityItem,
+  communityReplies,
   writeSystemPrompt,
   writeUserPrompt,
   editSystemPrompt,

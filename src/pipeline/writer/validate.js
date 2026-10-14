@@ -2,7 +2,7 @@
 
 const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interests');
 const { guardFacts } = require('./facts');
-const { isCommunityItem } = require('./prompts');
+const { communityReplies, isCommunityItem } = require('./prompts');
 const {
   hasAustralianOnlyPlace,
   hasOverseasOnlyEvidence,
@@ -81,6 +81,11 @@ function isCommunityHelpRequest(item) {
   if (/^is\b.+\bgood enough for\b/i.test(title) || /^moving to\b.+\bor\b/i.test(title)) return true;
   return words(title).length <= 5
     && /\b(?:just bought|good purchase|any advice)\b/i.test(description);
+}
+
+function isUnansweredCommunityQuestion(item) {
+  if (!isCommunityItem(item) || !/[?？]/u.test(String(item.title || ''))) return false;
+  return communityReplies(item).length < 2;
 }
 
 function fallbackWrite(item) {
@@ -600,6 +605,7 @@ module.exports = {
   isVagueHeadline,
   missingTextFields,
   isCommunityHelpRequest,
+  isUnansweredCommunityQuestion,
   validateWrite,
   validateEdit,
   deterministicEdit,

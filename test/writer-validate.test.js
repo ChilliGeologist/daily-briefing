@@ -9,6 +9,7 @@ const {
   defaultSection,
   missingTextFields,
   isCommunityHelpRequest,
+  isUnansweredCommunityQuestion,
 } = require('../src/pipeline/writer/validate');
 
 const item = {
@@ -255,6 +256,17 @@ it('forces patterned community help and buying requests to not-news unless engag
     ...nearMisses.map(isCommunityHelpRequest),
     isCommunityHelpRequest({ ...catches[0], score: 500, comment_count: 80 }),
   ], [true, true, true, true, true, true, true, true, false, false, false, false, false, false]);
+});
+
+it('rejects community question titles with fewer than two real replies', () => {
+  const boilerplate = 'Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.';
+  const base = { source_type: 'reddit', source_name: 'r/OutOfTheLoop' };
+  assert.deepStrictEqual([
+    isUnansweredCommunityQuestion({ ...base, title: "What's the deal with an AI-generated meme character ending up in a federal lawsuit?", top_comments: [boilerplate] }),
+    isUnansweredCommunityQuestion({ ...base, title: "What's going on with Jennifer Meyers?", top_comments: [boilerplate, 'Answer one.', 'Answer two.'] }),
+    isUnansweredCommunityQuestion({ ...base, title: 'Honey, I shrunk the homelab', top_comments: [] }),
+    isUnansweredCommunityQuestion({ title: 'Why did this happen?', source_name: 'ABC', top_comments: [] }),
+  ], [true, false, false, false]);
 });
 
 it('normalises kicker case while preserving mid-sentence proper nouns and acronyms', () => {

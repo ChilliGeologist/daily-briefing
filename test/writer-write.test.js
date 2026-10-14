@@ -417,6 +417,44 @@ it('forces deterministic community help requests to not-news but keeps highly en
   });
 });
 
+it('forces a community question with fewer than two real replies to not-news', async () => {
+  const items = [
+    {
+      title: "What's the deal with an AI-generated meme character ending up in a federal lawsuit?",
+      source_type: 'reddit', source_name: 'r/OutOfTheLoop', interest_matches: [],
+      top_comments: ['Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.'],
+    },
+    {
+      title: "What's going on with Jennifer Meyers?",
+      source_type: 'reddit', source_name: 'r/OutOfTheLoop', interest_matches: [],
+      top_comments: ['Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.', 'Answer one.', 'Answer two.'],
+    },
+  ];
+  const written = headline => ({ is_news: true, headline, summary: 'People asked what happened.', detail: 'The post asks the community to explain what happened.', kicker: 'Online culture', section: 'internet' });
+  let index = 0;
+  const output = await writeStories(items, {
+    name: 'test', async write() { return { json: written(items[index++].title) }; },
+  }, retrySettings);
+
+  assert.deepStrictEqual({
+    stories: output.stories.map(story => ({ title: story.title, is_news: story.is_news, problems: story.write_problems })),
+    dropped: output.dropped.map(story => ({ title: story.title, is_news: story.is_news, problems: story.write_problems })),
+    stats: output.stats,
+  }, {
+    stories: [{ title: "What's going on with Jennifer Meyers?", is_news: true, problems: [] }],
+    dropped: [{
+      title: "What's the deal with an AI-generated meme character ending up in a federal lawsuit?",
+      is_news: false,
+      problems: ['not news: community question has fewer than two real replies'],
+    }],
+    stats: {
+      written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0,
+      section_moves: 0, facts_removed: 0, numbers_unsupported: 0,
+      input_tokens: 0, output_tokens: 0, duration_ms: 0,
+    },
+  });
+});
+
 it('retries over-18-word and quote-only Reddit headlines once', async () => {
   const cases = [
     ['Kernel Summit says the time has come to make it harder for new people to contribute code after AI submission flood', 'Linus Torvalds calls for tighter kernel contribution rules'],

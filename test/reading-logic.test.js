@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 let logic = {};
 try { logic = require('../public/reading-logic'); } catch (_) { /* red run: module not built yet */ }
 
-const { prepareSections, decideGesture, settleGesture } = logic;
+const { prepareSections, prepareReaderContent, decideGesture, settleGesture } = logic;
 
 function story(id, title) {
   const item = { title };
@@ -34,31 +34,31 @@ test('prepareSections puts top first and leaves a four-item section fully shown'
   ]);
 });
 
-test('prepareSections caps ordinary sections at five and preserves overflow order', () => {
+test('prepareSections shows every ordinary story with more appended in order', () => {
   const items = Array.from({ length: 7 }, (_, index) => story('s' + (index + 1), 'Story ' + (index + 1)));
   const section = { id: 'world', title: 'World', items, more: [story('s8', 'Story 8'), story('s9', 'Story 9')] };
 
   assert.deepStrictEqual(prepareSections([section]), [{
     section,
-    shown: items.slice(0, 5),
-    hidden: items.slice(5).concat(section.more)
+    shown: items.concat(section.more),
+    hidden: []
   }]);
 });
 
-test('prepareSections honours a smaller limit but never exceeds five', () => {
+test('prepareSections ignores the old visible-limit argument and shows the complete section', () => {
   const items = Array.from({ length: 7 }, (_, index) => story('s' + index, 'Story ' + index));
-  const section = { id: 'tech', title: 'Tech & Security', items, more: [] };
+  const more = [story('later', 'Later story')];
+  const section = { id: 'tech', title: 'Tech & Security', items, more };
 
-  assert.deepStrictEqual(prepareSections([section], 4), [{ section, shown: items.slice(0, 4), hidden: items.slice(4) }]);
-  assert.deepStrictEqual(prepareSections([section], 99), [{ section, shown: items.slice(0, 5), hidden: items.slice(5) }]);
+  assert.deepStrictEqual(prepareSections([section], 4), [{ section, shown: items.concat(more), hidden: [] }]);
 });
 
-test('prepareSections does not cap top and keeps its pre-existing more list hidden', () => {
+test('prepareSections shows top items and its pre-existing more list together', () => {
   const items = Array.from({ length: 7 }, (_, index) => story('top-' + index, 'Lead ' + index));
   const more = [story('top-more', 'Later lead')];
   const section = { id: 'top', title: 'You should know', items, more };
 
-  assert.deepStrictEqual(prepareSections([section]), [{ section, shown: items, hidden: more }]);
+  assert.deepStrictEqual(prepareSections([section]), [{ section, shown: items.concat(more), hidden: [] }]);
 });
 
 test('prepareSections recognises a legacy no-id You should know section as top', () => {
@@ -87,8 +87,8 @@ test('prepareSections removes duplicate ids by first occurrence and retains id-l
 
   assert.deepStrictEqual(prepareSections([section], 2), [{
     section,
-    shown: [first, legacyOne],
-    hidden: [legacyTwo, final]
+    shown: [first, legacyOne, legacyTwo, final],
+    hidden: []
   }]);
 });
 
@@ -104,6 +104,29 @@ test('prepareSections does not mutate the payload or its arrays', () => {
   prepareSections(input, 1);
 
   assert.deepStrictEqual(input, snapshot);
+});
+
+test('prepareReaderContent prefers detail without an article and keeps community text plain', () => {
+  assert.deepStrictEqual(prepareReaderContent({
+    detail: 'The fuller detail shown after the tap.',
+    summary: 'Short summary.',
+    description: '  The post text.  ',
+    top_comments: [' First reply. ', '', null, 'Second reply.'],
+  }, false), {
+    fallback: 'The fuller detail shown after the tap.',
+    post: 'The post text.',
+    replies: ['First reply.', 'Second reply.'],
+  });
+});
+
+test('prepareReaderContent falls back to summary and omits article fallback when a body exists', () => {
+  assert.deepStrictEqual([
+    prepareReaderContent({ summary: 'Short summary.' }, false),
+    prepareReaderContent({ detail: 'Detail.', summary: 'Summary.' }, true),
+  ], [
+    { fallback: 'Short summary.', post: '', replies: [] },
+    { fallback: '', post: '', replies: [] },
+  ]);
 });
 
 test('decideGesture waits below 8 px and locks at exactly 8 px', () => {
