@@ -4,6 +4,8 @@ const { Readability } = require('@mozilla/readability');
 const { parseHTML } = require('linkedom');
 const RSSParser = require('rss-parser');
 const { redditRequestQueue } = require('../reddit-request-queue');
+const { isGoogleNewsUrl, resolveGoogleNewsUrl } = require('./gnews');
+const { sanitiseHtml } = require('./sanitise');
 
 const FETCH_TIMEOUT_MS = 10000;
 const CONCURRENCY = 5;
@@ -20,11 +22,11 @@ function isRedditUrl(url) {
   }
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, fetchImpl = globalThis.fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       redirect: 'follow',
       headers: { 'User-Agent': USER_AGENT, ...(options.headers || {}) },
       signal: controller.signal,
@@ -36,8 +38,8 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-async function extractArticle(url, log) {
-  const response = await fetchWithTimeout(url);
+async function extractArticle(url, log, fetchImpl = globalThis.fetch) {
+  const response = await fetchWithTimeout(url, {}, fetchImpl);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
@@ -58,6 +60,7 @@ async function extractArticle(url, log) {
 
   return {
     article_content: article.textContent.trim(),
+    article_html: sanitiseHtml(article.content || ''),
     canonical_url: finalUrl,
   };
 }
@@ -191,8 +194,153 @@ async function extract(items, settings, log, emitProgress) {
   return { items, stats };
 }
 
+function hostnameOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+function makeSemaphore(limit) {
+  let active = 0;
+  const waiting = [];
+
+  async function run(fn) {
+    if (active >= limit) await new Promise(resolve => waiting.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      const next = waiting.shift();
+      if (next) next();
+    }
+  }
+
+  return { run };
+}
+
+function orderedCandidates(cluster, paywalledHosts) {
+  const paywalled = new Set(paywalledHosts.map(host => host.replace(/^www\./i, '').toLowerCase()));
+  return cluster.items
+    .map((item, index) => ({ item, index, paywalled: paywalled.has(hostnameOf(item.canonical_url || item.url)) }))
+    .sort((a, b) =>
+      (Number(a.paywalled) - Number(b.paywalled))
+      || ((b.item.source_priority ?? 1) - (a.item.source_priority ?? 1))
+      || (a.index - b.index)
+    )
+    .slice(0, 3)
+    .map(candidate => candidate.item);
+}
+
+async function extractClusters(clusters, settings, log, emitProgress, { fetchImpl = globalThis.fetch } = {}) {
+  const total = clusters.length;
+  const stats = {
+    attempted: 0,
+    articles: 0,
+    comments: 0,
+    discussions: 0,
+    failures: 0,
+    gnews_resolved: 0,
+    gnews_failed: 0,
+  };
+  const googleSemaphore = makeSemaphore(2);
+  const paywalledHosts = settings.getPaywalledHosts();
+  let cursor = 0;
+  let completed = 0;
+
+  if (emitProgress) emitProgress('extract', 0, total);
+
+  async function processCluster(cluster) {
+    stats.attempted++;
+    cluster.article_text = null;
+    cluster.article_html = null;
+    cluster.article_url = null;
+    cluster.top_comments = null;
+
+    // A Reddit post page is a discussion, not an article: Readability finds
+    // nothing on it, and every request waits a minute in the Reddit queue.
+    // The post's own text is already in its description; comments are fetched
+    // separately below.
+    const fetchable = orderedCandidates(cluster, paywalledHosts)
+      .filter(item => !isRedditUrl(item.canonical_url || item.url));
+    if (fetchable.length === 0) stats.discussions++;
+
+    for (const item of fetchable) {
+      let url = item.canonical_url || item.url;
+      if (!url) continue;
+
+      if (isGoogleNewsUrl(url)) {
+        const resolved = await googleSemaphore.run(() => resolveGoogleNewsUrl(url, { fetchImpl }));
+        if (!resolved) {
+          stats.gnews_failed++;
+          continue;
+        }
+        stats.gnews_resolved++;
+        url = resolved;
+      }
+
+      try {
+        const article = await extractArticle(url, log, fetchImpl);
+        if (article.article_content.length < 400) {
+          throw new Error(`Article text too short (${article.article_content.length} characters)`);
+        }
+        cluster.article_text = article.article_content;
+        cluster.article_html = article.article_html;
+        cluster.article_url = article.canonical_url;
+        stats.articles++;
+        break;
+      } catch (error) {
+        log.warn('pipeline:extract', `Article fetch failed for ${url}: ${error.message}`);
+      }
+    }
+
+    const lead = cluster.lead;
+    if (lead && lead.source_type === 'reddit' && redditPermalinkUrl(lead)) {
+      try {
+        const comments = await extractRedditComments(lead, log);
+        if (comments.length > 0) {
+          cluster.top_comments = comments;
+          stats.comments++;
+        }
+      } catch (error) {
+        log.warn('pipeline:extract', `Reddit comments fetch failed for ${lead.url}: ${error.message}`);
+      }
+    }
+
+    if (!cluster.article_text && fetchable.length > 0) stats.failures++;
+  }
+
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= total) return;
+      try {
+        await processCluster(clusters[index]);
+      } catch (error) {
+        clusters[index].article_text = null;
+        clusters[index].article_html = null;
+        clusters[index].article_url = null;
+        clusters[index].top_comments = null;
+        stats.failures++;
+        log.warn('pipeline:extract', `Unexpected error processing cluster: ${error.message}`);
+      }
+      completed++;
+      if (emitProgress) emitProgress('extract', completed, total);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, () => worker()));
+
+  log.info('pipeline:extract',
+    `Extracted ${total} stories: ${stats.articles} articles, ${stats.discussions} discussion posts, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed`);
+  return { clusters, stats };
+}
+
 module.exports = {
   extract,
+  extractClusters,
   isRedditUrl,
   redditPermalinkUrl,
   parseRedditComments,

@@ -1,5 +1,13 @@
 'use strict';
 
+const DEFAULT_FILLER_PATTERNS = [
+  'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
+  'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
+];
+const DEFAULT_PAYWALLED_HOSTS = [
+  'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
+];
+
 function createSettings(db) {
   return {
     getAppTitle() {
@@ -39,6 +47,26 @@ function createSettings(db) {
     getMaxCuratedItems() {
       const val = db.getSetting('max_curated_items');
       return val !== null ? Number(val) : 60;
+    },
+
+    getFilterMaxAgeHours() {
+      const val = db.getSetting('filter_max_age_hours');
+      return val !== null ? Number(val) : 36;
+    },
+
+    getFillerPatterns() {
+      const val = db.getSetting('filler_patterns');
+      return val !== null ? val : DEFAULT_FILLER_PATTERNS;
+    },
+
+    getPaywalledHosts() {
+      const val = db.getSetting('paywalled_hosts');
+      return val !== null ? val : DEFAULT_PAYWALLED_HOSTS;
+    },
+
+    getMaxSameStoryChecks() {
+      const val = db.getSetting('max_same_story_checks');
+      return val !== null ? Number(val) : 40;
     },
 
     getLogDisplayLevel() {

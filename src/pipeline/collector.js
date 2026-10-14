@@ -10,6 +10,12 @@ const FETCHERS = {
   api: fetchAPI,
 };
 
+function assignListPositions(items) {
+  return items.map((item, index) => (
+    item.list_position != null ? item : { ...item, list_position: index + 1 }
+  ));
+}
+
 async function collect(db, log, emitProgress) {
   const start = Date.now();
   const sources = db.getEnabledSources();
@@ -71,7 +77,7 @@ async function collect(db, log, emitProgress) {
     }
 
     stats.items_by_source[source.name] = result.items.length;
-    allItems.push(...result.items);
+    allItems.push(...assignListPositions(result.items));
   }
 
   stats.duration_ms = Date.now() - start;
@@ -84,4 +90,4 @@ async function collect(db, log, emitProgress) {
   return { items: allItems, stats };
 }
 
-module.exports = { collect };
+module.exports = { collect, assignListPositions };

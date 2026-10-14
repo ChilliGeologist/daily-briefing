@@ -1,0 +1,56 @@
+{
+  "note": "Titles are as they read after normalise (Google News suffix stripped). same_story pairs are settled by word overlap or shared links alone; pairs that need the model are checked on the dev run.",
+  "same_story": [
+    [
+      "Izzi Batt-Doyle smashes Australian marathon record with run in Chicago",
+      "Izzi Batt-Doyle smashes Australian marathon record by nearly a minute in Chicago"
+    ],
+    [
+      "Australian government says online platforms have ‘responsibility’ to block US military execution live stream",
+      "Australian government says online platforms have ‘responsibility’ to block US military execution livestream"
+    ],
+    [
+      "Nicolas Cage reveals lingering regret over Sean Connery friendship",
+      "Nicolas Cage reveals lingering regret over Sean Connery friendship"
+    ],
+    [
+      "Pennsylvania shooter who killed eight people was family’s patriarch, father of killed toddler says",
+      "Pennsylvania mass shooter was family patriarch, father of toddler killed says"
+    ],
+    [
+      "'Violent' fire destroys Paris's oldest covered food market",
+      "Fire Devastates the Oldest Covered Food Market in Paris"
+    ],
+    [
+      "Cyberattack shuts down refrigerators at French supermarkets",
+      "French supermarkets suffer refrigerator shutdown after 'unprecedented' cyberattack"
+    ],
+    [
+      "WA primary school students to go ‘back to basics’ with pilot program to ban unnecessary screen time",
+      "WA primary school students to have less classroom screen time in Back to Basics trial"
+    ],
+    [
+      "Smith monitored for concussion after hit to helmet while batting",
+      "Steve Smith set to be monitored for concussion after being hit in the helmet in first Test"
+    ]
+  ],
+  "different_story": [
+    [
+      "Smith monitored for concussion after hit to helmet while batting",
+      "Sydney father Joshua Smith remembered as friends demand justice over alleged fatal stabbing near Westfield Mt Druitt"
+    ],
+    [
+      "Mining & Smithing Opinion Survey - OUT NOW!",
+      "[Suggestion] Add Motherload as the Mining/Smithing rework"
+    ]
+  ],
+  "dropped_filler": [
+    "Joyce likens US public execution to ‘Roman amphitheatre’ – as it happened",
+    "Devonport Magistrates Court list, Monday, October 12",
+    "Hobart Magistrates Court list, Tuesday, October 13",
+    "Burnie Magistrates Court list, Monday, October 12",
+    "Weather report for Devonport",
+    "Weather report for Burnie",
+    "Weather report for Hobart"
+  ]
+}
