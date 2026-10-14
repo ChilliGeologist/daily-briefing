@@ -710,3 +710,12 @@ it('blanks a "No story" kicker', () => {
   const raw = { is_news: true, headline: 'Everest Runner by Runner', summary: 'A feature.', detail: 'A feature.', kicker: 'No story', section: 'australia' };
   assert.strictEqual(validateWrite(raw, { ...geographyItem, interest_matches: [] }).value.kicker, '');
 });
+
+it('does not lift a Reddit-only post about a product in a news section', () => {
+  const list = [
+    { id: 's1', section: 'australia', coverage: 1, interest_matches: [], rank: 1, sources: [{ name: 'ABC News Australia' }] },
+    { id: 's2', section: 'australia', coverage: 1, interest_matches: [{ label: 'Coles', kind: 'product', weight: 2 }], rank: 2, sources: [{ name: 'r/popular' }] },
+    { id: 's3', section: 'australia', coverage: 1, interest_matches: [{ label: 'Woolworths', kind: 'product', weight: 2 }], rank: 3, sources: [{ name: 'ABC News Australia' }] },
+  ];
+  assert.deepStrictEqual(validateEdit({ top: [], sections: { australia: ['s1', 's2', 's3'] } }, list, { sectionSize: 3, topSize: { min: 0, max: 7 } }).sections.australia, ['s3', 's1', 's2']);
+});

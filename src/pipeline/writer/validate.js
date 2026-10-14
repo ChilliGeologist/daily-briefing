@@ -462,9 +462,12 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
       .map(story => story.id);
     // Then stories about something the reader runs or uses (Plex, Unraid, the
     // arr apps): the editor left "Plex 1.6" and an arr-suite replacement in "more".
+    // In the news sections only reporting is lifted: an r/popular musing about
+    // Coles and Woolworths bag fees rose to third in Australia.
     const product = stories
       .filter(story => story.section === sectionId
-        && (story.interest_matches || []).some(match => match.kind === 'product'))
+        && (story.interest_matches || []).some(match => match.kind === 'product')
+        && !(TOP_NEWS_SECTIONS.has(sectionId) && hasOnlyCommunitySources(story)))
       .sort((a, b) => interestScore(b.interest_matches) - interestScore(a.interest_matches))
       .map(story => story.id);
     for (const id of [...wide, ...product, ...(preferred[sectionId] || [])]) {
