@@ -106,3 +106,26 @@ it('filters video, podcast and audio pages by their title suffix', () => {
   assert.deepStrictEqual(result.dropped.map(drop => drop.item.title), titles);
   assert.deepStrictEqual(result.kept.map(value => value.title), keep);
 });
+
+it('filters social-user says and shares filler plus possessive Redditor features', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = [
+    'TikToker Says You Must Prepare to Be Ghosted in Modern Dating',
+    'TikTok User Shares 8 Red Flags Her Exes Showed While Dating',
+    'TikTokers Claim the New Trend Is Over',
+    'Redditors Reveal Their Worst Travel Mistakes',
+    "Redditor's First Day in Paris Goes From Fridge Trouble to Scammers",
+    'Redditor’s First Day in Paris Goes From Fridge Trouble to Scammers',
+  ];
+  const keep = [
+    "TikToker Are Assigning Their Favorites In The 'Holy Trinity' Meme Trend",
+    'Redditors celebrate a court victory',
+  ];
+  const candidates = [...titles, ...keep].map(title => item(title, 1));
+  const reason = "filler: /^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i";
+  assert.deepStrictEqual(filterItems(candidates, opts({ fillerPatterns: settings.getFillerPatterns() })), {
+    kept: candidates.slice(6),
+    dropped: candidates.slice(0, 6).map(value => ({ item: value, reason })),
+    stats: { total: 8, kept: 2, stale: 0, filler: 6 },
+  });
+});

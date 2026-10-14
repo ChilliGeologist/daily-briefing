@@ -1,5 +1,6 @@
 'use strict';
 
+const { tokenize } = require('../cluster');
 const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = require('./prompts');
 const {
   isVagueHeadline,
@@ -10,6 +11,8 @@ const {
 } = require('./validate');
 
 const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
+const SAME_EVENT_SIMILARITY = 0.4;
+const SAME_EVENT_MIN_SHARED_WORDS = 5;
 
 // True when the app has nothing but the headline: no article text, and every
 // teaser is just the headline again plus the outlet's name (Google News).
@@ -65,7 +68,7 @@ function applyMissingTextFallback(validation, item) {
     if (!fields.includes(field)) continue;
     const label = `${field[0].toUpperCase()}${field.slice(1)}`;
     // Keep the sentences that are real news; drop only the ones about the text.
-    const kept = (String(validation.value[field]).match(/[^.!?]+(?:[.!?]+|$)/g) || [])
+    const kept = String(validation.value[field]).split(/(?<=[.!?])\s+/u)
       .map(sentence => sentence.trim())
       .filter(sentence => sentence && missingTextFields({ [field]: sentence }).length === 0)
       .join(' ');
@@ -74,11 +77,77 @@ function applyMissingTextFallback(validation, item) {
       validation.problems.push(`${label}: sentences about unavailable text removed`);
     } else {
       validation.value[field] = teaser;
-      validation.problems.push(teaser
-        ? `${label} replaced with the first teaser sentence`
-        : `${label} left empty because no teaser was available`);
+      if (teaser) {
+        validation.problems.push(`${label} replaced with the first teaser sentence`);
+      } else if (field === 'summary') {
+        validation.value.is_news = false;
+        validation.problems.push('not news: nothing beyond the headline');
+      } else {
+        validation.problems.push(`${label} left empty because no teaser was available`);
+      }
     }
   }
+}
+
+function writtenContentWords(story) {
+  return new Set(tokenize(`${story.headline || ''} ${story.summary || ''}`).map(word => (
+    /^(?:death|die|dies|died)$/.test(word) ? 'death' : word
+  )));
+}
+
+function writtenStorySimilarity(left, right) {
+  const leftWords = writtenContentWords(left);
+  const rightWords = writtenContentWords(right);
+  const shared = [...leftWords].filter(word => rightWords.has(word)).length;
+  const smaller = Math.min(leftWords.size, rightWords.size);
+  return { score: smaller === 0 ? 0 : shared / smaller, shared };
+}
+
+function mergeSources(keeper, duplicate) {
+  const sources = [...(keeper.sources || []), ...(duplicate.sources || [])];
+  const seen = new Set();
+  keeper.sources = sources.filter(source => {
+    const key = `${String(source?.name || '')}\u0000${String(source?.url || '')}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dropWrittenDuplicates(stories, log) {
+  const ranked = stories.map((story, index) => ({ story, index }))
+    .sort((a, b) => (Number(a.story.rank) - Number(b.story.rank)) || (a.index - b.index));
+  const kept = [];
+  const dropped = [];
+  const droppedIds = new Set();
+
+  for (const entry of ranked) {
+    const duplicate = kept.find(candidate => {
+      if (candidate.story.section !== entry.story.section) return false;
+      const similarity = writtenStorySimilarity(candidate.story, entry.story);
+      return similarity.shared >= SAME_EVENT_MIN_SHARED_WORDS
+        && similarity.score >= SAME_EVENT_SIMILARITY;
+    });
+    if (!duplicate) {
+      kept.push(entry);
+      continue;
+    }
+
+    mergeSources(duplicate.story, entry.story);
+    entry.story.is_news = false;
+    entry.story.duplicate_of = duplicate.story.id;
+    entry.story.write_problems.push(`duplicate: same event as ${duplicate.story.id}`);
+    dropped.push(entry.story);
+    droppedIds.add(entry.story.id);
+    if (log && log.info) {
+      log.info('pipeline:writer', `Duplicate event: "${entry.story.title}" merged into ${duplicate.story.id}`);
+    }
+  }
+
+  return {
+    stories: stories.filter(story => !droppedIds.has(story.id)),
+    dropped,
+  };
 }
 
 async function writeStories(items, writer, settings, log, emitProgress, checkCancelled) {
@@ -127,18 +196,20 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       const first = await request(userPrompt);
       validation = first.validation;
       writtenBy = first.backend;
-      if (!headlineOnly && validation.ok && (validation.value.is_news || overrideNotNews)
+      if (validation.ok && (validation.value.is_news || overrideNotNews)
         && (validation.missingTextFields || []).length > 0) {
-        try {
-          const retry = await request(`${userPrompt}\n\n${MISSING_TEXT_RETRY_NOTE}`);
-          if (retry.validation.ok) {
-            validation = retry.validation;
-            writtenBy = retry.backend;
-          } else {
-            validation.problems.push('Missing-text retry was invalid');
+        if (!headlineOnly) {
+          try {
+            const retry = await request(`${userPrompt}\n\n${MISSING_TEXT_RETRY_NOTE}`);
+            if (retry.validation.ok) {
+              validation = retry.validation;
+              writtenBy = retry.backend;
+            } else {
+              validation.problems.push('Missing-text retry was invalid');
+            }
+          } catch (error) {
+            validation.problems.push(`Missing-text retry failed: ${error.message}`);
           }
-        } catch (error) {
-          validation.problems.push(`Missing-text retry failed: ${error.message}`);
         }
         applyMissingTextFallback(validation, item);
       }
@@ -177,7 +248,8 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: community question has fewer than two real replies');
       }
-      if (!validation.value.is_news && overrideNotNews && !headlineOnly) {
+      if (!validation.value.is_news && overrideNotNews && !headlineOnly
+        && !validation.problems.includes('not news: nothing beyond the headline')) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');
         stats.not_news_overridden++;
@@ -190,7 +262,9 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.summary = '';
         validation.value.detail = '';
         validation.value.is_news = false;
-        validation.problems.push('not news: only the headline is available');
+        if (!validation.problems.includes('not news: nothing beyond the headline')) {
+          validation.problems.push('not news: only the headline is available');
+        }
       }
       if (!validation.ok) {
         stats.fallbacks++;
@@ -245,8 +319,10 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   const concurrency = Math.min(4, Math.max(1, Number(writer.concurrency) || 1), Math.max(1, items.length));
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  const stories = storiesByIndex.filter(Boolean);
-  const dropped = droppedByIndex.filter(Boolean);
+  const deduplicated = dropWrittenDuplicates(storiesByIndex.filter(Boolean), log);
+  const stories = deduplicated.stories;
+  const dropped = [...droppedByIndex.filter(Boolean), ...deduplicated.dropped]
+    .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
   stats.written = stories.length;
 
   if (log && log.info) {
@@ -256,4 +332,4 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
   return { stories, dropped, stats };
 }
 
-module.exports = { writeStories };
+module.exports = { writeStories, writtenStorySimilarity, dropWrittenDuplicates };

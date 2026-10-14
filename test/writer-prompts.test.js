@@ -51,7 +51,7 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
+The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
 });
 
 it('builds a complete per-story prompt with capped article and five real community comments', () => {

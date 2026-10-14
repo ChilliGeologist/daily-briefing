@@ -392,6 +392,120 @@ it('retries missing-text meta writing once and falls back to the teaser sentence
   });
 });
 
+it('drops persistent headline-meta writing when there is no teaser to fall back on', async () => {
+  const source = {
+    title: 'Character.ai Files for Bankruptcy',
+    description: '',
+    article_content: 'Subscribe to continue reading. '.repeat(10),
+    source_name: 'Publisher',
+    interest_matches: [],
+  };
+  const bad = {
+    is_news: true,
+    headline: 'Character.ai Files for Bankruptcy',
+    summary: "The headline suggests Character.ai's bankruptcy could signal a wider decline.",
+    detail: 'Character.ai filed for bankruptcy.',
+    kicker: 'AI companies',
+    section: 'tech',
+  };
+  let calls = 0;
+  const output = await writeStories([source], {
+    name: 'test',
+    async write() { calls++; return { json: bad }; },
+  }, retrySettings);
+  assert.strictEqual(calls, 2);
+  assert.deepStrictEqual(output, {
+    stories: [],
+    dropped: [{
+      ...source,
+      rank: 1,
+      id: 's1',
+      ...bad,
+      is_news: false,
+      summary: '',
+      written_by: 'test',
+      write_ok: true,
+      write_problems: [
+        'Missing-text retry still referred to unavailable source text',
+        'not news: nothing beyond the headline',
+      ],
+    }],
+    stats: { written: 0, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
+it('drops same-event stories after writing, merges their sources, and keeps same-topic stories separate', async () => {
+  const items = [
+    {
+      title: 'Michelin Guide dishes out first Australian stars to array of SA restaurants',
+      description: 'South Australian restaurants received the first Michelin stars in Australia, with one venue earning two stars.',
+      article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 39,
+      sources: [{ name: 'ABC', url: 'https://example.com/abc-michelin' }],
+    },
+    {
+      title: 'Last-minute AFL trade deals loom',
+      description: 'Multiple AFL trade deals were finalised late, involving several players and draft picks across different clubs.',
+      article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 21,
+      sources: [{ name: 'ABC', url: 'https://example.com/afl-deals' }],
+    },
+    {
+      title: 'Ten South Australian Restaurants Awarded Michelin Stars',
+      description: 'Ten South Australian restaurants received one Michelin star, with Magill Estate Restaurant winning two.',
+      article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 58,
+      sources: [{ name: 'Guardian', url: 'https://example.com/guardian-michelin' }],
+    },
+    {
+      title: 'Almost perfect trade period for Roos | The player movement winners and losers',
+      description: 'The AFL trade period concluded with clubs making player movements and experts rating the winners and losers.',
+      article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 26,
+      sources: [{ name: 'Mercury', url: 'https://example.com/afl-ratings' }],
+    },
+  ];
+  let index = 0;
+  const outputs = items.map(item => ({
+    is_news: true,
+    headline: item.title,
+    summary: item.description,
+    detail: item.description,
+    kicker: item.title.startsWith('Michelin') || item.title.startsWith('Ten South') ? 'Dining' : 'AFL trades',
+    section: 'australia',
+  }));
+  const output = await writeStories(items, {
+    name: 'test', concurrency: 1,
+    async write() { return { json: outputs[index++] }; },
+  }, retrySettings);
+  const story = (item, value, id, sources = item.sources) => ({
+    ...item,
+    id,
+    ...value,
+    sources,
+    written_by: 'test',
+    write_ok: true,
+    write_problems: [],
+  });
+  const first = story(items[0], outputs[0], 's1', [
+    { name: 'ABC', url: 'https://example.com/abc-michelin' },
+    { name: 'Guardian', url: 'https://example.com/guardian-michelin' },
+  ]);
+  const duplicate = story(items[2], outputs[2], 's3');
+  duplicate.is_news = false;
+  duplicate.write_problems = ['duplicate: same event as s1'];
+  duplicate.duplicate_of = 's1';
+  assert.deepStrictEqual(output, {
+    stories: [
+      first,
+      story(items[1], outputs[1], 's2'),
+      story(items[3], outputs[3], 's4'),
+    ],
+    dropped: [duplicate],
+    stats: {
+      written: 3, repairs: 0, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0,
+      section_moves: 0, facts_removed: 0, numbers_unsupported: 0,
+      input_tokens: 0, output_tokens: 0, duration_ms: 0,
+    },
+  });
+});
+
 it('forces deterministic community help requests to not-news but keeps highly engaged posts', async () => {
   const items = [
     { title: 'Help me pick a rack please', source_type: 'reddit', source_name: 'r/homelab', article_content: 'x'.repeat(500), interest_matches: [] },

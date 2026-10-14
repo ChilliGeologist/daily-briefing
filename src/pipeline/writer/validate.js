@@ -4,6 +4,7 @@ const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interest
 const { guardFacts } = require('./facts');
 const { communityReplies, isCommunityItem } = require('./prompts');
 const {
+  hasAnyAustralianEvidence,
   hasAustralianOnlyPlace,
   hasOverseasOnlyEvidence,
   isBarePlaceName,
@@ -24,7 +25,7 @@ const TOP_TECH_SECTIONS = new Set(['tech', 'homelab', 'gaming', 'internet']);
 const TOP_NEWS_SECTIONS = new Set(['tasmania', 'australia', 'world']);
 // Only phrasing about the supplied text itself. Ordinary reporting such as
 // "police released no details about the man" must not match.
-const MISSING_TEXT = /\b(?:no\s+(?:further\s+|additional\s+|other\s+)?(?:(?:article|story|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
+const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies)|no\s+(?:further\s+|additional\s+|other\s+)?(?:(?:article|story|source|supplied|available)\s+)?(?:text|content|details?|information|viewpoints?)(?:\s+or\s+[\p{L}\s]+?)?\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)|no\s+(?:article|story|source|supplied)\s+(?:text|content)|(?:article|story|source|supplied|available)\s+(?:text|content)\s+(?:was|were|is|are)\s+(?:not\s+(?:provided|available|included|supplied|given)|missing|absent)|in\s+the\s+(?:available|supplied|provided)\s+text|(?:unable|impossible)\s+to\s+(?:write|provide|summari[sz]e)|summary\s+(?:is\s+|was\s+)?impossible|no\s+summary\s+can\s+be)\b/iu;
 // The writer describing the page instead of the story: "The provided text is
 // not a genuine news story and appears to be a paywall or subscription
 // prompt" (404 Media, 2026-10-15).
@@ -86,6 +87,12 @@ function isCommunityHelpRequest(item) {
   if (/\b(?:suggestions?|help|ideas?|input|feedback)\s+(?:sought|needed|wanted|requested|please)\b/i.test(title)) return true;
   if (/^looking for\b/i.test(title) || /\bideas?\s*\??$/i.test(title)) return true;
   if (/^is\b.+\bgood enough for\b/i.test(title) || /^moving to\b.+\bor\b/i.test(title)) return true;
+  if (/\bquestions?\s+about\b/i.test(title)) return true;
+  if (words(title).length <= 12
+    && (/\b(?:any|some)\s+(?:advice|recommendations?|suggestions?|guidance|tips?)\b/i.test(description)
+      || /\b(?:want(?:ed)?|would like|(?:am|'m)\s+(?:looking|hoping))\s+to\s+know\b/i.test(description))) {
+    return true;
+  }
   // A short, plain title whose post asks for help ("My Home Firewall": "Please
   // suggest your valuable suggestions"); the writer's retry would otherwise
   // dress it up as a headline.
@@ -128,6 +135,14 @@ function enforceSectionRequirements(value, item, interests, problems) {
   if (sourceSection && TOP_NEWS_SECTIONS.has(value.section)) {
     problems.push(`section moved: ${value.section} -> ${sourceSection} (${item.default_category} source)`);
     value.section = sourceSection;
+    return true;
+  }
+  if (item.default_category === 'tech'
+    && (value.section === 'tasmania' || value.section === 'australia')
+    && !hasAnyAustralianEvidence([value.headline, value.summary, value.detail].join('\n'))) {
+    const from = value.section;
+    value.section = 'world';
+    problems.push(`section moved: ${from} -> world (tech source; no Australian evidence)`);
     return true;
   }
   if (value.section === 'world' && hasAustralianOnlyPlace(

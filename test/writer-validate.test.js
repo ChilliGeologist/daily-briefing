@@ -226,10 +226,15 @@ it('detects only missing-source meta writing in summaries, details and kickers',
     { summary: 'Useful summary.', detail: 'No story content was provided for this article.', kicker: 'Sport' },
     { summary: 'Useful summary.', detail: 'Writing a detailed summary is impossible.', kicker: 'Sport' },
     { summary: 'Useful summary.', detail: 'Useful detail.', kicker: 'Headline mystery' },
+    { summary: 'The headline suggests a concerning trend.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'The headline indicates rates will rise.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'The headline states the company has failed.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'The headline implies the talks have ended.', detail: 'Useful detail.', kicker: 'News' },
     { summary: 'The article says no jobs will be cut.', detail: 'Officials provided details about the available content.', kicker: 'Job cuts' },
   ];
   assert.deepStrictEqual(values.map(missingTextFields), [
-    ['summary'], ['summary'], ['detail'], ['detail'], ['kicker'], [],
+    ['summary'], ['summary'], ['detail'], ['detail'], ['kicker'],
+    ['summary'], ['summary'], ['summary'], ['summary'], [],
   ]);
 });
 
@@ -692,6 +697,38 @@ it('keeps stories from a gaming or homelab source out of the news sections', () 
   ]);
 });
 
+it('moves tech-source stories out of local sections unless the written story has Australian evidence', () => {
+  const value = (section, headline = 'Banks offload AI data centre debt', detail = 'Banks are selling debt they underwrote.') => ({
+    is_news: true,
+    headline,
+    summary: 'Banks are selling AI data centre debt.',
+    detail,
+    kicker: 'AI debt',
+    section,
+  });
+  assert.deepStrictEqual([
+    validateWrite(value('australia'), { ...geographyItem, default_category: 'tech' }),
+    validateWrite(value('tasmania'), { ...geographyItem, default_category: 'tech' }),
+    validateWrite(value('australia', 'Sydney banks offload AI data centre debt'), { ...geographyItem, default_category: 'tech' }),
+    validateWrite(value('tech'), { ...geographyItem, default_category: 'tech' }),
+  ], [
+    {
+      ok: true,
+      value: value('world'),
+      problems: ['section moved: australia -> world (tech source; no Australian evidence)'],
+      sectionMoved: true,
+    },
+    {
+      ok: true,
+      value: value('world'),
+      problems: ['section moved: tasmania -> world (tech source; no Australian evidence)'],
+      sectionMoved: true,
+    },
+    { ok: true, value: value('australia', 'Sydney banks offload AI data centre debt'), problems: [] },
+    { ok: true, value: value('tech'), problems: [] },
+  ]);
+});
+
 it('sentence-cases kickers whose only capitals are in a Title Case headline, and keeps acronyms', () => {
   const source = { ...geographyItem, title: 'Grace Hopper Celebration Cancelled', description: 'Grace Hopper Celebration Cancelled', article_content: 'The mini NAS build uses two drives.' };
   const raw = kicker => ({ is_news: true, headline: 'Grace Hopper Celebration Cancelled', summary: 'The event was cancelled.', detail: 'Funding fell short.', kicker, section: 'tech' });
@@ -763,5 +800,23 @@ it('treats a short Reddit post asking for suggestions in its text as a help requ
     isCommunityHelpRequest(post('My Home Firewall', 'I have installed firewall called Freesense. Please suggest your valuable suggestions to make it more secured.')),
     isCommunityHelpRequest(post('HBA 240 SMART ERRAY CARD', 'I have 8 SAS hard drives I cannot use. Can someone please help me')),
     isCommunityHelpRequest(post('My 3D printed rack is finished', 'Here are the parts I used and what I learned printing it.')),
+  ], [true, true, false]);
+});
+
+it('treats questions about a problem and concise posts whose body asks for advice as help requests', () => {
+  const post = (title, description) => ({ title, description, source_type: 'reddit', source_name: 'r/tasmania' });
+  assert.deepStrictEqual([
+    isCommunityHelpRequest(post(
+      'A couple of question about the return of bond.',
+      'I vacated my rental. Can I deny a claim against my bond?'
+    )),
+    isCommunityHelpRequest(post(
+      "I'm about to do a masters in Protected Area Conservation in UTAS",
+      "Just wanted to know what the work opportunities are like in Tasmania after finishing the degree."
+    )),
+    isCommunityHelpRequest(post(
+      'Selfhosted inventory manager - OpenInvento',
+      "I released v1.0.0 and now I'd love to get some feedback on it."
+    )),
   ], [true, true, false]);
 });
