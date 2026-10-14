@@ -2,16 +2,33 @@
 
 const { DEFAULT_INTERESTS } = require('./pipeline/writer/interests');
 
+// Only this batch is appended to existing settings. Older defaults may have
+// been deliberately deleted, so never union the entire default list on reads.
+const FILLER_PATTERNS_ADDED_V1 = [
+  'ask away', 'megathread',
+  '/\\b(?:daily|weekly|monthly)\\s+(?:discussion|questions?)(?:\\s+(?:discussion|questions?))?\\s+threads?\\b/i',
+  '/^\\s*(?:(?:hardware|quick)\\s+question|question|help|need\\s+advice)\\s*\\??\\s*$/i',
+];
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
   'everybody appearing at', 'in case you missed it',
+  ...FILLER_PATTERNS_ADDED_V1,
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
 ];
 
 function createSettings(db) {
+  // Run once at app startup so the settings UI and pipeline see the same list.
+  // Write the revision last: if startup is interrupted, appending is idempotent.
+  if (Number(db.getSetting('filler_patterns_revision')) < 1) {
+    const stored = db.getSetting('filler_patterns');
+    const patterns = stored === null ? [...DEFAULT_FILLER_PATTERNS]
+      : [...stored, ...FILLER_PATTERNS_ADDED_V1.filter(pattern => !stored.includes(pattern))];
+    db.setSetting('filler_patterns', patterns);
+    db.setSetting('filler_patterns_revision', 1);
+  }
   return {
     getAppTitle() {
       return db.getSetting('app_title') || 'Daily Briefing';

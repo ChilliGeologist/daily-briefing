@@ -431,3 +431,46 @@ it('reports no fallback for a clean editor selection', () => {
     problems: [],
   });
 });
+
+const geographyItem = { title: 'A local update', description: 'Residents discuss the changes.', interest_matches: [] };
+const geographyValue = (headline, summary = 'Residents discuss the changes.', section = 'world') => ({ is_news: true, headline, summary, detail: 'Residents discuss the changes.', kicker: 'Update', section });
+const geographyResult = (value, section) => ({ ok: true, value: { ...value, section }, problems: value.section === section ? [] : [`section moved: world -> ${section} (Australian place named; no overseas place named)`], ...(value.section === section ? {} : { sectionMoved: true }) });
+
+it('moves Australian states, territories and major cities out of world using whole capitalised names', () => {
+  const names = ['New South Wales', 'Victoria', 'Queensland', 'South Australia', 'Western Australia', 'Northern Territory', 'Australian Capital Territory', 'NSW', 'Vic', 'Qld', 'SA', 'WA', 'NT', 'ACT', 'Sydney', 'Melbourne', 'Brisbane', 'Adelaide', 'Canberra', 'Alice Springs', 'Gold Coast', 'Sunshine Coast', 'Wollongong', 'Geelong', 'Cairns', 'Townsville'];
+  const values = names.map(name => geographyValue(`Residents meet in ${name}`));
+  assert.deepStrictEqual(values.map(value => validateWrite(value, geographyItem)), values.map(value => geographyResult(value, 'australia')));
+  const lower = ['nsw', 'vic', 'qld', 'Sa', 'Wa', 'nt', 'act', 'tas', 'was', 'SAIL', 'Tasman', 'sydney', 'queensland', 'éNTé'];
+  const unchanged = lower.map(name => geographyValue(`Residents discuss ${name}`));
+  assert.deepStrictEqual(unchanged.map(value => validateWrite(value, geographyItem)), unchanged.map(value => geographyResult(value, 'world')));
+});
+
+it('uses written headline and summary for Australian evidence and reuses the Tasmania acceptance rule', () => {
+  const cases = [
+    [geographyValue('Storms damage local businesses', 'Severe storms hit the Northern Territory.'), geographyItem, 'australia'],
+    ...['Tasmania', 'Tas', 'Hobart', 'Launceston'].map(name => [geographyValue(`Residents meet in ${name}`), geographyItem, 'tasmania']),
+    [geographyValue('Residents discuss new services', 'Hobart residents discuss the changes.'), { ...geographyItem, title: 'Hobart residents discuss new services' }, 'tasmania'],
+    // Summary alone does not extend the existing Tasmania evidence rule.
+    [geographyValue('Residents discuss new services', 'Hobart residents discuss the changes.'), geographyItem, 'australia'],
+    [geographyValue('Residents discuss new services'), { ...geographyItem, title: 'Sydney residents meet' }, 'world'],
+    [{ ...geographyValue('Residents discuss new services'), detail: 'Residents meet in Sydney.' }, geographyItem, 'world'],
+    [geographyValue('Sydney technology firm announces updates', undefined, 'tech'), geographyItem, 'tech'],
+  ];
+  assert.deepStrictEqual(cases.map(([value, source]) => validateWrite(value, source)), cases.map(([value, , section]) => geographyResult(value, section)));
+});
+
+it('keeps international stories and disambiguates shared Australian place names', () => {
+  const cases = [
+    ['Perth residents meet in WA', 'australia'], ['Newcastle residents meet in NSW', 'australia'],
+    ['Richmond residents meet in Victoria', 'australia'], ['Darwin residents meet in NT', 'australia'],
+    ['Perth residents meet in Scotland', 'world'], ['Newcastle residents meet in UK', 'world'],
+    ['Coventry crush Newcastle', 'world'], ['Richmond residents meet', 'world'],
+    ['Charles Darwin papers go on display', 'world'], ['Darwin Nunez joins a new club', 'world'],
+    ['Perth residents meet', 'world'], ['Newcastle residents meet', 'world'],
+    ...['Japan', 'Japanese', 'China', 'Chinese', 'France', 'French', 'United States', 'American', 'US', 'USA', 'U.S.', 'UK', 'British', 'New Zealand', 'Kiwi', 'South Africa', 'South African', 'South Africans', 'London', 'Paris', 'New York', 'Tokyo', 'Auckland', 'Singapore', 'Dubai', 'Hong Kong', 'Coventry'].map(name => [`Sydney delegation visits ${name}`, 'world']),
+  ];
+  const values = cases.map(([headline]) => geographyValue(headline));
+  assert.deepStrictEqual(values.map(value => validateWrite(value, geographyItem)), values.map((value, index) => geographyResult(value, cases[index][1])));
+  const summary = geographyValue('Sydney delegation departs for talks', 'The delegation will meet Japanese officials.');
+  assert.deepStrictEqual(validateWrite(summary, geographyItem), geographyResult(summary, 'world'));
+});

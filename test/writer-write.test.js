@@ -15,7 +15,7 @@ function result(json, backend, model, usage, duration_ms) {
 
 it('writes with backend concurrency while preserving rank order and aggregating all outcomes', async () => {
   const outputs = [
-    result({ is_news: true, headline: 'Written one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world' },
+    result({ is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 10),
     result({ is_news: true, headline: '', summary: 'Bad.', detail: 'Bad.', kicker: 'Bad', section: 'unknown' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 20),
@@ -63,7 +63,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(written, {
     stories: [
       {
-        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world',
+        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world',
         written_by: 'ollama:qwen3:8b', write_ok: true, write_problems: ['Kicker repeated the section name'],
       },
       {
@@ -77,7 +77,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
     }],
     stats: {
       written: 2,
-      repairs: 1,
+      repairs: 1, headline_retries: 0,
       fallbacks: 1,
       not_news: 1,
       not_news_overridden: 0,
@@ -95,7 +95,7 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(logs, [
     ['warn', 'pipeline:writer', 'Writer output invalid for "Publisher two", using fallback', { problems: ['Headline was empty', 'Unknown section: unknown'] }],
     ['info', 'pipeline:writer', 'Not news: "Publisher three"'],
-    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 1 fallback, 1 not news, 0 not-news overrides, 0 section moves, 0 facts removed, 0 unsupported numbers'],
+    ['info', 'pipeline:writer', 'Wrote 2 stories: 1 repair, 0 headline retries, 1 fallback, 1 not news, 0 not-news overrides, 0 section moves, 0 facts removed, 0 unsupported numbers'],
   ]);
 });
 
@@ -115,24 +115,24 @@ it('turns a thrown story call into a publisher fallback', async () => {
       written_by: 'ollama:qwen', write_ok: false, write_problems: ['Writer output was not valid JSON'],
     }],
     dropped: [],
-    stats: { written: 1, repairs: 0, fallbacks: 1, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 1, repairs: 0, headline_retries: 0, fallbacks: 1, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [['pipeline:writer', 'Writer failed for "Publisher", using fallback: model stopped']]);
 });
 
 it('moves unsupported local sections using configured place interests and counts the move', async () => {
   const outputs = [
-    result({ is_news: true, headline: 'Queensland inquest continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
-    result({ is_news: true, headline: 'Council decision', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
-    result({ is_news: true, headline: 'National update', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'National government announces new policy', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia' }, 'ollama:test', 'test', {}, 0),
   ];
   let index = 0;
   const logs = [];
   const output = await writeStories(
     [
-      { title: 'Queensland inquest continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1 },
-      { title: 'Council decision', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1 },
-      { title: 'National update', description: 'A national update.', interest_matches: [], coverage: 1 },
+      { title: 'Queensland inquest hearing continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1 },
+      { title: 'Council approves new service', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1 },
+      { title: 'National government announces new policy', description: 'A national update.', interest_matches: [], coverage: 1 },
     ],
     { name: 'ollama:test', concurrency: 1, async write() { return outputs[index++]; } },
     {
@@ -149,27 +149,27 @@ it('moves unsupported local sections using configured place interests and counts
   assert.deepStrictEqual(output, {
     stories: [
       {
-        title: 'Queensland inquest continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1,
-        rank: 1, id: 's1', is_news: true, headline: 'Queensland inquest continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'australia',
+        title: 'Queensland inquest hearing continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1,
+        rank: 1, id: 's1', is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'australia',
         written_by: 'ollama:test', write_ok: true, write_problems: ['section moved: tasmania -> australia (no Tasmanian place named)'],
       },
       {
-        title: 'Council decision', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1,
-        rank: 2, id: 's2', is_news: true, headline: 'Council decision', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania',
+        title: 'Council approves new service', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1,
+        rank: 2, id: 's2', is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
       {
-        title: 'National update', description: 'A national update.', interest_matches: [], coverage: 1,
-        rank: 3, id: 's3', is_news: true, headline: 'National update', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia',
+        title: 'National government announces new policy', description: 'A national update.', interest_matches: [], coverage: 1,
+        rank: 3, id: 's3', is_news: true, headline: 'National government announces new policy', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
     ],
     dropped: [],
-    stats: { written: 3, repairs: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 3, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
   assert.deepStrictEqual(logs, [
     ['debug', 'pipeline:writer', 'section moved: tasmania -> australia (no Tasmanian place named)'],
-    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 fallbacks, 0 not news, 0 not-news overrides, 1 section move, 0 facts removed, 0 unsupported numbers'],
+    ['info', 'pipeline:writer', 'Wrote 3 stories: 1 repair, 0 headline retries, 0 fallbacks, 0 not news, 0 not-news overrides, 1 section move, 0 facts removed, 0 unsupported numbers'],
   ]);
 });
 
@@ -194,12 +194,12 @@ it('counts removed facts and unsupported numbers in writer statistics and loggin
   );
 
   assert.deepStrictEqual(output.stats, {
-    written: 1, repairs: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0,
+    written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0,
     facts_removed: 1, numbers_unsupported: 2, input_tokens: 0, output_tokens: 0, duration_ms: 0,
   });
   assert.deepStrictEqual(logs, [[
     'pipeline:writer',
-    'Wrote 1 stories: 1 repair, 0 fallbacks, 0 not news, 0 not-news overrides, 0 section moves, 1 fact removed, 2 unsupported numbers',
+    'Wrote 1 stories: 1 repair, 0 headline retries, 0 fallbacks, 0 not news, 0 not-news overrides, 0 section moves, 1 fact removed, 2 unsupported numbers',
   ]]);
 });
 
@@ -248,7 +248,7 @@ it('overrides not-news only for non-community stories without substantial articl
       },
     ],
     stats: {
-      written: 1, repairs: 1, fallbacks: 0, not_news: 2, not_news_overridden: 1,
+      written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 2, not_news_overridden: 1,
       section_moves: 0, facts_removed: 0, numbers_unsupported: 0,
       input_tokens: 0, output_tokens: 0, duration_ms: 0,
     },
@@ -256,6 +256,91 @@ it('overrides not-news only for non-community stories without substantial articl
   assert.deepStrictEqual(logs, [
     ['pipeline:writer', 'Not news: "Can someone help with my server?"'],
     ['pipeline:writer', 'Not news: "Long-form advertorial"'],
-    ['pipeline:writer', 'Wrote 1 stories: 1 repair, 0 fallbacks, 2 not news, 1 not-news override, 0 section moves, 0 facts removed, 0 unsupported numbers'],
+    ['pipeline:writer', 'Wrote 1 stories: 1 repair, 0 headline retries, 0 fallbacks, 2 not news, 1 not-news override, 0 section moves, 0 facts removed, 0 unsupported numbers'],
   ]);
+});
+
+const retryItem = { title: 'Tough Decisions', description: 'The RBA minutes discuss inflation.', source_name: 'Outlet' };
+const retryValue = { is_news: true, headline: 'Tough Decisions', summary: 'The RBA minutes discuss inflation.', detail: 'The RBA minutes discuss inflation.', kicker: 'Rates', section: 'australia' };
+const retrySettings = { getWriterArticleChars: () => 6000 };
+
+it('retries a vague headline once with the full source prompt and validates the replacement', async () => {
+  const { writeSystemPrompt, writeUserPrompt, WRITE_SCHEMA } = require('../src/pipeline/writer/prompts');
+  const calls = [];
+  const logs = [];
+  const replacement = { ...retryValue, headline: 'RBA minutes show continued concern about inflation', detail: 'An official died by suicide. The RBA minutes discuss inflation.', section: 'world', summary: 'The RBA minutes discuss inflation in NSW.' };
+  const output = await writeStories([retryItem], {
+    name: 'test', async write(...args) {
+      calls.push(args);
+      return result(calls.length === 1 ? retryValue : replacement, 'test', 'test', { input_tokens: 10, output_tokens: 5 }, 7);
+    },
+  }, retrySettings, { info: (...args) => logs.push(args), debug: (...args) => logs.push(args) });
+  const prompt = writeUserPrompt(retryItem, { articleChars: 6000 });
+  assert.deepStrictEqual(calls, [
+    [writeSystemPrompt(), prompt, WRITE_SCHEMA],
+    [writeSystemPrompt(), `${prompt}\n\nHeadline "Tough Decisions" is too vague; write a specific headline of 6–14 words saying what happened, from the supplied text only.`, WRITE_SCHEMA],
+  ]);
+  assert.deepStrictEqual(output, {
+    stories: [{ ...retryItem, rank: 1, id: 's1', ...replacement, detail: 'The RBA minutes discuss inflation. The RBA minutes discuss inflation.', section: 'australia', written_by: 'test', write_ok: true,
+      write_problems: ['removed unsupported claim: "suicid"', 'section moved: world -> australia (Australian place named; no overseas place named)'] }],
+    dropped: [],
+    stats: { written: 1, repairs: 1, headline_retries: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 1, facts_removed: 1, numbers_unsupported: 0, input_tokens: 20, output_tokens: 10, duration_ms: 14 },
+  });
+  assert.deepStrictEqual(logs, [
+    ['pipeline:writer', 'section moved: world -> australia (Australian place named; no overseas place named)'],
+    ['pipeline:writer', 'Wrote 1 stories: 1 repair, 1 headline retry, 0 fallbacks, 0 not news, 0 not-news overrides, 1 section move, 1 fact removed, 0 unsupported numbers'],
+  ]);
+});
+
+for (const [label, second, problem] of [
+  ['still vague', { ...retryValue, headline: 'Rates', summary: 'Changed summary.' }, 'Headline retry was still vague: "Rates"'],
+  ['invalid', { ...retryValue, headline: 'RBA minutes discuss inflation again', summary: '' }, 'Headline retry was invalid'],
+  ['throws', new Error('model stopped'), 'Headline retry failed: model stopped'],
+]) {
+  it(`retains the first validated answer when the headline retry ${label}`, async () => {
+    let calls = 0;
+    const output = await writeStories([retryItem], { name: 'test', async write() {
+      calls++;
+      if (calls === 2 && second instanceof Error) throw second;
+      return { json: calls === 1 ? retryValue : second };
+    } }, retrySettings);
+    assert.strictEqual(calls, 2);
+    assert.deepStrictEqual(output, {
+      stories: [{ ...retryItem, rank: 1, id: 's1', ...retryValue, written_by: 'test', write_ok: true, write_problems: [problem] }], dropped: [],
+      stats: { written: 1, repairs: 1, headline_retries: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    });
+  });
+}
+
+it('retries one to three words but accepts four words and skips rejected news and invalid writes', async () => {
+  const cases = [
+    [{ ...retryValue, headline: 'Rates' }, 2],
+    [retryValue, 2],
+    [{ ...retryValue, headline: 'Rates stay high' }, 2],
+    [{ ...retryValue, headline: 'RBA rates remain unchanged' }, 1],
+    [{ ...retryValue, is_news: false }, 1],
+    [null, 1],
+  ];
+  for (const [first, expected] of cases) {
+    let calls = 0;
+    const output = await writeStories([{ ...retryItem, source_type: 'reddit' }], { name: 'test', async write() {
+      calls++;
+      return { json: calls === 1 ? first : { ...retryValue, headline: 'RBA rates remain unchanged' } };
+    } }, retrySettings);
+    assert.strictEqual(calls, expected);
+    assert.strictEqual(output.stats.headline_retries, expected - 1);
+    if (expected === 2) assert.strictEqual(output.stories[0].headline, 'RBA rates remain unchanged');
+  }
+});
+
+it('keeps the not-news override on a retried unread publisher story', async () => {
+  let calls = 0;
+  const output = await writeStories([retryItem], { name: 'test', async write() {
+    calls++;
+    return { json: calls === 1 ? retryValue : { ...retryValue, headline: 'RBA minutes discuss inflation again', is_news: false } };
+  } }, retrySettings);
+  assert.strictEqual(calls, 2);
+  assert.strictEqual(output.stats.not_news_overridden, 1);
+  assert.deepStrictEqual(output.stories[0], { ...retryItem, rank: 1, id: 's1', ...retryValue, headline: 'RBA minutes discuss inflation again', written_by: 'test', write_ok: true, write_problems: ['kept: no article text, not-news ignored'] });
+  assert.deepStrictEqual(output.dropped, []);
 });

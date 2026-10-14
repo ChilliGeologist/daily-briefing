@@ -1,7 +1,7 @@
 'use strict';
 
 const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = require('./prompts');
-const { validateWrite } = require('./validate');
+const { isVagueHeadline, validateWrite } = require('./validate');
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return count === 1 ? singular : pluralForm;
@@ -13,6 +13,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
   const stats = {
     written: 0,
     repairs: 0,
+    headline_retries: 0,
     fallbacks: 0,
     not_news: 0,
     not_news_overridden: 0,
@@ -35,23 +36,43 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     let validation;
     let writtenBy = writer.name;
 
-    try {
-      const response = await writer.write(
-        writeSystemPrompt(),
-        writeUserPrompt(item, { articleChars: settings.getWriterArticleChars() }),
-        WRITE_SCHEMA
-      );
-      writtenBy = response.backend || writer.name;
+    async function request(prompt) {
+      const response = await writer.write(writeSystemPrompt(), prompt, WRITE_SCHEMA);
       const usage = response.usage || {};
       stats.input_tokens += Number(usage.input_tokens) || 0;
       stats.output_tokens += Number(usage.output_tokens) || 0;
       stats.duration_ms += Number(response.duration_ms) || 0;
-      validation = validateWrite(response.json, item, interests);
+      return { validation: validateWrite(response.json, item, interests), backend: response.backend || writer.name };
+    }
+    const overrideNotNews = !isCommunityItem(item)
+      && String(item.article_content || '').trim().length < 500;
+
+    try {
+      const userPrompt = writeUserPrompt(item, { articleChars: settings.getWriterArticleChars() });
+      const first = await request(userPrompt);
+      validation = first.validation;
+      writtenBy = first.backend;
+      if (validation.ok && (validation.value.is_news || overrideNotNews)
+        && isVagueHeadline(validation.value.headline)) {
+        stats.headline_retries++;
+        const note = `Headline "${validation.value.headline}" is too vague; write a specific headline of 6–14 words saying what happened, from the supplied text only.`;
+        try {
+          const retry = await request(`${userPrompt}\n\n${note}`);
+          if (!retry.validation.ok) {
+            validation.problems.push('Headline retry was invalid');
+          } else if (isVagueHeadline(retry.validation.value.headline)) {
+            validation.problems.push(`Headline retry was still vague: "${retry.validation.value.headline}"`);
+          } else {
+            validation = retry.validation;
+            writtenBy = retry.backend;
+          }
+        } catch (error) {
+          validation.problems.push(`Headline retry failed: ${error.message}`);
+        }
+      }
       stats.facts_removed += validation.facts_removed || 0;
       stats.numbers_unsupported += validation.numbers_unsupported || 0;
-      if (!validation.value.is_news
-        && !isCommunityItem(item)
-        && String(item.article_content || '').trim().length < 500) {
+      if (!validation.value.is_news && overrideNotNews) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');
         stats.not_news_overridden++;
@@ -85,7 +106,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     if (validation.sectionMoved) {
       stats.section_moves++;
       if (log && log.debug) {
-        log.debug('pipeline:writer', validation.problems.at(-1));
+        log.debug('pipeline:writer', validation.problems.find(problem => problem.startsWith('section moved:')));
       }
     }
     if (story.is_news) {
@@ -115,7 +136,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 
   if (log && log.info) {
     log.info('pipeline:writer',
-      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.not_news_overridden} ${plural(stats.not_news_overridden, 'not-news override')}, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}, ${stats.facts_removed} ${plural(stats.facts_removed, 'fact', 'facts')} removed, ${stats.numbers_unsupported} unsupported ${plural(stats.numbers_unsupported, 'number')}`);
+      `Wrote ${stories.length} stories: ${stats.repairs} ${plural(stats.repairs, 'repair')}, ${stats.headline_retries} ${plural(stats.headline_retries, 'headline retry', 'headline retries')}, ${stats.fallbacks} ${plural(stats.fallbacks, 'fallback')}, ${stats.not_news} not news, ${stats.not_news_overridden} ${plural(stats.not_news_overridden, 'not-news override')}, ${stats.section_moves} ${plural(stats.section_moves, 'section move')}, ${stats.facts_removed} ${plural(stats.facts_removed, 'fact', 'facts')} removed, ${stats.numbers_unsupported} unsupported ${plural(stats.numbers_unsupported, 'number')}`);
   }
   return { stories, dropped, stats };
 }

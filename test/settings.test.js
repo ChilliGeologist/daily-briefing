@@ -5,7 +5,10 @@ const assert = require('node:assert');
 const { createSettings } = require('../src/settings');
 const { DEFAULT_INTERESTS } = require('../src/pipeline/writer/interests');
 
-const fakeDb = vals => ({ getSetting: key => (key in vals ? vals[key] : null) });
+const fakeDb = vals => ({
+  getSetting: key => (key in vals ? vals[key] : null),
+  setSetting: (key, value) => { vals[key] = value; },
+});
 
 it('returns defaults when unset', () => {
   const settings = createSettings(fakeDb({}));
@@ -14,6 +17,7 @@ it('returns defaults when unset', () => {
     'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
     'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
     'everybody appearing at', 'in case you missed it',
+    ...newFillerPatterns,
   ]);
   assert.deepStrictEqual(settings.getPaywalledHosts(), [
     'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
@@ -32,6 +36,7 @@ it('returns stored values when set', () => {
   const settings = createSettings(fakeDb({
     filter_max_age_hours: 24,
     filler_patterns: ['x'],
+    filler_patterns_revision: 1,
     paywalled_hosts: [],
     max_same_story_checks: 5,
     max_candidates: 135,
@@ -59,4 +64,31 @@ it('returns stored values when set', () => {
   ], [
     [{ label: 'Mine' }], 'writer-model', 16384, 9000, 4, { min: 6, max: 6 },
   ]);
+});
+
+const newFillerPatterns = [
+  'ask away', 'megathread',
+  '/\\b(?:daily|weekly|monthly)\\s+(?:discussion|questions?)(?:\\s+(?:discussion|questions?))?\\s+threads?\\b/i',
+  '/^\\s*(?:(?:hardware|quick)\\s+question|question|help|need\\s+advice)\\s*\\??\\s*$/i',
+];
+
+it('upgrades stored filler patterns once without restoring deleted defaults or losing custom patterns', () => {
+  const vals = { filler_patterns: ['my custom pattern', 'ask away', 'superquiz'] };
+  const db = { getSetting: key => vals[key] ?? null, setSetting: (key, value) => { vals[key] = value; }, getAllSettings: () => ({ ...vals }) };
+  const settings = createSettings(db);
+  const expected = ['my custom pattern', 'ask away', 'superquiz', ...newFillerPatterns.slice(1)];
+  assert.deepStrictEqual(settings.getFillerPatterns(), expected);
+  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 1 });
+  settings.set('filler_patterns', ['my custom pattern']);
+  assert.deepStrictEqual(createSettings(db).getFillerPatterns(), ['my custom pattern']);
+  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 1 });
+});
+
+it('seeds fresh filler defaults once and respects an empty list after editing', () => {
+  const vals = {};
+  const db = { getSetting: key => vals[key] ?? null, setSetting: (key, value) => { vals[key] = value; } };
+  const settings = createSettings(db);
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['weather report for', 'magistrates court list', 'superquiz', 'best of cartoons', 'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle', 'everybody appearing at', 'in case you missed it', ...newFillerPatterns]);
+  settings.set('filler_patterns', []);
+  assert.deepStrictEqual(createSettings(db).getFillerPatterns(), []);
 });

@@ -51,7 +51,7 @@ it('ignores an invalid regex pattern instead of throwing', () => {
 });
 
 it('filters court-list filler using the code defaults', () => {
-  const settings = createSettings({ getSetting: () => null });
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
   const result = filterItems([
     item('Everybody appearing at Hobart Magistrates Court', 1),
   ], opts({ fillerPatterns: settings.getFillerPatterns() }));
@@ -63,4 +63,14 @@ it('filters court-list filler using the code defaults', () => {
     }],
     stats: { total: 1, kept: 0, stale: 0, filler: 1 },
   });
+});
+
+it('filters standing threads and whole generic labels while keeping specific story titles', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = ['Have a question about the game or the subreddit? Ask away!', 'October Megathread', 'Daily discussion thread', 'Weekly question thread: October', 'Monthly questions thread', 'Daily question discussion thread', 'Question', 'Hardware question', 'Quick question?', 'Help?', 'Need advice ?', '  question?  '];
+  const keep = ['Hardware question answered by new research', 'Question time exposes policy dispute', 'Help arrives after floods', 'Need advice on new hardware?', 'Daily discussion of inflation continues', 'Weekly report: question thread closed'];
+  const result = filterItems([...titles, ...keep].map(title => item(title, 1)), opts({ fillerPatterns: settings.getFillerPatterns() }));
+  assert.deepStrictEqual(result.dropped.map(drop => drop.item.title), titles);
+  assert.deepStrictEqual(result.kept.map(value => value.title), keep);
+  assert.deepStrictEqual(result.stats, { total: 18, kept: 6, stale: 0, filler: 12 });
 });

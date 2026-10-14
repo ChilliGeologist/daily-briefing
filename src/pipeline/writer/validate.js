@@ -2,6 +2,7 @@
 
 const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interests');
 const { guardFacts } = require('./facts');
+const { hasAustralianOnlyPlace } = require('./australian-places');
 const { isTasmanianSource, matchTasmanianPlaces } = require('./tasmanian-places');
 const {
   SECTIONS,
@@ -66,6 +67,15 @@ function sectionEvidence(item, value) {
 }
 
 function enforceSectionRequirements(value, item, interests, problems) {
+  if (value.section === 'world' && hasAustralianOnlyPlace(value.headline, value.summary)) {
+    // Probe the existing Tasmania rule with exactly its existing evidence and
+    // configured interests; do not broaden its gazetteer or source exceptions.
+    const local = { ...value, section: 'tasmania' };
+    enforceSectionRequirements(local, item, interests, []);
+    value.section = local.section;
+    problems.push(`section moved: world -> ${value.section} (Australian place named; no overseas place named)`);
+    return true;
+  }
   const requirement = SECTION_REQUIRES_PLACE[value.section];
   if (!requirement) return false;
 
@@ -91,6 +101,10 @@ function enforceSectionRequirements(value, item, interests, problems) {
 
 function words(text) {
   return String(text).trim().match(/\S+/g) || [];
+}
+
+function isVagueHeadline(headline) {
+  return words(headline).length <= 3;
 }
 
 function stripHeadlineFullStop(headline) {
@@ -351,4 +365,4 @@ function validateEdit(raw, stories, { sectionSize, topSize }) {
   return { top, ...placeRemaining(stories, top, sectionSize, preferred), fallback, problems };
 }
 
-module.exports = { validateWrite, validateEdit, deterministicEdit, defaultSection };
+module.exports = { isVagueHeadline, validateWrite, validateEdit, deterministicEdit, defaultSection };
