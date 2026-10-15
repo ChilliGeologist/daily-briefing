@@ -220,10 +220,8 @@ var currentDate = null;
 var currentBriefingId = null;
 var readingStories = new Map();
 var readingStoryKeys = new Map();
-var readingStoryToggles = new Map();
+var readingStoryOpeners = new Map();
 var readingFallbackId = 0;
-var readingControlId = 0;
-var expandedStory = null;
 var briefingLoaded = false;
 var curlState = { progress: 0, cornerY: 0, sign: 1, dragY: 0, animation: null, gesture: null };
 var thumbIndexState = {
@@ -518,7 +516,6 @@ function resetReadingStage() {
   if ($('#reader-body')) $('#reader-body').replaceChildren();
   if ($('#curl-ghost')) $('#curl-ghost').replaceChildren();
   resetThumbIndexInteraction();
-  closeExpandedStory();
   readingState.readerOpen = false;
   readingState.storyId = null;
   readingState.openerId = null;
@@ -532,10 +529,6 @@ function storyKey(item) {
   readingStoryKeys.set(item, key);
   if (!readingStories.has(key)) readingStories.set(key, item);
   return key;
-}
-
-function domToken(value) {
-  return String(value || 'item').replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
 function sectionFallbackId(section) {
@@ -904,7 +897,7 @@ function releaseThumbIndex(event, cancelled) {
   thumbIndexState.finger = null;
   $('#section-thumb-pickline').classList.remove('is-visible');
   setThumbIndexPick(null);
-  if (!cancelled && picked) toggleReadingStory(picked, true);
+  if (!cancelled && picked) startForwardTurn(picked.dataset.storyId);
   kickThumbIndex();
 }
 
@@ -948,9 +941,8 @@ async function loadBriefing(id) {
   briefingLoaded = false;
   readingStories.clear();
   readingStoryKeys.clear();
-  readingStoryToggles.clear();
+  readingStoryOpeners.clear();
   readingFallbackId = 0;
-  readingControlId = 0;
   container.replaceChildren();
   loading.classList.remove('hidden');
   emptyState.classList.add('hidden');
@@ -1035,9 +1027,6 @@ function renderReadingSection(group) {
 
 function renderReadingStory(item, lead) {
   var key = storyKey(item);
-  var controlToken = domToken(key) + '-' + (++readingControlId);
-  var toggleId = 'story-toggle-' + controlToken;
-  var detailId = 'story-detail-' + controlToken;
   var story = el('article', {
     className: 'reading-story' + (lead ? ' reading-story--lead' : ''),
     'data-story-id': key
@@ -1046,92 +1035,21 @@ function renderReadingStory(item, lead) {
   if (item.kicker) summaryChildren.push(el('span', { className: 'reading-story-kicker', textContent: item.kicker }));
   summaryChildren.push(el('span', { className: 'reading-story-title', textContent: item.title || 'Untitled story' }));
   if (item.summary) summaryChildren.push(el('span', { className: 'reading-story-summary', textContent: item.summary }));
-  var toggle = el('button', {
+  var opener = el('button', {
     type: 'button',
-    className: 'reading-story-toggle',
-    id: toggleId,
-    'data-reading-action': 'toggle',
-    'data-story-id': key,
-    'aria-expanded': 'false',
-    'aria-controls': detailId
-  }, summaryChildren);
-  if (!readingStoryToggles.has(key)) readingStoryToggles.set(key, toggle);
-
-  var innerChildren = [];
-  if (item.detail) innerChildren.push(el('p', { className: 'reading-story-detail-text', textContent: item.detail }));
-  var names = sourceNames(item);
-  var time = readingTimeText(item.reading_time);
-  if (names.length || time) {
-    var meta = el('div', { className: 'reading-story-meta' });
-    if (names.length) meta.appendChild(el('span', { textContent: names.join(' · ') }));
-    if (time) meta.appendChild(el('span', { textContent: time }));
-    innerChildren.push(meta);
-  }
-  innerChildren.push(el('button', {
-    type: 'button',
-    className: 'read-full-button',
+    className: 'reading-story-open',
     'data-reading-action': 'read',
-    'data-story-id': key,
-    textContent: 'Read in full'
-  }));
-  var detailInner = el('div', { className: 'reading-story-detail-inner' }, innerChildren);
-  var overflow = el('div', { className: 'reading-story-detail-overflow' }, [detailInner]);
-  var detail = el('div', {
-    className: 'reading-story-detail',
-    id: detailId,
-    role: 'region',
-    'aria-labelledby': toggleId,
-    'aria-hidden': 'true',
-    inert: ''
-  }, [overflow]);
-  story.append(toggle, detail);
+    'data-story-id': key
+  }, summaryChildren);
+  if (!readingStoryOpeners.has(key)) readingStoryOpeners.set(key, opener);
+  story.appendChild(opener);
   return story;
-}
-
-function closeExpandedStory() {
-  if (!expandedStory) return;
-  expandedStory.classList.remove('expanded');
-  var toggle = expandedStory.querySelector('.reading-story-toggle');
-  var detail = expandedStory.querySelector('.reading-story-detail');
-  if (toggle) toggle.setAttribute('aria-expanded', 'false');
-  if (detail) {
-    detail.setAttribute('aria-hidden', 'true');
-    setInert(detail, true);
-  }
-  expandedStory = null;
-}
-
-function toggleReadingStory(story, forceOpen) {
-  var wasExpanded = story === expandedStory;
-  if (wasExpanded && forceOpen) return;
-  closeExpandedStory();
-  if (wasExpanded) {
-    refreshCurlGhost();
-    return;
-  }
-  expandedStory = story;
-  story.classList.add('expanded');
-  var toggle = story.querySelector('.reading-story-toggle');
-  var detail = story.querySelector('.reading-story-detail');
-  if (toggle) toggle.setAttribute('aria-expanded', 'true');
-  if (detail) {
-    detail.setAttribute('aria-hidden', 'false');
-    setInert(detail, false);
-  }
-  refreshCurlGhost();
 }
 
 $('#briefing-page').addEventListener('click', function(event) {
   var button = event.target.closest('button[data-reading-action]');
   if (!button || !event.currentTarget.contains(button)) return;
-  var action = button.dataset.readingAction;
-  if (action === 'toggle') {
-    var story = button.closest('.reading-story');
-    if (story) toggleReadingStory(story);
-  } else if (action === 'read') {
-    event.stopPropagation();
-    startForwardTurn(button.dataset.storyId);
-  }
+  startForwardTurn(button.dataset.storyId);
 });
 
 // ============================================================
@@ -1284,8 +1202,8 @@ function closeReader() {
   $('#briefing-page').scrollTop = readingState.briefingScrollTop;
   requestAnimationFrame(function() {
     $('#briefing-page').scrollTop = readingState.briefingScrollTop;
-    var toggle = readingStoryToggles.get(openerId);
-    if (toggle && !toggle.closest('[hidden]')) toggle.focus();
+    var opener = readingStoryOpeners.get(openerId);
+    if (opener && !opener.closest('[hidden]')) opener.focus();
   });
 }
 

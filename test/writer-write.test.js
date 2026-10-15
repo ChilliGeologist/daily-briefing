@@ -2,7 +2,7 @@
 
 const { it } = require('node:test');
 const assert = require('node:assert');
-const { writeStories } = require('../src/pipeline/writer/write');
+const { writeStories, writtenStorySimilarity } = require('../src/pipeline/writer/write');
 
 function result(json, backend, model, usage, duration_ms) {
   const value = { json, usage, duration_ms };
@@ -15,11 +15,11 @@ function result(json, backend, model, usage, duration_ms) {
 
 it('writes with backend concurrency while preserving rank order and aggregating all outcomes', async () => {
   const outputs = [
-    result({ is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: 'World', section: 'world' },
+    result({ is_news: true, headline: 'Written story number one', summary: 'Summary one.', kicker: 'World', section: 'world' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 10),
-    result({ is_news: true, headline: '', summary: 'Bad.', detail: 'Bad.', kicker: 'Bad', section: 'unknown' },
+    result({ is_news: true, headline: '', summary: 'Bad.', kicker: 'Bad', section: 'unknown' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 20),
-    result({ is_news: false, headline: 'An advert', summary: 'This is an advert.', detail: 'It is sponsored.', kicker: 'Advert', section: 'australia' },
+    result({ is_news: false, headline: 'An advert', summary: 'This is an advert.', kicker: 'Advert', section: 'australia' },
       'ollama:qwen3:8b', 'qwen3:8b', { input_tokens: 1000000, output_tokens: 1000000 }, 30),
   ];
   let callIndex = 0;
@@ -63,16 +63,16 @@ it('writes with backend concurrency while preserving rank order and aggregating 
   assert.deepStrictEqual(written, {
     stories: [
       {
-        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written story number one', summary: 'Summary one.', detail: 'Detail one.', kicker: '', section: 'world',
+        ...items[0], rank: 1, id: 's1', is_news: true, headline: 'Written story number one', summary: 'Summary one.', kicker: '', section: 'world',
         written_by: 'ollama:qwen3:8b', write_ok: true, write_problems: ['Kicker repeated the section name'],
       },
       {
-        ...items[1], rank: 2, id: 's2', is_news: true, headline: 'Publisher two', summary: 'Teaser two.', detail: 'Teaser two. More.', kicker: 'Plex', section: 'homelab',
+        ...items[1], rank: 2, id: 's2', is_news: true, headline: 'Publisher two', summary: 'Teaser two.', kicker: 'Plex', section: 'homelab',
         written_by: 'ollama:qwen3:8b', write_ok: false, write_problems: ['Headline was empty', 'Unknown section: unknown'],
       },
     ],
     dropped: [{
-      ...items[2], rank: 3, id: 's3', is_news: false, headline: 'An advert', summary: 'This is an advert.', detail: 'It is sponsored.', kicker: 'Advert', section: 'australia',
+      ...items[2], rank: 3, id: 's3', is_news: false, headline: 'An advert', summary: 'This is an advert.', kicker: 'Advert', section: 'australia',
       written_by: 'ollama:qwen3:8b', write_ok: true, write_problems: [],
     }],
     stats: {
@@ -111,7 +111,7 @@ it('turns a thrown story call into a publisher fallback', async () => {
   assert.deepStrictEqual(output, {
     stories: [{
       title: 'Publisher', description: 'Teaser.', source_name: 'Outlet', interest_matches: [], coverage: 1,
-      rank: 1, id: 's1', is_news: true, headline: 'Publisher', summary: 'Teaser.', detail: 'Teaser.', kicker: 'Outlet', section: 'australia',
+      rank: 1, id: 's1', is_news: true, headline: 'Publisher', summary: 'Teaser.', kicker: 'Outlet', section: 'australia',
       written_by: 'ollama:qwen', write_ok: false, write_problems: ['Writer output was not valid JSON'],
     }],
     dropped: [],
@@ -122,9 +122,9 @@ it('turns a thrown story call into a publisher fallback', async () => {
 
 it('moves unsupported local sections using configured place interests and counts the move', async () => {
   const outputs = [
-    result({ is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
-    result({ is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
-    result({ is_news: true, headline: 'National government announces new policy', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', kicker: 'Inquest', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', kicker: 'Council', section: 'tasmania' }, 'ollama:test', 'test', {}, 0),
+    result({ is_news: true, headline: 'National government announces new policy', summary: 'A national update.', kicker: 'Update', section: 'australia' }, 'ollama:test', 'test', {}, 0),
   ];
   let index = 0;
   const logs = [];
@@ -150,17 +150,17 @@ it('moves unsupported local sections using configured place interests and counts
     stories: [
       {
         title: 'Queensland inquest hearing continues', description: 'A Queensland hearing.', interest_matches: [], coverage: 1,
-        rank: 1, id: 's1', is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', detail: 'The hearing continues in Queensland.', kicker: 'Inquest', section: 'australia',
+        rank: 1, id: 's1', is_news: true, headline: 'Queensland inquest hearing continues', summary: 'An inquest continues.', kicker: 'Inquest', section: 'australia',
         written_by: 'ollama:test', write_ok: true, write_problems: ['section moved: tasmania -> australia (no Tasmanian place named)'],
       },
       {
         title: 'Council approves new service', description: 'A council has decided.', article_content: 'Launceston residents will be affected.', interest_matches: [], coverage: 1,
-        rank: 2, id: 's2', is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', detail: 'The decision affects residents.', kicker: 'Council', section: 'tasmania',
+        rank: 2, id: 's2', is_news: true, headline: 'Council approves new service', summary: 'A council has decided.', kicker: 'Council', section: 'tasmania',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
       {
         title: 'National government announces new policy', description: 'A national update.', interest_matches: [], coverage: 1,
-        rank: 3, id: 's3', is_news: true, headline: 'National government announces new policy', summary: 'A national update.', detail: 'More details.', kicker: 'Update', section: 'australia',
+        rank: 3, id: 's3', is_news: true, headline: 'National government announces new policy', summary: 'A national update.', kicker: 'Update', section: 'australia',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
     ],
@@ -182,8 +182,7 @@ it('counts removed facts and unsupported numbers in writer statistics and loggin
         return result({
           is_news: true,
           headline: 'Actor dies at 34',
-          summary: 'The death is under investigation.',
-          detail: 'The actor died by suicide at 34. Friends remembered his long career and the death remains under investigation by authorities.',
+          summary: 'The actor died by suicide at 34. The death is under investigation.',
           kicker: 'Tribute',
           section: 'world',
         }, 'ollama:test', 'test', {}, 0);
@@ -211,9 +210,9 @@ it('overrides not-news only for non-community stories without substantial articl
   ];
   let index = 0;
   const outputs = [
-    { is_news: false, headline: 'Team handed 3-0 loss over jersey slogan in Hobart', summary: 'A team was penalised.', detail: 'A team was penalised over a jersey slogan.', kicker: 'Sport', section: 'tasmania' },
-    { is_news: false, headline: 'Can someone help with my server?', summary: 'A beginner asks for help.', detail: 'A beginner asks the community for help.', kicker: 'Help', section: 'homelab' },
-    { is_news: false, headline: 'Long-form advertorial', summary: 'A promotional feature.', detail: 'The supplied article is promotional.', kicker: 'Advert', section: 'australia' },
+    { is_news: false, headline: 'Team handed 3-0 loss over jersey slogan in Hobart', summary: 'A team was penalised.', kicker: 'Sport', section: 'tasmania' },
+    { is_news: false, headline: 'Can someone help with my server?', summary: 'A beginner asks for help.', kicker: 'Help', section: 'homelab' },
+    { is_news: false, headline: 'Long-form advertorial', summary: 'A promotional feature.', kicker: 'Advert', section: 'australia' },
   ];
   const logs = [];
   const output = await writeStories(items, {
@@ -229,7 +228,7 @@ it('overrides not-news only for non-community stories without substantial articl
     stories: [{
       ...items[0], rank: 1, id: 's1', is_news: true,
       headline: 'Team handed 3-0 loss over jersey slogan in Hobart',
-      summary: 'A team was penalised.', detail: 'A team was penalised over a jersey slogan.',
+      summary: 'A team was penalised.',
       kicker: 'Sport', section: 'tasmania', written_by: 'ollama:test', write_ok: true,
       write_problems: ['kept: no article text, not-news ignored'],
     }],
@@ -237,13 +236,13 @@ it('overrides not-news only for non-community stories without substantial articl
       {
         ...items[1], rank: 2, id: 's2', is_news: false,
         headline: 'Can someone help with my server?', summary: 'A beginner asks for help.',
-        detail: 'A beginner asks the community for help.', kicker: 'Help', section: 'homelab',
+        kicker: 'Help', section: 'homelab',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
       {
         ...items[2], rank: 3, id: 's3', is_news: false,
         headline: 'Long-form advertorial', summary: 'A promotional feature.',
-        detail: 'The supplied article is promotional.', kicker: 'Advert', section: 'australia',
+        kicker: 'Advert', section: 'australia',
         written_by: 'ollama:test', write_ok: true, write_problems: [],
       },
     ],
@@ -261,14 +260,14 @@ it('overrides not-news only for non-community stories without substantial articl
 });
 
 const retryItem = { title: 'Tough Decisions', description: 'The RBA minutes discuss inflation.', source_name: 'Outlet' };
-const retryValue = { is_news: true, headline: 'Tough Decisions', summary: 'The RBA minutes discuss inflation and future interest rates.', detail: 'The RBA minutes discuss inflation.', kicker: 'Rates', section: 'australia' };
+const retryValue = { is_news: true, headline: 'Tough Decisions', summary: 'The RBA minutes discuss inflation and future interest rates.', kicker: 'Rates', section: 'australia' };
 const retrySettings = { getWriterArticleChars: () => 6000 };
 
 it('retries a vague headline once with the full source prompt and validates the replacement', async () => {
   const { writeSystemPrompt, writeUserPrompt, WRITE_SCHEMA } = require('../src/pipeline/writer/prompts');
   const calls = [];
   const logs = [];
-  const replacement = { ...retryValue, headline: 'RBA minutes show continued concern about inflation', detail: 'An official died by suicide. The RBA minutes discuss inflation.', section: 'world', summary: 'The RBA minutes discuss inflation in NSW.' };
+  const replacement = { ...retryValue, headline: 'RBA minutes show continued concern about inflation', section: 'world', summary: 'An official died by suicide. The RBA minutes discuss inflation in NSW.' };
   const output = await writeStories([retryItem], {
     name: 'test', async write(...args) {
       calls.push(args);
@@ -281,7 +280,7 @@ it('retries a vague headline once with the full source prompt and validates the 
     [writeSystemPrompt(), `${prompt}\n\nHeadline "Tough Decisions" is too vague; write a specific headline of 6–14 words saying what happened, from the supplied text only.`, WRITE_SCHEMA],
   ]);
   assert.deepStrictEqual(output, {
-    stories: [{ ...retryItem, rank: 1, id: 's1', ...replacement, detail: 'The RBA minutes discuss inflation. The RBA minutes discuss inflation.', section: 'australia', written_by: 'test', write_ok: true,
+    stories: [{ ...retryItem, rank: 1, id: 's1', ...replacement, summary: 'The RBA minutes discuss inflation in NSW.', section: 'australia', written_by: 'test', write_ok: true,
       write_problems: ['removed unsupported claim: "suicid"', 'section moved: world -> australia (Australian place named; no overseas place named)'] }],
     dropped: [],
     stats: { written: 1, repairs: 1, headline_retries: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 1, facts_removed: 1, numbers_unsupported: 0, input_tokens: 20, output_tokens: 10, duration_ms: 14 },
@@ -356,7 +355,6 @@ it('retries missing-text meta writing once and falls back to the teaser sentence
     is_news: true,
     headline: 'Hobart CBD jobs face cuts',
     summary: 'No article text was provided, so no summary can be written.',
-    detail: 'No further details were available in the supplied text.',
     kicker: 'Jobs',
     section: 'tasmania',
   };
@@ -369,7 +367,7 @@ it('retries missing-text meta writing once and falls back to the teaser sentence
   const prompt = writeUserPrompt(source, { articleChars: 6000 });
   assert.deepStrictEqual(calls, [
     [writeSystemPrompt(), prompt, WRITE_SCHEMA],
-    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
+    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
   ]);
   assert.deepStrictEqual(output, {
     stories: [{
@@ -378,13 +376,11 @@ it('retries missing-text meta writing once and falls back to the teaser sentence
       id: 's1',
       ...bad,
       summary: 'Job cuts are expected in the Hobart CBD.',
-      detail: 'Job cuts are expected in the Hobart CBD.',
       written_by: 'test',
       write_ok: true,
       write_problems: [
         'Missing-text retry still referred to unavailable source text',
         'Summary replaced with the first teaser sentence',
-        'Detail replaced with the first teaser sentence',
       ],
     }],
     dropped: [],
@@ -404,7 +400,6 @@ it('drops persistent headline-meta writing when there is no teaser to fall back 
     is_news: true,
     headline: 'Character.ai Files for Bankruptcy',
     summary: "The headline suggests Character.ai's bankruptcy could signal a wider decline.",
-    detail: 'Character.ai filed for bankruptcy.',
     kicker: 'AI companies',
     section: 'tech',
   };
@@ -446,7 +441,6 @@ it('retries a short summary unrelated to its headline and falls back to the teas
     is_news: true,
     headline: source.title,
     summary: 'New music genre just dropped.',
-    detail: 'New music genre just dropped.',
     kicker: 'AI bubble',
     section: 'tech',
   };
@@ -459,7 +453,7 @@ it('retries a short summary unrelated to its headline and falls back to the teas
   const prompt = writeUserPrompt(source, { articleChars: 6000 });
   assert.deepStrictEqual(calls, [
     [writeSystemPrompt(), prompt, WRITE_SCHEMA],
-    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
+    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
   ]);
   assert.deepStrictEqual(output, {
     stories: [{
@@ -508,7 +502,6 @@ it('drops a persistently unrelated short summary with no teaser but keeps the ei
         is_news: true,
         headline: sources[sourceIndex].title,
         summary: summaries[sourceIndex],
-        detail: summaries[sourceIndex],
         kicker: 'AI bubble',
         section: 'tech',
       } };
@@ -517,12 +510,12 @@ it('drops a persistently unrelated short summary with no teaser but keeps the ei
   assert.deepStrictEqual(output, {
     stories: [{
       ...sources[1], rank: 2, id: 's2', is_news: true, headline: sources[1].title,
-      summary: summaries[1], detail: summaries[1], kicker: 'AI bubble', section: 'tech',
+      summary: summaries[1], kicker: 'AI bubble', section: 'tech',
       written_by: 'test', write_ok: true, write_problems: [],
     }],
     dropped: [{
       ...sources[0], rank: 1, id: 's1', is_news: false, headline: sources[0].title,
-      summary: '', detail: summaries[0], kicker: 'AI bubble', section: 'tech',
+      summary: '', kicker: 'AI bubble', section: 'tech',
       written_by: 'test', write_ok: true,
       write_problems: [
         'Missing-text retry still referred to unavailable source text',
@@ -565,7 +558,6 @@ it('drops same-event stories after writing, merges their sources, and keeps same
     is_news: true,
     headline: item.title,
     summary: item.description,
-    detail: item.description,
     kicker: item.title.startsWith('Michelin') || item.title.startsWith('Ten South') ? 'Dining' : 'AFL trades',
     section: 'australia',
   }));
@@ -605,12 +597,38 @@ it('drops same-event stories after writing, merges their sources, and keeps same
   });
 });
 
+it('compares written summaries with source teasers for duplicates and ignores legacy detail', () => {
+  const left = {
+    headline: 'Restaurants receive awards',
+    summary: 'The honours were announced overnight.',
+    title: 'Michelin Guide awards first Australian stars to South Australian restaurants',
+    description: 'Ten South Australian restaurants received Michelin stars, including one two-star venue.',
+    detail: 'Legacy prose about an unrelated football match.',
+  };
+  const right = {
+    headline: 'Dining venues win honours',
+    summary: 'The results mark a national first.',
+    title: 'Ten South Australian restaurants awarded Michelin stars',
+    description: 'South Australian restaurants won the first Michelin stars awarded in Australia.',
+    detail: 'Different legacy prose about a software release.',
+  };
+
+  assert.deepStrictEqual(writtenStorySimilarity(left, right), {
+    score: 0.5882352941176471,
+    shared: 10,
+  });
+  assert.deepStrictEqual(
+    writtenStorySimilarity({ ...left, detail: right.detail }, { ...right, detail: left.detail }),
+    { score: 0.5882352941176471, shared: 10 }
+  );
+});
+
 it('forces deterministic community help requests to not-news but keeps highly engaged posts', async () => {
   const items = [
     { title: 'Help me pick a rack please', source_type: 'reddit', source_name: 'r/homelab', article_content: 'x'.repeat(500), interest_matches: [] },
     { title: 'Hardware question', source_type: 'reddit', source_name: 'r/homelab', score: 500, comment_count: 80, article_content: 'x'.repeat(500), interest_matches: [] },
   ];
-  const written = headline => ({ is_news: true, headline, summary: 'A user asks the community for homelab hardware advice.', detail: 'A user asks the community for advice about homelab hardware.', kicker: 'Hardware Help', section: 'homelab' });
+  const written = headline => ({ is_news: true, headline, summary: 'A user asks the community for homelab hardware advice.', kicker: 'Hardware Help', section: 'homelab' });
   const outputs = [written(items[0].title), written('Community discusses homelab hardware choices')];
   let index = 0;
   const output = await writeStories(items, {
@@ -643,7 +661,7 @@ it('forces a community question with fewer than two real replies to not-news', a
       top_comments: ['Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.', 'Answer one.', 'Answer two.'],
     },
   ];
-  const written = headline => ({ is_news: true, headline, summary: 'People in the community asked what happened in detail.', detail: 'The post asks the community to explain what happened.', kicker: 'Online culture', section: 'internet' });
+  const written = headline => ({ is_news: true, headline, summary: 'People in the community asked what happened in detail.', kicker: 'Online culture', section: 'internet' });
   let index = 0;
   const output = await writeStories(items, {
     name: 'test', async write() { return { json: written(items[index++].title) }; },
@@ -682,7 +700,7 @@ it('retries over-18-word and quote-only Reddit headlines once', async () => {
       name: 'test', async write() {
         count++;
         calls.push(headline);
-        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced to the online community today.', detail: 'The move was announced by the parties.', kicker: 'Code Rules', section: 'tech' } };
+        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced to the online community today.', kicker: 'Code Rules', section: 'tech' } };
       },
     }, retrySettings);
     assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {
@@ -698,13 +716,13 @@ it('leaves out a story when only its headline is available, but keeps one with a
     mercury('Hobart now dearest capital for petrol'),
     { ...mercury('Job cuts to hit Hobart CBD'), merged_descriptions: ['Job cuts to hit Hobart CBD The Mercury', 'About 200 public service roles will move out of the Hobart CBD next year.'] },
   ];
-  const written = { is_news: false, summary: 'Prices rose as part of a new government venture.', detail: 'Invented context about a venture.', kicker: 'Petrol prices', section: 'tasmania' };
+  const written = { is_news: false, summary: 'Prices rose as part of a new government venture.', kicker: 'Petrol prices', section: 'tasmania' };
   let call = 0;
   const output = await writeStories(items, { name: 'test', async write() {
     return { json: { ...written, headline: items[call++].title } };
   } }, retrySettings);
-  assert.deepStrictEqual(output.dropped.map(story => [story.headline, story.summary, story.detail, story.write_problems]), [[
-    'Hobart now dearest capital for petrol', '', '', ['not news: only the headline is available'],
+  assert.deepStrictEqual(output.dropped.map(story => [story.headline, story.summary, story.write_problems]), [[
+    'Hobart now dearest capital for petrol', '', ['not news: only the headline is available'],
   ]]);
   assert.deepStrictEqual(output.stories.map(story => [story.headline, story.write_problems]), [[
     'Job cuts to hit Hobart CBD', ['kept: no article text, not-news ignored'],
@@ -724,8 +742,8 @@ it('drops a low-text headline echo but keeps a summary that adds a substantive f
     },
   ];
   const values = [
-    { is_news: true, headline: items[0].title, summary: 'Suicide rates are reported as the highest ever among middle-aged men.', detail: 'Suicide rates are reported as the highest ever among middle-aged men.', kicker: 'Suicide rates', section: 'world' },
-    { is_news: true, headline: items[1].title, summary: items[1].description, detail: `${items[1].description} Existing free plugins remain available.`, kicker: 'Plugin rules', section: 'gaming' },
+    { is_news: true, headline: items[0].title, summary: 'Suicide rates are reported as the highest ever among middle-aged men.', kicker: 'Suicide rates', section: 'world' },
+    { is_news: true, headline: items[1].title, summary: `${items[1].description} Existing free plugins remain available.`, kicker: 'Plugin rules', section: 'gaming' },
   ];
   let index = 0;
   const output = await writeStories(items, {
@@ -751,7 +769,7 @@ it('keeps a long publisher headline rather than asking for a rewrite', async () 
   }], {
     name: 'test', async write() {
       count++;
-      return { json: { is_news: true, headline, summary: 'The IMF advises targeted income support.', detail: 'The IMF advises targeted income support over price suppression.', kicker: 'Economic advice', section: 'australia' } };
+      return { json: { is_news: true, headline, summary: 'The IMF advises targeted income support.', kicker: 'Economic advice', section: 'australia' } };
     },
   }, retrySettings);
   assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {

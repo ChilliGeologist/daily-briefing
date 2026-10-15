@@ -24,7 +24,6 @@ it('parses and trims a valid writer result', () => {
     is_news: true,
     headline: '  Clear headline  ',
     summary: '  A clear summary. ',
-    detail: '  Useful detail. ',
     kicker: '  Plex ',
     section: 'homelab',
   }), item), {
@@ -33,7 +32,6 @@ it('parses and trims a valid writer result', () => {
       is_news: true,
       headline: 'Clear headline',
       summary: 'A clear summary.',
-      detail: 'Useful detail.',
       kicker: 'Plex',
       section: 'homelab',
     },
@@ -45,8 +43,7 @@ it('applies the facts guard after parsing a valid writer result', () => {
   assert.deepStrictEqual(validateWrite({
     is_news: true,
     headline: 'Actor dies at 34',
-    summary: 'The death remains under investigation.',
-    detail: 'RJ Mitte died by suicide at 34 in Texas. The death remains under investigation and colleagues shared their memories of his work.',
+    summary: 'RJ Mitte died by suicide at 34 in Texas. The death remains under investigation.',
     kicker: 'Tribute',
     section: 'world',
   }, {
@@ -58,7 +55,6 @@ it('applies the facts guard after parsing a valid writer result', () => {
       is_news: true,
       headline: 'Actor dies at 34',
       summary: 'The death remains under investigation.',
-      detail: 'The death remains under investigation and colleagues shared their memories of his work. RJ Mitte died suddenly. An investigation is ongoing.',
       kicker: 'Tribute',
       section: 'world',
     },
@@ -73,7 +69,6 @@ it('replaces a section-name kicker with the first interest label', () => {
     is_news: true,
     headline: 'Clear headline',
     summary: 'A clear summary.',
-    detail: 'Useful detail.',
     kicker: 'Homelab & Self-hosting news',
     section: 'homelab',
   }, item), {
@@ -82,7 +77,6 @@ it('replaces a section-name kicker with the first interest label', () => {
       is_news: true,
       headline: 'Clear headline',
       summary: 'A clear summary.',
-      detail: 'Useful detail.',
       kicker: 'Plex',
       section: 'homelab',
     },
@@ -95,7 +89,6 @@ it('repairs an overlong kicker without discarding the model writing', () => {
     is_news: true,
     headline: 'Model headline',
     summary: 'Model summary.',
-    detail: 'Model detail.',
     kicker: 'A much too long model kicker.',
     section: 'homelab',
   }, item), {
@@ -104,7 +97,6 @@ it('repairs an overlong kicker without discarding the model writing', () => {
       is_news: true,
       headline: 'Model headline',
       summary: 'Model summary.',
-      detail: 'Model detail.',
       kicker: 'Plex',
       section: 'homelab',
     },
@@ -117,7 +109,6 @@ it('cuts an overlong kicker to two words when no interest label is available', (
     is_news: true,
     headline: 'Model headline',
     summary: 'Model summary.',
-    detail: 'Model detail.',
     kicker: 'A much too long model kicker...',
     section: 'world',
   }, { ...item, interest_matches: [] }), {
@@ -126,7 +117,6 @@ it('cuts an overlong kicker to two words when no interest label is available', (
       is_news: true,
       headline: 'Model headline',
       summary: 'Model summary.',
-      detail: 'Model detail.',
       kicker: 'A much',
       section: 'world',
     },
@@ -139,7 +129,6 @@ it('repairs an unknown section without discarding the model writing', () => {
     is_news: true,
     headline: 'Model headline',
     summary: 'Model summary.',
-    detail: 'Model detail.',
     kicker: 'Plex',
     section: 'space',
   }, item), {
@@ -148,7 +137,6 @@ it('repairs an unknown section without discarding the model writing', () => {
       is_news: true,
       headline: 'Model headline',
       summary: 'Model summary.',
-      detail: 'Model detail.',
       kicker: 'Plex',
       section: 'homelab',
     },
@@ -161,7 +149,6 @@ it('blanks a section-name kicker when no interest label is available', () => {
     is_news: true,
     headline: 'Clear headline',
     summary: 'A clear summary.',
-    detail: 'Useful detail.',
     kicker: 'Around the internet news',
     section: 'internet',
   }, { ...item, interest_matches: [] }), {
@@ -170,7 +157,6 @@ it('blanks a section-name kicker when no interest label is available', () => {
       is_news: true,
       headline: 'Clear headline',
       summary: 'A clear summary.',
-      detail: 'Useful detail.',
       kicker: '',
       section: 'internet',
     },
@@ -183,7 +169,6 @@ it('strips only a single sentence-ending full stop from headlines', () => {
     is_news: true,
     headline,
     summary: 'A clear summary.',
-    detail: 'Useful detail.',
     kicker: 'Topic',
     section: 'world',
   }, item);
@@ -193,10 +178,10 @@ it('strips only a single sentence-ending full stop from headlines', () => {
     result('Wait...'),
     result('Version 2.'),
   ], [
-    { ok: true, value: { is_news: true, headline: 'Fine refused', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
-    { ok: true, value: { is_news: true, headline: 'Made in the U.S.', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
-    { ok: true, value: { is_news: true, headline: 'Wait...', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: [] },
-    { ok: true, value: { is_news: true, headline: 'Version 2', summary: 'A clear summary.', detail: 'Useful detail.', kicker: 'Topic', section: 'world' }, problems: ['unsupported number: 2'], numbers_unsupported: 1 },
+    { ok: true, value: { is_news: true, headline: 'Fine refused', summary: 'A clear summary.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Made in the U.S.', summary: 'A clear summary.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Wait...', summary: 'A clear summary.', kicker: 'Topic', section: 'world' }, problems: [] },
+    { ok: true, value: { is_news: true, headline: 'Version 2', summary: 'A clear summary.', kicker: 'Topic', section: 'world' }, problems: ['unsupported number: 2'], numbers_unsupported: 1 },
   ]);
 });
 
@@ -206,38 +191,36 @@ it('strips leading media labels from headlines case-insensitively', () => {
     is_news: true,
     headline: `${label}: Council approves safer crossing`,
     summary: 'The council approved a safer crossing.',
-    detail: 'The council approved a safer crossing after reviewing the plans.',
     kicker: 'Council Decision',
     section: 'tasmania',
   }, { ...item, title: 'Council approves safer crossing in Launceston' }).value), labels.map(() => ({
     is_news: true,
     headline: 'Council approves safer crossing',
     summary: 'The council approved a safer crossing.',
-    detail: 'The council approved a safer crossing after reviewing the plans.',
     kicker: 'Council decision',
     section: 'tasmania',
   })));
 });
 
-it('detects only missing-source meta writing in summaries, details and kickers', () => {
+it('detects only missing-source meta writing in summaries and kickers and ignores legacy detail', () => {
   const values = [
-    { summary: 'No article text was provided, so no summary can be written.', detail: 'Useful detail.', kicker: 'Jobs' },
-    { summary: 'No details are available regarding the loss.', detail: 'Useful detail.', kicker: 'Sport' },
-    { summary: 'Useful summary.', detail: 'No story content was provided for this article.', kicker: 'Sport' },
-    { summary: 'Useful summary.', detail: 'Writing a detailed summary is impossible.', kicker: 'Sport' },
-    { summary: 'Useful summary.', detail: 'Useful detail.', kicker: 'Headline mystery' },
-    { summary: 'The headline suggests a concerning trend.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'The headline indicates rates will rise.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'The headline states the company has failed.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'The headline implies the talks have ended.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'No substantive news content was provided for this story.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'This article does not contain enough information to report.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'The supplied content has no account of the event.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'Police have released no details about the man.', detail: 'Useful detail.', kicker: 'News' },
-    { summary: 'The article says no jobs will be cut.', detail: 'Officials provided details about the available content.', kicker: 'Job cuts' },
+    { summary: 'No article text was provided, so no summary can be written.', kicker: 'Jobs' },
+    { summary: 'No details are available regarding the loss.', kicker: 'Sport' },
+    { summary: 'Useful summary.', kicker: 'Sport' },
+    { summary: 'Useful summary.', kicker: 'Sport' },
+    { summary: 'Useful summary.', kicker: 'Headline mystery' },
+    { summary: 'The headline suggests a concerning trend.', kicker: 'News' },
+    { summary: 'The headline indicates rates will rise.', kicker: 'News' },
+    { summary: 'The headline states the company has failed.', kicker: 'News' },
+    { summary: 'The headline implies the talks have ended.', kicker: 'News' },
+    { summary: 'No substantive news content was provided for this story.', kicker: 'News' },
+    { summary: 'This article does not contain enough information to report.', kicker: 'News' },
+    { summary: 'The supplied content has no account of the event.', kicker: 'News' },
+    { summary: 'Police have released no details about the man.', kicker: 'News' },
+    { summary: 'The article says no jobs will be cut.', kicker: 'Job cuts' },
   ];
   assert.deepStrictEqual(values.map(missingTextFields), [
-    ['summary'], ['summary'], ['detail'], ['detail'], ['kicker'],
+    ['summary'], ['summary'], [], [], ['kicker'],
     ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], [], [],
   ]);
 });
@@ -283,13 +266,12 @@ it('normalises kicker case while preserving mid-sentence proper nouns and acrony
     is_news: true,
     headline: 'Council meets Launceston AI researchers',
     summary: 'The council discussed local research.',
-    detail: 'Officials in Launceston discussed the AI project.',
     kicker,
     section: 'tasmania',
   });
   assert.deepStrictEqual([
     validateWrite(raw('Security Flaw'), { ...item, title: 'Ghostscript flaw affects servers' }).value.kicker,
-    validateWrite(raw('Council Launceston'), { ...item, title: 'Council meets Launceston researchers' }).value.kicker,
+    validateWrite(raw('Council Launceston'), { ...item, title: 'Council meets Launceston researchers', description: 'Officials met Launceston researchers.' }).value.kicker,
     validateWrite(raw('AI Security'), item).value.kicker,
     validateWrite(raw('Mowbray Charges'), { ...item, title: 'Man charged after search in Mowbray' }).value.kicker,
   ], ['Security flaw', 'Council Launceston', 'AI security', 'Mowbray charges']);
@@ -300,7 +282,6 @@ it('replaces bare-place and meta kickers before applying sentence case', () => {
     is_news: true,
     headline: 'Conversion therapy petition launched',
     summary: 'A petition has been launched.',
-    detail: 'The petition seeks a change in law.',
     kicker,
     section: 'tasmania',
   });
@@ -318,20 +299,52 @@ it('replaces bare-place and meta kickers before applying sentence case', () => {
   })));
 });
 
-it('cuts an overlong detail at its last safe sentence and notes it', () => {
-  const first = `${Array(150).fill('word').join(' ')}.`;
-  const detail = `${first} ${Array(20).fill('extra').join(' ')}`;
+it('ignores a legacy detail property in writer output', () => {
   assert.deepStrictEqual(validateWrite({
     is_news: true,
     headline: 'Headline',
     summary: 'Summary.',
-    detail,
+    detail: 'Legacy detail.',
     kicker: 'Topic',
     section: 'world',
   }, item), {
     ok: true,
-    value: { is_news: true, headline: 'Headline', summary: 'Summary.', detail: first, kicker: 'Topic', section: 'world' },
-    problems: ['Detail exceeded 160 words and was shortened'],
+    value: { is_news: true, headline: 'Headline', summary: 'Summary.', kicker: 'Topic', section: 'world' },
+    problems: [],
+  });
+});
+
+it('shortens a summary over 45 words at the last safe sentence without failing the write', () => {
+  const first = 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.';
+  const second = 'Twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six twenty-seven twenty-eight twenty-nine thirty thirty-one thirty-two thirty-three thirty-four thirty-five thirty-six thirty-seven thirty-eight thirty-nine forty.';
+  const raw = {
+    is_news: true,
+    headline: 'Headline',
+    summary: `${first} ${second} forty-one forty-two forty-three forty-four forty-five forty-six.`,
+    kicker: 'Topic',
+    section: 'world',
+  };
+
+  assert.deepStrictEqual(validateWrite(raw, item), {
+    ok: true,
+    value: { ...raw, summary: `${first} ${second}` },
+    problems: ['Summary exceeded 45 words and was shortened'],
+  });
+});
+
+it('turns the 45-word cut into a sentence boundary when an overlong summary has none', () => {
+  const raw = {
+    is_news: true,
+    headline: 'Headline',
+    summary: Array(46).fill('word').join(' '),
+    kicker: 'Topic',
+    section: 'world',
+  };
+
+  assert.deepStrictEqual(validateWrite(raw, item), {
+    ok: true,
+    value: { ...raw, summary: `${Array(45).fill('word').join(' ')}.` },
+    problems: ['Summary exceeded 45 words and was shortened'],
   });
 });
 
@@ -342,12 +355,11 @@ it('falls back for every junk writer shape without throwing', () => {
       is_news: true,
       headline: 'Publisher headline',
       summary: 'First teaser sentence.',
-      detail: 'First teaser sentence. Second teaser sentence.',
       kicker: 'Plex',
       section: 'homelab',
     },
   };
-  const base = { is_news: true, headline: 'H', summary: 'S', detail: 'D', kicker: 'K', section: 'world' };
+  const base = { is_news: true, headline: 'H', summary: 'S', kicker: 'K', section: 'world' };
   const cases = [
     ['not json', ['Writer output was not valid JSON']],
     [{ ...base, headline: '   ' }, ['Headline was empty']],
@@ -369,7 +381,6 @@ it('uses the Tasmanian gazetteer only to enforce the Tasmania section', () => {
     is_news: true,
     headline: 'Gift shop question',
     summary: 'A visitor asks about a souvenir.',
-    detail: 'A visitor asks why the gift shop does not sell a particular shirt.',
     kicker: 'Gift shop',
     section,
   });
@@ -394,7 +405,6 @@ it('rejects the four observed false Tasmanian place matches', () => {
     is_news: true,
     headline: 'Neutral headline',
     summary: 'Neutral summary.',
-    detail: 'Neutral detail.',
     kicker: 'News',
     section: 'tasmania',
   };
@@ -423,7 +433,6 @@ it('enforces companion-required Tasmanian places against the whole story text', 
     is_news: true,
     headline: title,
     summary: 'A local update.',
-    detail: 'More details are available.',
     kicker: 'Local update',
     section: 'tasmania',
   });
@@ -589,7 +598,7 @@ it('repairs community-only and over-balanced tech top picks with ranked general 
 });
 
 const geographyItem = { title: 'A local update', description: 'Residents discuss the changes.', interest_matches: [] };
-const geographyValue = (headline, summary = 'Residents discuss the changes.', section = 'world') => ({ is_news: true, headline, summary, detail: 'Residents discuss the changes.', kicker: 'Update', section });
+const geographyValue = (headline, summary = 'Residents discuss the changes.', section = 'world') => ({ is_news: true, headline, summary, kicker: 'Update', section });
 const geographyResult = (value, section) => ({ ok: true, value: { ...value, section }, problems: value.section === section ? [] : [`section moved: world -> ${section} (Australian place named; no overseas place named)`], ...(value.section === section ? {} : { sectionMoved: true }) });
 
 it('moves Australian states, territories and major cities out of world using whole capitalised names', () => {
@@ -606,10 +615,9 @@ it('uses written headline and summary for Australian evidence and reuses the Tas
     [geographyValue('Storms damage local businesses', 'Severe storms hit the Northern Territory.'), geographyItem, 'australia'],
     ...['Tasmania', 'Tas', 'Hobart', 'Launceston'].map(name => [geographyValue(`Residents meet in ${name}`), geographyItem, 'tasmania']),
     [geographyValue('Residents discuss new services', 'Hobart residents discuss the changes.'), { ...geographyItem, title: 'Hobart residents discuss new services' }, 'tasmania'],
-    // Summary alone does not extend the existing Tasmania evidence rule.
-    [geographyValue('Residents discuss new services', 'Hobart residents discuss the changes.'), geographyItem, 'australia'],
-    [geographyValue('Residents discuss new services'), { ...geographyItem, title: 'Sydney residents meet' }, 'world'],
-    [{ ...geographyValue('Residents discuss new services'), detail: 'Residents meet in Sydney.' }, geographyItem, 'australia'],
+    [geographyValue('Residents discuss new services', 'Hobart residents discuss the changes.'), geographyItem, 'tasmania'],
+    [geographyValue('Residents discuss new services'), { ...geographyItem, title: 'Sydney residents meet' }, 'australia'],
+    [geographyValue('Residents discuss new services'), { ...geographyItem, description: 'Residents meet in Sydney.' }, 'australia'],
     [geographyValue('Sydney technology firm announces updates', undefined, 'tech'), geographyItem, 'tech'],
   ];
   assert.deepStrictEqual(cases.map(([value, source]) => validateWrite(value, source)), cases.map(([value, , section]) => geographyResult(value, section)));
@@ -631,16 +639,17 @@ it('keeps international stories and disambiguates shared Australian place names'
   assert.deepStrictEqual(validateWrite(summary, geographyItem), geographyResult(summary, 'world'));
 });
 
-it('uses detail and kicker as Australian evidence while keeping overseas evidence scoped to headline and summary', () => {
-  const values = [
-    { ...geographyValue('Two seriously injured in Palumpa violence'), detail: 'Unrest continues in Wadeye.', kicker: 'Northern Territory' },
-    { ...geographyValue('Communities assess storm damage'), detail: 'Businesses in Alice Springs were damaged.', kicker: 'Outback damage' },
-    { ...geographyValue('Sydney delegation visits Japan'), detail: 'Officials later returned to Darwin.', kicker: 'Trade visit' },
+it('uses the summary, kicker and source text as Australian evidence while keeping overseas evidence scoped to headline and summary', () => {
+  const cases = [
+    [{ ...geographyValue('Two seriously injured in Palumpa violence'), kicker: 'Northern Territory' }, geographyItem],
+    [geographyValue('Communities assess storm damage'), { ...geographyItem, description: 'Businesses in Alice Springs were damaged.' }],
+    [{ ...geographyValue('Sydney delegation visits Japan'), kicker: 'Trade visit' }, { ...geographyItem, article_content: 'Officials later returned to Darwin.' }],
+    [{ ...geographyValue('Comedian on trial for sex offences', 'A prosecutor described the comedian to the jury.'), kicker: 'Trial begins' }, { ...geographyItem, article_content: 'The court heard evidence. ABC Tasmania, Hobart: we acknowledge the traditional owners.' }],
   ];
-  assert.deepStrictEqual(values.map(value => validateWrite(value, geographyItem)), [
+  assert.deepStrictEqual(cases.map(([value, source]) => validateWrite(value, source)), [
     {
       ok: true,
-      value: { ...values[0], kicker: '', section: 'australia' },
+      value: { ...cases[0][0], kicker: '', section: 'australia' },
       problems: [
         'section moved: world -> australia (Australian place named; no overseas place named)',
         'Kicker was only a place or meta label: Northern Territory',
@@ -649,11 +658,12 @@ it('uses detail and kicker as Australian evidence while keeping overseas evidenc
     },
     {
       ok: true,
-      value: { ...values[1], section: 'australia' },
+      value: { ...cases[1][0], section: 'australia' },
       problems: ['section moved: world -> australia (Australian place named; no overseas place named)'],
       sectionMoved: true,
     },
-    { ok: true, value: values[2], problems: [] },
+    { ok: true, value: cases[2][0], problems: [] },
+    { ok: true, value: cases[3][0], problems: [] },
   ]);
 });
 
@@ -661,7 +671,7 @@ it('moves clean overseas club and entertainment stories out of Australia without
   const values = [
     { ...geographyValue('Regulator would quit over Man City scandal', 'English football officials discussed Manchester City.', 'australia'), kicker: 'Football Scandal' },
     { ...geographyValue('Carragher goes in on Martinez and United', 'The football opinion concerns United.', 'australia'), kicker: 'Football Opinion' },
-    { ...geographyValue('Metallica frontman shuns political rants', 'The concert residency continues.', 'australia'), detail: 'The band made the comments during a Las Vegas concert.', kicker: 'Concert Focus' },
+    { ...geographyValue('Metallica frontman shuns political rants', 'The band made the comments during a Las Vegas concert.', 'australia'), kicker: 'Concert Focus' },
     { ...geographyValue('Matildas defeat Haiti in France', 'The Matildas won comfortably.', 'australia'), kicker: 'World Cup' },
     { ...geographyValue('De Minaur reaches Shanghai quarterfinal', 'The Australian player advanced.', 'australia'), kicker: 'Tennis Quarterfinal' },
   ];
@@ -690,7 +700,7 @@ it('moves clean overseas club and entertainment stories out of Australia without
 });
 
 it('keeps stories from a gaming or homelab source out of the news sections', () => {
-  const value = section => ({ is_news: true, headline: 'Australia misses out on the collector edition', summary: 'The edition is sold elsewhere.', detail: 'The edition is sold elsewhere.', kicker: 'Collector edition', section });
+  const value = section => ({ is_news: true, headline: 'Australia misses out on the collector edition', summary: 'The edition is sold elsewhere.', kicker: 'Collector edition', section });
   assert.deepStrictEqual([
     validateWrite(value('world'), { ...geographyItem, default_category: 'gaming' }),
     validateWrite(value('tech'), { ...geographyItem, default_category: 'gaming' }),
@@ -706,12 +716,11 @@ it('keeps stories from a gaming or homelab source out of the news sections', () 
   ]);
 });
 
-it('moves tech-source stories out of local sections unless the written story has Australian evidence', () => {
-  const value = (section, headline = 'Banks offload AI data centre debt', detail = 'Banks are selling debt they underwrote.') => ({
+it('moves tech-source stories out of local sections unless the summary or source text has Australian evidence', () => {
+  const value = (section, headline = 'Banks offload AI data centre debt') => ({
     is_news: true,
     headline,
     summary: 'Banks are selling AI data centre debt.',
-    detail,
     kicker: 'AI debt',
     section,
   });
@@ -740,7 +749,7 @@ it('moves tech-source stories out of local sections unless the written story has
 
 it('sentence-cases kickers whose only capitals are in a Title Case headline, and keeps acronyms', () => {
   const source = { ...geographyItem, title: 'Grace Hopper Celebration Cancelled', description: 'Grace Hopper Celebration Cancelled', article_content: 'The mini NAS build uses two drives.' };
-  const raw = kicker => ({ is_news: true, headline: 'Grace Hopper Celebration Cancelled', summary: 'The event was cancelled.', detail: 'Funding fell short.', kicker, section: 'tech' });
+  const raw = kicker => ({ is_news: true, headline: 'Grace Hopper Celebration Cancelled', summary: 'The event was cancelled.', kicker, section: 'tech' });
   assert.deepStrictEqual(['Celebration Cancelled', 'Mini Nas'].map(kicker => validateWrite(raw(kicker), source).value.kicker), ['Celebration cancelled', 'Mini NAS']);
 });
 
@@ -765,7 +774,7 @@ it('leads a section with stories about the reader\'s products after widely cover
 });
 
 it('blanks a "No story" kicker', () => {
-  const raw = { is_news: true, headline: 'Everest Runner by Runner', summary: 'A feature.', detail: 'A feature.', kicker: 'No story', section: 'australia' };
+  const raw = { is_news: true, headline: 'Everest Runner by Runner', summary: 'A feature.', kicker: 'No story', section: 'australia' };
   assert.strictEqual(validateWrite(raw, { ...geographyItem, interest_matches: [] }).value.kicker, '');
 });
 
@@ -779,7 +788,7 @@ it('does not lift a Reddit-only post about a product in a news section', () => {
 });
 
 it('keeps a single-source internet-culture story in Around the internet, but not one other outlets carried', () => {
-  const value = section => ({ is_news: true, headline: 'What is going on with the new Narnia movie', summary: 'Fans are debating the casting.', detail: 'Fans are debating the casting.', kicker: 'Film casting', section });
+  const value = section => ({ is_news: true, headline: 'What is going on with the new Narnia movie', summary: 'Fans are debating the casting.', kicker: 'Film casting', section });
   assert.deepStrictEqual([
     validateWrite(value('australia'), { ...geographyItem, default_category: 'trending', coverage: 1 }),
     validateWrite(value('australia'), { ...geographyItem, default_category: 'trending', coverage: 3 }),
@@ -791,7 +800,7 @@ it('keeps a single-source internet-culture story in Around the internet, but not
 
 it('never repairs a long kicker into a bare place name', () => {
   const source = { ...geographyItem, interest_matches: [{ label: 'Tasmania', kind: 'place', weight: 1 }, { label: 'State politics', kind: 'topic', weight: 2 }] };
-  const raw = { is_news: true, headline: 'Firmus IPO flops but the premier still sees opportunity', summary: 'The premier remains confident.', detail: 'The premier remains confident.', kicker: 'Premier backs data centre plans', section: 'tasmania' };
+  const raw = { is_news: true, headline: 'Firmus IPO flops but the premier still sees opportunity', summary: 'The premier remains confident.', kicker: 'Premier backs data centre plans', section: 'tasmania' };
   assert.strictEqual(validateWrite(raw, source).value.kicker, 'State politics');
 });
 
@@ -814,7 +823,6 @@ it('moves world and tech source stories out of local sections only without Austr
     is_news: true,
     headline,
     summary,
-    detail: summary,
     kicker: 'Court case',
     section,
   });

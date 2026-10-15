@@ -12,12 +12,11 @@ const COMMUNITY_BOILERPLATE_REPLY_PATTERNS = Object.freeze([
 const WRITE_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
-  required: ['is_news', 'headline', 'summary', 'detail', 'kicker', 'section'],
+  required: ['is_news', 'headline', 'summary', 'kicker', 'section'],
   properties: {
     is_news: { type: 'boolean' },
     headline: { type: 'string' },
     summary: { type: 'string' },
-    detail: { type: 'string' },
     kicker: { type: 'string' },
     section: { type: 'string', enum: SECTION_IDS },
   },
@@ -62,7 +61,7 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`;
+The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`;
 
 const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Public safety and deaths in Tasmania, and major world events, outrank technology news unless the technology story is a security hole in something the reader runs. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. Include at most two stories from tech, homelab, gaming and internet combined, and never include a story whose only sources are Reddit or Hacker News. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`;
 

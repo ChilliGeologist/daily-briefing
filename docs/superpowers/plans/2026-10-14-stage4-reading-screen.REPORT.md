@@ -281,3 +281,63 @@ The strip is a 36 px layer at the paper sheet's right edge, above curl layers 2�
 ### Could not verify without a browser
 
 No browser automation, jsdom or manual browser run was used. Pure tests do not verify visual icon/pill placement, spring feel, short-glide tracking, story hit-testing after live layout changes, native touch scrolling beside the strip, pointer capture, vibration support, keyboard focus appearance, screen-reader slider announcements, broadsheet edge placement, dark/light/Auto rendering, reduced-motion presentation, or the precise visual hand-off between the index and page curl. Those remain dev-container browser checks.
+
+---
+
+# One tap
+
+Date: 2026-10-15
+
+## Outcome
+
+- The writer now emits `is_news`, `headline`, `summary`, `kicker` and `section` only. Its summary instruction is one or two sentences, no more than about 40 words, synthesising all supplied sources and relevant disagreements.
+- Validation accepts the summary-only shape and ignores a legacy `detail` property. A summary over 45 words is shortened at the last complete sentence within the first 45 words; when there is no existing boundary, the 45-word cut is closed with a full stop. Neither case fails the write.
+- The assembler no longer stores `detail`, and reading time is based on the summary. Already-stored editions may still contain `detail`; the reader deliberately ignores it and uses the summary.
+- Every briefing story is now one native button. Its delegated click goes directly through the existing `startForwardTurn` curl path and then `openReaderById`, which pushes one history entry. Native button activation gives focused stories the same path for Enter and Space. Releasing the thumb index over a story calls that path too.
+- Removed the expansion state, toggle/detail region, Read in full button, associated focus restoration, and both the Paper and older card expansion styles. Reduced motion still completes navigation with the existing 150 ms fade.
+- A reader without meaningful `article_html` shows the summary followed by `Open on <site> ›`. Community post text and cleaned replies under “What people said” are unchanged.
+- `scripts/self-check.js` no longer requires `detail` and reports summaries over 45 words. The service-worker cache is now `daily-briefing-v6`.
+
+## Rule evidence after removing `detail`
+
+- Writer shape and fallback: headline and summary are required; deterministic fallback takes the first sentence of the source description or first merged teaser. A headline-only source clears only the summary before being rejected.
+- Facts guard: sensitive claims are checked sentence-by-sentence in the generated summary. Numbers are checked in the generated headline and summary. Support still comes from the source title, merged teasers (or description), article text and real top comments; a fully removed summary falls back to the first source teaser sentence.
+- Australian-place and section rules: evidence is the generated headline, summary and kicker plus source title, description, merged descriptions and article text. Tasmania additionally retains its configured place terms and Tasmanian-source exception. Overseas disambiguation remains scoped to the generated headline and summary.
+- Kicker casing: evidence is the generated summary plus source descriptions/merged teasers with the publisher title removed, and article text.
+- Missing-text retry and fallback: detection reads the summary and kicker. A retry receives the same full source prompt; persistent meta sentences are removed from the summary, then the first source teaser sentence is used, or the story is rejected when no teaser exists.
+- Duplicate merge: comparison uses the generated headline and summary plus the source title, description and merged descriptions. Legacy `detail` does not affect similarity; sources are still merged into the higher-ranked story.
+- Headline retry: the replacement is requested with the complete original source prompt and is passed through the same summary facts, missing-text and section validation before it can replace the first answer.
+
+## Real-data evidence check
+
+The read-only stdin-script pass used all 10 saved candidate snapshots and `b8.json`–`b11.json`. It examined 409 distinct stored-story occurrences across the four briefings; 240 could be joined back to a saved full source item.
+
+- Facts guard: on those 240 joined stories, summary/headline results were identical before and after the evidence change: zero sensitive-claim removals and the same five unsupported-number catches. No catch changed.
+- Summary limit/self-check: none of the 409 stored summaries exceeded 45 words, so no real-data catch changed.
+- Duplicate merge: the only caught pair was the two South Australian Michelin stories in `b8`; it remained caught, with similarity increasing from 8 shared words/0.5333 to 12/0.8 after source teasers were included. No pair was added or removed.
+- Missing-text detection: three `b8` stories had old `detail` meta-writing catches. Two still have summary catches. `Fortnite is coming to Linux` changed: its valid summary is now kept instead of retrying solely because legacy detail began “The headline suggests”.
+- Place evidence changed six stored occurrences representing three stories. `I blacked out: Woman recounts alleged attack during car swap gone wrong` now remains in Tasmania because its summary names Ravenswood, instead of moving to Australia. `America didn't lose its rare earth industry, it sold it` now remains in Australia rather than moving to World because the source article mentions financing Australia’s Lynas. The Russell Brand trial story moved from World to Australia in four briefings because the extracted article text contains Sydney/Brisbane/Australian publisher-footer text; this is a changed, likely noisy catch, recorded here rather than hidden.
+- Kicker evidence: one stored-only story that had no matching candidate, `Australia is the monster that turns World Cup dreams to nightmares`, would change `World Cup dominance` to `World cup dominance` because only its removed detail supplied mid-sentence `World Cup`; this could not be checked with its original source text.
+- Headline and missing-text retries are not retained in briefing artefacts, so there was no separate retry trace to replay. Their returned values use the same facts/place/missing-text validation covered above.
+
+## Files changed
+
+- `src/pipeline/writer/prompts.js`, `facts.js`, `validate.js`, `write.js` — summary-only writing and preserved rule evidence.
+- `src/pipeline/assembler.js` — summary-only stored reader shape and reading time.
+- `public/app.js`, `reading-logic.js`, `style.css` — direct story-to-reader activation, legacy-detail compatibility and expansion removal.
+- `public/sw.js` — cache v6.
+- `scripts/self-check.js` — summary-only checks and the 45-word warning.
+- `test/writer-prompts.test.js`, `writer-facts.test.js`, `writer-validate.test.js`, `writer-write.test.js`, `assembler.test.js`, `reading-logic.test.js`, `self-check.test.js`, and `test/fixtures/self-check-summary-over-45.json` — whole-value coverage for the new shape and rules.
+- `docs/superpowers/plans/2026-10-14-stage4-reading-screen.REPORT.md` — this record.
+
+## Test counts and fail-then-pass evidence
+
+- Baseline before changes: `npm test` — 245 passed, 0 failed, 16 suites.
+- Red focused run after adding the first new assertions and before implementation: `node --test test/writer-prompts.test.js test/writer-validate.test.js test/reading-logic.test.js test/assembler.test.js test/self-check.test.js` — 78 tests, 73 passed, 5 failed. The failures were the absent summary-only schema/prompt, summary shortening, summary-only assembled shape, legacy-detail reader behaviour and self-check rule.
+- Final focused run of the same files: 79 passed, 0 failed; the added case covers an over-45 single sentence with no pre-existing boundary.
+- Final full run: `npm test` — 252 passed, 0 failed, 16 suites.
+- `node --check` passed for every changed production JavaScript file, and `git diff --check` passed.
+
+## Anything left undone
+
+No implementation item is left undone, and no commit was made. No browser or device run was performed. Pure tests verify reader-content selection and the existing gesture decisions; they do not verify visual curl/fade appearance, real pointer release, native Enter/Space dispatch, focus movement or the single history entry in a browser. Those remain manual browser checks.

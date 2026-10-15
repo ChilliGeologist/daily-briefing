@@ -42,7 +42,8 @@ function words(text) {
     for (const story of stories) {
       const title = story.title || '(no title)';
       if (!String(story.summary || '').trim()) problems.push(`no summary: ${title}`);
-      if (!String(story.detail || '').trim()) problems.push(`no detail: ${title}`);
+      const summaryWords = words(story.summary).length;
+      if (summaryWords > 45) problems.push(`summary over 45 words (${summaryWords}): ${title}`);
       const kickerWords = words(story.kicker);
       if (kickerWords.length > 1 && kickerWords.slice(1).every(word => /^[A-Z][a-z]/.test(word))) {
         problems.push(`Title Case kicker "${story.kicker}": ${title}`);

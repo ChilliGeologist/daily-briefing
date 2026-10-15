@@ -10,7 +10,7 @@ const {
   validateWrite,
 } = require('./validate');
 
-const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
+const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
 const SAME_EVENT_SIMILARITY = 0.4;
 const SAME_EVENT_MIN_SHARED_WORDS = 5;
 const HEADLINE_ECHO_SIMILARITY = 0.8;
@@ -98,35 +98,31 @@ function applyMissingTextFallback(validation, item) {
   if (fields.length === 0) return;
   const teaser = firstSentence(item);
   validation.problems.push('Missing-text retry still referred to unavailable source text');
-  for (const field of ['summary', 'detail']) {
-    if (!fields.includes(field)) continue;
-    const label = `${field[0].toUpperCase()}${field.slice(1)}`;
-    // Keep the sentences that are real news; drop only the ones about the text.
-    const kept = field === 'summary' && isUnrelatedShortSummary(validation.value)
-      ? ''
-      : String(validation.value[field]).split(/(?<=[.!?])\s+/u)
-        .map(sentence => sentence.trim())
-        .filter(sentence => sentence && missingTextFields({ [field]: sentence }).length === 0)
-        .join(' ');
-    if (kept) {
-      validation.value[field] = kept;
-      validation.problems.push(`${label}: sentences about unavailable text removed`);
+  if (!fields.includes('summary')) return;
+  // Keep the sentences that are real news; drop only the ones about the text.
+  const kept = isUnrelatedShortSummary(validation.value)
+    ? ''
+    : String(validation.value.summary).split(/(?<=[.!?])\s+/u)
+      .map(sentence => sentence.trim())
+      .filter(sentence => sentence && missingTextFields({ summary: sentence }).length === 0)
+      .join(' ');
+  if (kept) {
+    validation.value.summary = kept;
+    validation.problems.push('Summary: sentences about unavailable text removed');
+  } else {
+    validation.value.summary = teaser;
+    if (teaser) {
+      validation.problems.push('Summary replaced with the first teaser sentence');
     } else {
-      validation.value[field] = teaser;
-      if (teaser) {
-        validation.problems.push(`${label} replaced with the first teaser sentence`);
-      } else if (field === 'summary') {
-        validation.value.is_news = false;
-        validation.problems.push('not news: nothing beyond the headline');
-      } else {
-        validation.problems.push(`${label} left empty because no teaser was available`);
-      }
+      validation.value.is_news = false;
+      validation.problems.push('not news: nothing beyond the headline');
     }
   }
 }
 
 function writtenContentWords(story) {
-  return new Set(tokenize(`${story.headline || ''} ${story.summary || ''}`).map(word => (
+  const sourceTeasers = [story.title, story.description, ...(Array.isArray(story.merged_descriptions) ? story.merged_descriptions : [])];
+  return new Set(tokenize([story.headline, story.summary, ...sourceTeasers].filter(Boolean).join(' ')).map(word => (
     /^(?:death|die|dies|died)$/.test(word) ? 'death' : word
   )));
 }
@@ -302,7 +298,6 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         // so the story is left out. A cluster with another outlet's teaser or
         // text is not headline-only and stays.
         validation.value.summary = '';
-        validation.value.detail = '';
         validation.value.is_news = false;
         if (!validation.problems.includes('not news: nothing beyond the headline')) {
           validation.problems.push('not news: only the headline is available');

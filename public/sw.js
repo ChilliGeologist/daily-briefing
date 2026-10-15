@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daily-briefing-v5';
+const CACHE_NAME = 'daily-briefing-v6';
 const PRECACHE = [
   '/',
   '/style.css',

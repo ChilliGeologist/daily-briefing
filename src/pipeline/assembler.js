@@ -15,8 +15,8 @@ function getStory(storiesById, id) {
   return storiesById instanceof Map ? storiesById.get(id) : storiesById && storiesById[id];
 }
 
-function readingTime(detail) {
-  const words = String(detail || '').trim().match(/\S+/g) || [];
+function readingTime(summary) {
+  const words = String(summary || '').trim().match(/\S+/g) || [];
   return Math.max(1, Math.ceil(words.length / 200));
 }
 
@@ -26,7 +26,6 @@ function readerStory(story, significance) {
     title: story.headline,
     kicker: story.kicker,
     summary: story.summary,
-    detail: story.detail,
     significance,
     image: story.image || null,
     sources: story.sources || [],
@@ -36,7 +35,7 @@ function readerStory(story, significance) {
     coverage: Number(story.coverage) || 1,
     interest_labels: (story.interest_matches || []).map(match => match.label).filter(Boolean),
     written_by: story.written_by,
-    reading_time: readingTime(story.detail),
+    reading_time: readingTime(story.summary),
   };
   if (isCommunityItem(story)) {
     output.description = String(story.description || '').trim().slice(0, COMMUNITY_POST_CHARS);

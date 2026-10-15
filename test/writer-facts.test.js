@@ -14,18 +14,17 @@ const source = {
 function written(overrides = {}) {
   return {
     headline: 'Bryan Cranston mourns RJ Mitte',
-    summary: 'Bryan Cranston paid tribute to RJ Mitte.',
-    detail: 'Bryan Cranston paid tribute to his former co-star. Friends and colleagues shared memories of the actor and his work.',
+    summary: 'Bryan Cranston paid tribute to his former co-star. Friends and colleagues shared memories of the actor and his work.',
     ...overrides,
   };
 }
 
 it('removes the invented Mitte suicide sentence and flags its unsupported number', () => {
   assert.deepStrictEqual(guardFacts(written({
-    detail: 'RJ Mitte, who played his onscreen son, died by suicide at 34 in Texas. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.',
+    summary: 'RJ Mitte, who played his onscreen son, died by suicide at 34 in Texas. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.',
   }), source), {
     value: written({
-      detail: 'Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work. RJ Mitte died suddenly. An investigation is ongoing.',
+      summary: 'Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.',
     }),
     problems: ['removed unsupported claim: "suicid"', 'unsupported number: 34'],
     facts_removed: 1,
@@ -35,7 +34,7 @@ it('removes the invented Mitte suicide sentence and flags its unsupported number
 
 it('keeps the Mitte sentence when the source states suicide', () => {
   const value = written({
-    detail: 'RJ Mitte, who played his onscreen son, died by suicide. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.',
+    summary: 'RJ Mitte, who played his onscreen son, died by suicide. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.',
   });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
@@ -49,7 +48,7 @@ it('keeps the Mitte sentence when the source states suicide', () => {
 });
 
 it('keeps a sensitive term when its stem occurs in the source', () => {
-  const value = written({ detail: 'Police said a man was charged with an offence. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  const value = written({ summary: 'Police said a man was charged with an offence. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
     merged_descriptions: ['A man was charged with an offence.'],
@@ -62,7 +61,7 @@ it('keeps a sensitive term when its stem occurs in the source', () => {
 });
 
 it('keeps a suicide claim supported by a report that he took his own life', () => {
-  const value = written({ detail: 'A publicist confirmed that Mitte died by suicide. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.' });
+  const value = written({ summary: 'A publicist confirmed that Mitte died by suicide. Bryan Cranston paid tribute to his former co-star and colleagues shared memories of the actor and his work.' });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
     article_content: 'A publicist confirmed news reports that Mitte took his own life.',
@@ -75,7 +74,7 @@ it('keeps a suicide claim supported by a report that he took his own life', () =
 });
 
 it('keeps a conviction claim supported by a murder conviction', () => {
-  const value = written({ detail: 'He was convicted of murder. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  const value = written({ summary: 'He was convicted of murder. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
     article_content: 'He appeals his murder conviction.',
@@ -88,7 +87,7 @@ it('keeps a conviction claim supported by a murder conviction', () => {
 });
 
 it('keeps a killing claim supported by a reference to a killer', () => {
-  const value = written({ detail: 'The man was killed. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  const value = written({ summary: 'The man was killed. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
     article_content: 'Police are searching for the killer.',
@@ -113,7 +112,7 @@ it('removes a suicide claim when the source reports only a sudden death under in
 });
 
 it('keeps a charge claim supported by charges in the source', () => {
-  const value = written({ detail: 'He was charged. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
+  const value = written({ summary: 'He was charged. The case will return to court after investigators filed their evidence and prepared for the next hearing.' });
   assert.deepStrictEqual(guardFacts(value, {
     ...source,
     article_content: 'He faces charges.',
@@ -163,7 +162,7 @@ it('does not flag 34 when it is present in the source', () => {
 });
 
 it('does not treat "stable" as a stabbing claim', () => {
-  const value = written({ detail: 'Bryan Cranston paid tribute to his former co-star. His condition had been stable for years, friends and colleagues said.' });
+  const value = written({ summary: 'Bryan Cranston paid tribute to his former co-star. His condition had been stable for years, friends and colleagues said.' });
   assert.deepStrictEqual(guardFacts(value, source), {
     value,
     problems: [],

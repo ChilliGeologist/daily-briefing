@@ -63,7 +63,7 @@ function firstSentence(teaser) {
 }
 
 function missingTextFields(value) {
-  return ['summary', 'detail', 'kicker'].filter(field => {
+  return ['summary', 'kicker'].filter(field => {
     const text = String(value?.[field] || '').trim();
     return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text)
       || text.split(/(?<=[.!?])\s+|\n+/u).some(sentence =>
@@ -117,7 +117,6 @@ function fallbackWrite(item) {
     is_news: true,
     headline: stripHeadlineFullStop(String(item.title || '').trim()),
     summary: firstSentence(teaser),
-    detail: teaser,
     kicker: interestLabel || outlet,
     section: defaultSection(item),
   };
@@ -127,6 +126,8 @@ function sectionEvidence(item, value) {
   return [
     item.title,
     value.headline,
+    value.summary,
+    value.kicker,
     item.description,
     ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : []),
     item.article_content,
@@ -144,7 +145,7 @@ function enforceSectionRequirements(value, item, interests, problems) {
   }
   if ((item.default_category === 'tech' || item.default_category === 'world')
     && (value.section === 'tasmania' || value.section === 'australia')
-    && !hasAnyAustralianEvidence([value.headline, value.summary, value.detail].join('\n'))) {
+    && !hasAnyAustralianEvidence(sectionEvidence(item, value))) {
     const from = value.section;
     value.section = 'world';
     problems.push(`section moved: ${from} -> world (${item.default_category} source; no Australian evidence)`);
@@ -153,8 +154,12 @@ function enforceSectionRequirements(value, item, interests, problems) {
   if (value.section === 'world' && hasAustralianOnlyPlace(
     value.headline,
     value.summary,
-    value.detail,
-    value.kicker
+    value.kicker,
+    // Article text is left out: publishers' footers name Australian places
+    // (an ABC footer moved the Russell Brand trial into Australia).
+    item.title,
+    item.description,
+    ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : [])
   )) {
     // Probe the existing Tasmania rule with exactly its existing evidence and
     // configured interests; do not broaden its gazetteer or source exceptions.
@@ -167,10 +172,10 @@ function enforceSectionRequirements(value, item, interests, problems) {
   if (value.section === 'australia' && hasOverseasOnlyEvidence(
     value.headline,
     value.summary,
-    value.detail,
     value.kicker,
     item.title,
     item.description,
+    ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : []),
     item.article_content
   )) {
     value.section = 'world';
@@ -230,7 +235,6 @@ function kickerEvidence(item, value) {
     .map(text => (title && typeof text === 'string' ? text.split(title).join(' ') : text));
   return [
     value.summary,
-    value.detail,
     ...teasers,
     item.article_content,
   ].filter(text => typeof text === 'string' && text.trim()).join('\n');
@@ -309,31 +313,18 @@ function repairKicker(value, item, problems) {
   }
 }
 
-function shortenDetail(detail) {
-  const wordMatches = [...detail.matchAll(/\S+/g)];
-  if (wordMatches.length <= 160) return { detail, problem: null, fatal: false };
-  if (wordMatches.length >= 400) {
-    return {
-      detail,
-      problem: 'Detail was 400 words or longer',
-      fatal: true,
-    };
-  }
-  const boundary = wordMatches[159].index + wordMatches[159][0].length;
-  const prefix = detail.slice(0, boundary);
+function shortenSummary(summary) {
+  const wordMatches = [...summary.matchAll(/\S+/g)];
+  if (wordMatches.length <= 45) return { summary, problem: null };
+  const boundary = wordMatches[44].index + wordMatches[44][0].length;
+  const prefix = summary.slice(0, boundary);
   const endings = [...prefix.matchAll(/[.!?](?:["'”’])?(?=\s|$)/g)];
   const last = endings.at(-1);
-  if (!last) {
-    return {
-      detail,
-      problem: 'Detail exceeded 160 words without a safe sentence boundary',
-      fatal: true,
-    };
-  }
   return {
-    detail: prefix.slice(0, last.index + last[0].length).trim(),
-    problem: 'Detail exceeded 160 words and was shortened',
-    fatal: false,
+    summary: last
+      ? prefix.slice(0, last.index + last[0].length).trim()
+      : `${prefix.trim().replace(/[,:;\-–—]+$/u, '')}.`,
+    problem: 'Summary exceeded 45 words and was shortened',
   };
 }
 
@@ -352,7 +343,6 @@ function validateWrite(raw, item, interests) {
     is_news: parsed.is_news,
     headline: typeof parsed.headline === 'string' ? stripHeadlineFullStop(parsed.headline.trim()) : '',
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
-    detail: typeof parsed.detail === 'string' ? parsed.detail.trim() : '',
     kicker: typeof parsed.kicker === 'string' ? parsed.kicker.trim() : '',
     section: parsed.section,
   };
@@ -362,7 +352,7 @@ function validateWrite(raw, item, interests) {
     problems.push('is_news was not a boolean');
     value.is_news = true;
   }
-  for (const [field, label] of [['headline', 'Headline'], ['summary', 'Summary'], ['detail', 'Detail']]) {
+  for (const [field, label] of [['headline', 'Headline'], ['summary', 'Summary']]) {
     if (!value[field]) {
       problems.push(`${label} was empty`);
       fatal = true;
@@ -390,9 +380,9 @@ function validateWrite(raw, item, interests) {
   const facts = guardFacts(value, item);
   Object.assign(value, facts.value);
   problems.push(...facts.problems);
-  if (value.detail) {
-    const shortened = shortenDetail(value.detail);
-    value.detail = shortened.detail;
+  if (value.summary) {
+    const shortened = shortenSummary(value.summary);
+    value.summary = shortened.summary;
     if (shortened.problem) problems.push(shortened.problem);
   }
 

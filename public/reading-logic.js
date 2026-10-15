@@ -45,7 +45,7 @@
       .filter(function(reply) { return typeof reply === 'string' && reply.trim(); })
       .map(function(reply) { return reply.trim(); });
     return {
-      fallback: hasArticle ? '' : String(story.detail || story.summary || '').trim(),
+      fallback: hasArticle ? '' : String(story.summary || '').trim(),
       post: typeof story.description === 'string' ? story.description.trim() : '',
       replies: replies
     };

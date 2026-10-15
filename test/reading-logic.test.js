@@ -106,14 +106,14 @@ test('prepareSections does not mutate the payload or its arrays', () => {
   assert.deepStrictEqual(input, snapshot);
 });
 
-test('prepareReaderContent prefers detail without an article and keeps community text plain', () => {
+test('prepareReaderContent uses the summary without an article and keeps community text plain', () => {
   assert.deepStrictEqual(prepareReaderContent({
     detail: 'The fuller detail shown after the tap.',
     summary: 'Short summary.',
     description: '  The post text.  ',
     top_comments: [' First reply. ', '', null, 'Second reply.'],
   }, false), {
-    fallback: 'The fuller detail shown after the tap.',
+    fallback: 'Short summary.',
     post: 'The post text.',
     replies: ['First reply.', 'Second reply.'],
   });
@@ -127,6 +127,17 @@ test('prepareReaderContent falls back to summary and omits article fallback when
     { fallback: 'Short summary.', post: '', replies: [] },
     { fallback: '', post: '', replies: [] },
   ]);
+});
+
+test('prepareReaderContent ignores detail from an old stored edition', () => {
+  assert.deepStrictEqual(prepareReaderContent({
+    summary: 'The current reader fallback.',
+    detail: 'Legacy expansion copy must not render.',
+  }, false), {
+    fallback: 'The current reader fallback.',
+    post: '',
+    replies: [],
+  });
 });
 
 test('decideGesture waits below 8 px and locks at exactly 8 px', () => {

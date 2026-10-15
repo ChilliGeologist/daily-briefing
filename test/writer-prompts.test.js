@@ -17,15 +17,26 @@ it('defines the exact closed write schema', () => {
   assert.deepStrictEqual(WRITE_SCHEMA, {
     type: 'object',
     additionalProperties: false,
-    required: ['is_news', 'headline', 'summary', 'detail', 'kicker', 'section'],
+    required: ['is_news', 'headline', 'summary', 'kicker', 'section'],
     properties: {
       is_news: { type: 'boolean' },
       headline: { type: 'string' },
       summary: { type: 'string' },
-      detail: { type: 'string' },
       kicker: { type: 'string' },
       section: { type: 'string', enum: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'] },
     },
+  });
+});
+
+it('writes only the longer summary shape and no detail field', () => {
+  assert.deepStrictEqual({
+    required: WRITE_SCHEMA.required,
+    fields: Object.keys(WRITE_SCHEMA.properties),
+    summaryRule: writeSystemPrompt().split(' Set is_news')[0].split('\n\n').at(-1),
+  }, {
+    required: ['is_news', 'headline', 'summary', 'kicker', 'section'],
+    fields: ['is_news', 'headline', 'summary', 'kicker', 'section'],
+    summaryRule: 'The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements.',
   });
 });
 
@@ -51,7 +62,7 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
+The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
 });
 
 it('builds a complete per-story prompt with capped article and five real community comments', () => {
