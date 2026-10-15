@@ -535,3 +535,31 @@ for look, motion constants and behaviour. Build it into the reading screen:
 7. **Reduced motion:** no bow or spring and no glide; the current icon and pill
    still show and the paper jumps directly.
 8. No Settings toggle in this stage; left-handed placement can come later.
+
+
+---
+
+## One tap to the article (Jesse, 2026-10-15)
+
+Jesse: "there's basically no point having the tap to expand it to a slightly
+bigger summary, and then the full article. If I read the very short summary
+and find something interesting ... I'm just going straight to the article. I
+think maybe we make the shortest summaries ever so slightly longer, and then
+ditch the mid-sized ones."
+
+1. **Writer (stage 3 code):** the summary becomes one or two sentences of at
+   most about 40 words (was one sentence, 30 words). The 60–120 word `detail`
+   is no longer written: remove it from the write schema, prompt and
+   validation, and from every rule that reads or repairs it (missing-text,
+   facts guard, place evidence, duplicate merge, headline retry), keeping each
+   rule's intent on the summary. Stored editions that still carry `detail`
+   keep working; nothing reads it for display any more.
+2. **Reading screen:** tapping a story opens the reader directly with the
+   approved curl (the same path as the old Read in full and a left swipe). The
+   in-place expansion, its one-at-a-time state, the Read in full button and the
+   expansion styles go. Sliding off the thumb strip onto a story opens its
+   reader too.
+3. **Reader with no article body:** show the summary, then "Open on <site> ›".
+   Community stories keep the post text and "What people said".
+4. `scripts/self-check.js` stops checking `detail` and flags any summary over
+   45 words.
