@@ -47,6 +47,19 @@ function headlineSummaryOverlap(headline, summary) {
   };
 }
 
+function isUnrelatedShortSummary(value) {
+  return (String(value?.summary || '').trim().match(/\S+/g) || []).length < 8
+    && headlineSummaryOverlap(value?.headline, value?.summary).shared === 0;
+}
+
+function markUnrelatedShortSummary(validation) {
+  if (!validation.ok || !isUnrelatedShortSummary(validation.value)) return;
+  validation.missingTextFields = [...new Set([
+    ...(validation.missingTextFields || []),
+    'summary',
+  ])];
+}
+
 function isLowTextHeadlineEcho(item, value) {
   if (String(item.article_content || '').trim().length >= 500) return false;
   const overlap = headlineSummaryOverlap(value.headline, value.summary);
@@ -89,10 +102,12 @@ function applyMissingTextFallback(validation, item) {
     if (!fields.includes(field)) continue;
     const label = `${field[0].toUpperCase()}${field.slice(1)}`;
     // Keep the sentences that are real news; drop only the ones about the text.
-    const kept = String(validation.value[field]).split(/(?<=[.!?])\s+/u)
-      .map(sentence => sentence.trim())
-      .filter(sentence => sentence && missingTextFields({ [field]: sentence }).length === 0)
-      .join(' ');
+    const kept = field === 'summary' && isUnrelatedShortSummary(validation.value)
+      ? ''
+      : String(validation.value[field]).split(/(?<=[.!?])\s+/u)
+        .map(sentence => sentence.trim())
+        .filter(sentence => sentence && missingTextFields({ [field]: sentence }).length === 0)
+        .join(' ');
     if (kept) {
       validation.value[field] = kept;
       validation.problems.push(`${label}: sentences about unavailable text removed`);
@@ -206,7 +221,9 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       stats.input_tokens += Number(usage.input_tokens) || 0;
       stats.output_tokens += Number(usage.output_tokens) || 0;
       stats.duration_ms += Number(response.duration_ms) || 0;
-      return { validation: validateWrite(response.json, item, interests), backend: response.backend || writer.name };
+      const checked = validateWrite(response.json, item, interests);
+      markUnrelatedShortSummary(checked);
+      return { validation: checked, backend: response.backend || writer.name };
     }
     const overrideNotNews = !isCommunityItem(item)
       && String(item.article_content || '').trim().length < 500;
@@ -360,6 +377,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
 module.exports = {
   writeStories,
   headlineSummaryOverlap,
+  isUnrelatedShortSummary,
   isLowTextHeadlineEcho,
   writtenStorySimilarity,
   dropWrittenDuplicates,

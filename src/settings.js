@@ -26,6 +26,10 @@ const FILLER_PATTERNS_ADDED_V5 = [
 const FILLER_PATTERNS_ADDED_V6 = [
   "/^\\s*redditors?(?:['’]s)?\\b/i",
 ];
+const FILLER_PATTERNS_ADDED_V7 = [
+  '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i',
+  '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i',
+];
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
@@ -36,6 +40,7 @@ const DEFAULT_FILLER_PATTERNS = [
   ...FILLER_PATTERNS_ADDED_V4,
   ...FILLER_PATTERNS_ADDED_V5,
   ...FILLER_PATTERNS_ADDED_V6,
+  ...FILLER_PATTERNS_ADDED_V7,
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
@@ -45,7 +50,7 @@ function createSettings(db) {
   // Run once at app startup so the settings UI and pipeline see the same list.
   // Write the revision last: if startup is interrupted, appending is idempotent.
   const fillerRevision = Number(db.getSetting('filler_patterns_revision'));
-  if (fillerRevision < 6) {
+  if (fillerRevision < 7) {
     const stored = db.getSetting('filler_patterns');
     const patterns = stored === null ? [...DEFAULT_FILLER_PATTERNS]
       : [
@@ -55,10 +60,11 @@ function createSettings(db) {
         ...(fillerRevision < 3 ? FILLER_PATTERNS_ADDED_V3 : []),
         ...(fillerRevision < 4 ? FILLER_PATTERNS_ADDED_V4 : []),
         ...(fillerRevision < 5 ? FILLER_PATTERNS_ADDED_V5 : []),
-        ...FILLER_PATTERNS_ADDED_V6,
+        ...(fillerRevision < 6 ? FILLER_PATTERNS_ADDED_V6 : []),
+        ...FILLER_PATTERNS_ADDED_V7,
       ].filter((pattern, index, all) => all.indexOf(pattern) === index);
     db.setSetting('filler_patterns', patterns);
-    db.setSetting('filler_patterns_revision', 6);
+    db.setSetting('filler_patterns_revision', 7);
   }
   return {
     getAppTitle() {

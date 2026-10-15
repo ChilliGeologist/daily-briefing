@@ -230,11 +230,15 @@ it('detects only missing-source meta writing in summaries, details and kickers',
     { summary: 'The headline indicates rates will rise.', detail: 'Useful detail.', kicker: 'News' },
     { summary: 'The headline states the company has failed.', detail: 'Useful detail.', kicker: 'News' },
     { summary: 'The headline implies the talks have ended.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'No substantive news content was provided for this story.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'This article does not contain enough information to report.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'The supplied content has no account of the event.', detail: 'Useful detail.', kicker: 'News' },
+    { summary: 'Police have released no details about the man.', detail: 'Useful detail.', kicker: 'News' },
     { summary: 'The article says no jobs will be cut.', detail: 'Officials provided details about the available content.', kicker: 'Job cuts' },
   ];
   assert.deepStrictEqual(values.map(missingTextFields), [
     ['summary'], ['summary'], ['detail'], ['detail'], ['kicker'],
-    ['summary'], ['summary'], ['summary'], ['summary'], [],
+    ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], ['summary'], [], [],
   ]);
 });
 
@@ -305,11 +309,12 @@ it('replaces bare-place and meta kickers before applying sentence case', () => {
     validateWrite(raw('Tasmania'), source),
     validateWrite(raw('Northern Territory'), source),
     validateWrite(raw('Headline mystery'), source),
-  ], ['Tasmania', 'Northern Territory', 'Headline mystery'].map(kicker => ({
+    validateWrite(raw('No details'), source),
+  ], ['Tasmania', 'Northern Territory', 'Headline mystery', 'No details'].map(kicker => ({
     ok: true,
     value: { ...raw(''), kicker: '' },
     problems: [`Kicker was only a place or meta label: ${kicker}`],
-    ...(kicker === 'Headline mystery' ? { missingTextFields: ['kicker'] } : {}),
+    ...(['Headline mystery', 'No details'].includes(kicker) ? { missingTextFields: ['kicker'] } : {}),
   })));
 });
 

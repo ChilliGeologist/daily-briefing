@@ -133,3 +133,28 @@ it('filters social-user says and shares filler plus possessive Redditor features
     stats: { total: 9, kept: 1, stale: 0, filler: 8 },
   });
 });
+
+it('filters residential sale and embrace-this-life advertorials without dropping business sale news', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = [
+    'Embrace this modern rural life in Longford, just minutes from Launceston',
+    'Trotting track home and $2.5m farmhouse for sale on same stretch of road',
+    'Historic Gingerbread House in Evandale listed for sale',
+  ];
+  const keep = [
+    'Hobart brewery Captain Blighs hits market',
+    'Number of homes for sale falls to a record low',
+  ];
+  const candidates = [...titles, ...keep].map(title => item(title, 1, 'The Examiner'));
+  const propertyPattern = '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i';
+  const lifestylePattern = '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i';
+  assert.deepStrictEqual(filterItems(candidates, opts({ fillerPatterns: settings.getFillerPatterns() })), {
+    kept: candidates.slice(3),
+    dropped: [
+      { item: candidates[0], reason: `filler: ${lifestylePattern}` },
+      { item: candidates[1], reason: `filler: ${propertyPattern}` },
+      { item: candidates[2], reason: `filler: ${propertyPattern}` },
+    ],
+    stats: { total: 5, kept: 2, stale: 0, filler: 3 },
+  });
+});

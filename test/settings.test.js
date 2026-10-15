@@ -53,7 +53,7 @@ it('returns stored values when set', () => {
     settings.getPaywalledHosts(),
     settings.getMaxSameStoryChecks(),
     settings.getMaxCandidates(),
-  ], [24, ['x', ...newFillerPatterns.slice(-7)], [], 5, 135]);
+  ], [24, ['x', ...newFillerPatterns.slice(-9)], [], 5, 135]);
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),
@@ -77,6 +77,8 @@ const newFillerPatterns = [
   '/\\bdiscussion\\s+threads?\\b/i',
   "/^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i",
   "/^\\s*redditors?(?:['’]s)?\\b/i",
+  '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i',
+  '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i',
 ];
 
 it('upgrades stored filler patterns once without restoring deleted defaults or losing custom patterns', () => {
@@ -85,10 +87,10 @@ it('upgrades stored filler patterns once without restoring deleted defaults or l
   const settings = createSettings(db);
   const expected = ['my custom pattern', 'ask away', 'superquiz', ...newFillerPatterns.slice(1)];
   assert.deepStrictEqual(settings.getFillerPatterns(), expected);
-  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 6 });
+  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 7 });
   settings.set('filler_patterns', ['my custom pattern']);
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), ['my custom pattern']);
-  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 6 });
+  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 7 });
 });
 
 it('seeds fresh filler defaults once and respects an empty list after editing', () => {
@@ -104,28 +106,35 @@ it('upgrades a revision 2 install with only the later patterns, keeping its dele
   const vals = { filler_patterns: ['my custom pattern', 'megathread'], filler_patterns_revision: 2 };
   const settings = createSettings(fakeDb(vals));
   assert.deepStrictEqual(settings.getFillerPatterns(), [
-    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-2),
+    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-4),
   ]);
-  assert.strictEqual(vals.filler_patterns_revision, 6);
+  assert.strictEqual(vals.filler_patterns_revision, 7);
 });
 
 it('upgrades a revision 3 install with only later filler revisions', () => {
   const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 3 };
   const settings = createSettings(fakeDb(vals));
-  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-2)]);
-  assert.strictEqual(vals.filler_patterns_revision, 6);
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-4)]);
+  assert.strictEqual(vals.filler_patterns_revision, 7);
 });
 
 it('upgrades a revision 4 install with only the later social-user fillers', () => {
   const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 4 };
   const settings = createSettings(fakeDb(vals));
-  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-2)]);
-  assert.strictEqual(vals.filler_patterns_revision, 6);
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-4)]);
+  assert.strictEqual(vals.filler_patterns_revision, 7);
 });
 
 it('upgrades a revision 5 install with only the general Redditor filler', () => {
   const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 5 };
   const settings = createSettings(fakeDb(vals));
-  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', newFillerPatterns.at(-1)]);
-  assert.strictEqual(vals.filler_patterns_revision, 6);
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-3)]);
+  assert.strictEqual(vals.filler_patterns_revision, 7);
+});
+
+it('upgrades a revision 6 install with only the property fillers', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 6 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-2)]);
+  assert.strictEqual(vals.filler_patterns_revision, 7);
 });

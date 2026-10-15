@@ -30,7 +30,8 @@ const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies
 // not a genuine news story and appears to be a paywall or subscription
 // prompt" (404 Media, 2026-10-15).
 const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content|article|story)\s+(?:is|was)\s+(?:not\b|(?:a\s+)?paywalled\s+(?:article|page|story)\b)|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
-const META_KICKER = /^(?:headline mystery|no story|subscription wall|paywall|login page|cookie notice)$/i;
+const META_REFERENCE = /\b(?:this\s+(?:story|article|post|text|page)|the\s+(?:provided|supplied)\s+(?:text|content))\b/i;
+const META_KICKER = /^(?:headline mystery|no story|no details|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
 
 function parseObject(raw) {
@@ -65,6 +66,9 @@ function missingTextFields(value) {
   return ['summary', 'detail', 'kicker'].filter(field => {
     const text = String(value?.[field] || '').trim();
     return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text)
+      || text.split(/(?<=[.!?])\s+|\n+/u).some(sentence =>
+        /\b(?:no|not)\b/i.test(sentence) && META_REFERENCE.test(sentence)
+      )
       || (field === 'kicker' && META_KICKER.test(text));
   });
 }

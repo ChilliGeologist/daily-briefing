@@ -261,7 +261,7 @@ it('overrides not-news only for non-community stories without substantial articl
 });
 
 const retryItem = { title: 'Tough Decisions', description: 'The RBA minutes discuss inflation.', source_name: 'Outlet' };
-const retryValue = { is_news: true, headline: 'Tough Decisions', summary: 'The RBA minutes discuss inflation.', detail: 'The RBA minutes discuss inflation.', kicker: 'Rates', section: 'australia' };
+const retryValue = { is_news: true, headline: 'Tough Decisions', summary: 'The RBA minutes discuss inflation and future interest rates.', detail: 'The RBA minutes discuss inflation.', kicker: 'Rates', section: 'australia' };
 const retrySettings = { getWriterArticleChars: () => 6000 };
 
 it('retries a vague headline once with the full source prompt and validates the replacement', async () => {
@@ -434,6 +434,105 @@ it('drops persistent headline-meta writing when there is no teaser to fall back 
   });
 });
 
+it('retries a short summary unrelated to its headline and falls back to the teaser if it persists', async () => {
+  const source = {
+    title: 'Character.ai Bankruptcy Is First AI Bubble Domino to Fall',
+    description: 'Character.ai has filed for bankruptcy amid mounting financial pressure.',
+    article_content: 'Become a paid member for unlimited access. '.repeat(20),
+    source_name: '404 Media',
+    interest_matches: [],
+  };
+  const bad = {
+    is_news: true,
+    headline: source.title,
+    summary: 'New music genre just dropped.',
+    detail: 'New music genre just dropped.',
+    kicker: 'AI bubble',
+    section: 'tech',
+  };
+  const calls = [];
+  const output = await writeStories([source], {
+    name: 'test',
+    async write(...args) { calls.push(args); return { json: bad }; },
+  }, retrySettings);
+  const { writeSystemPrompt, writeUserPrompt, WRITE_SCHEMA } = require('../src/pipeline/writer/prompts');
+  const prompt = writeUserPrompt(source, { articleChars: 6000 });
+  assert.deepStrictEqual(calls, [
+    [writeSystemPrompt(), prompt, WRITE_SCHEMA],
+    [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary, detail or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
+  ]);
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...source,
+      rank: 1,
+      id: 's1',
+      ...bad,
+      summary: source.description,
+      written_by: 'test',
+      write_ok: true,
+      write_problems: [
+        'Missing-text retry still referred to unavailable source text',
+        'Summary replaced with the first teaser sentence',
+      ],
+    }],
+    dropped: [],
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
+it('drops a persistently unrelated short summary with no teaser but keeps the eight-word boundary', async () => {
+  const sources = [
+    {
+      title: 'Character.ai Bankruptcy Is First AI Bubble Domino to Fall',
+      description: '',
+      article_content: 'Become a paid member for unlimited access. '.repeat(20),
+      source_name: '404 Media',
+      interest_matches: [],
+    },
+    {
+      title: 'Character.ai Bankruptcy Is First AI Bubble Domino to Fall',
+      description: 'A separate teaser is available.',
+      article_content: 'Become a paid member for unlimited access. '.repeat(20),
+      source_name: '404 Media',
+      interest_matches: [],
+    },
+  ];
+  const summaries = ['New music genre just dropped.', 'Fresh music genres suddenly appeared across online platforms.'];
+  let index = 0;
+  const output = await writeStories(sources, {
+    name: 'test', concurrency: 1,
+    async write() {
+      const sourceIndex = Math.floor(index / 2);
+      index++;
+      return { json: {
+        is_news: true,
+        headline: sources[sourceIndex].title,
+        summary: summaries[sourceIndex],
+        detail: summaries[sourceIndex],
+        kicker: 'AI bubble',
+        section: 'tech',
+      } };
+    },
+  }, retrySettings);
+  assert.deepStrictEqual(output, {
+    stories: [{
+      ...sources[1], rank: 2, id: 's2', is_news: true, headline: sources[1].title,
+      summary: summaries[1], detail: summaries[1], kicker: 'AI bubble', section: 'tech',
+      written_by: 'test', write_ok: true, write_problems: [],
+    }],
+    dropped: [{
+      ...sources[0], rank: 1, id: 's1', is_news: false, headline: sources[0].title,
+      summary: '', detail: summaries[0], kicker: 'AI bubble', section: 'tech',
+      written_by: 'test', write_ok: true,
+      write_problems: [
+        'Missing-text retry still referred to unavailable source text',
+        'not news: nothing beyond the headline',
+      ],
+    }],
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+  });
+});
+
 it('drops same-event stories after writing, merges their sources, and keeps same-topic stories separate', async () => {
   const items = [
     {
@@ -511,7 +610,7 @@ it('forces deterministic community help requests to not-news but keeps highly en
     { title: 'Help me pick a rack please', source_type: 'reddit', source_name: 'r/homelab', article_content: 'x'.repeat(500), interest_matches: [] },
     { title: 'Hardware question', source_type: 'reddit', source_name: 'r/homelab', score: 500, comment_count: 80, article_content: 'x'.repeat(500), interest_matches: [] },
   ];
-  const written = headline => ({ is_news: true, headline, summary: 'A user asks for advice.', detail: 'A user asks the community for advice about homelab hardware.', kicker: 'Hardware Help', section: 'homelab' });
+  const written = headline => ({ is_news: true, headline, summary: 'A user asks the community for homelab hardware advice.', detail: 'A user asks the community for advice about homelab hardware.', kicker: 'Hardware Help', section: 'homelab' });
   const outputs = [written(items[0].title), written('Community discusses homelab hardware choices')];
   let index = 0;
   const output = await writeStories(items, {
@@ -544,7 +643,7 @@ it('forces a community question with fewer than two real replies to not-news', a
       top_comments: ['Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.', 'Answer one.', 'Answer two.'],
     },
   ];
-  const written = headline => ({ is_news: true, headline, summary: 'People asked what happened.', detail: 'The post asks the community to explain what happened.', kicker: 'Online culture', section: 'internet' });
+  const written = headline => ({ is_news: true, headline, summary: 'People in the community asked what happened in detail.', detail: 'The post asks the community to explain what happened.', kicker: 'Online culture', section: 'internet' });
   let index = 0;
   const output = await writeStories(items, {
     name: 'test', async write() { return { json: written(items[index++].title) }; },
@@ -583,7 +682,7 @@ it('retries over-18-word and quote-only Reddit headlines once', async () => {
       name: 'test', async write() {
         count++;
         calls.push(headline);
-        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced.', detail: 'The move was announced by the parties.', kicker: 'Code Rules', section: 'tech' } };
+        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced to the online community today.', detail: 'The move was announced by the parties.', kicker: 'Code Rules', section: 'tech' } };
       },
     }, retrySettings);
     assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {
