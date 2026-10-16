@@ -51,8 +51,8 @@ test('pillOffset keeps the pill ten pixels beyond the scaled icon outer edge', (
   assertNear(pillOffset({ iconX: -46, iconScale: 2.15 }), -103.7);
 });
 
-test('sectionIconId accepts the stage 3 ids and sends every unknown id to the front page', () => {
-  const ids = ['top', 'tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'];
+test('sectionIconId accepts reading-screen ids including sport and sends every unknown id to the front page', () => {
+  const ids = ['top', 'tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'];
   assert.deepStrictEqual(ids.map(sectionIconId), ids);
   assert.deepStrictEqual([
     sectionIconId('constructor'),

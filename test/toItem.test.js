@@ -52,6 +52,10 @@ it('converts a ranked extracted cluster to the legacy item shape', () => {
       { name: 'Examiner', url: 'https://examiner.test/other' },
       { name: 'ABC', url: 'https://abc.test/lead' },
     ],
+    outlet_versions: [
+      { name: 'Examiner', headline: 'Other title', description: 'Other description', url: 'https://examiner.test/other', text: 'Other description' },
+      { name: 'ABC', headline: 'Lead title', description: 'Lead description', url: 'https://abc.test/lead', text: 'Lead description' },
+    ],
     merged_descriptions: ['Lead description', 'Other description'],
     relevance_score: 87.5,
     article_content: 'Full article text',

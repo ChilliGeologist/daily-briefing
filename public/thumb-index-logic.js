@@ -14,7 +14,7 @@
   var ICON_INSET = 9;
   var ICON_SIZE = 18;
   var PILL_GAP = 10;
-  var SECTION_IDS = ['top', 'tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'];
+  var SECTION_IDS = ['top', 'tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'];
 
   function labelLayout(height, count) {
     var safeHeight = Number(height);

@@ -1,12 +1,18 @@
 'use strict';
 
 const { tokenize } = require('../cluster');
-const { WRITE_SCHEMA, isCommunityItem, writeSystemPrompt, writeUserPrompt } = require('./prompts');
+const { WRITE_SCHEMA, communityReplies, isCommunityItem, photoUserPrompt, writeSystemPrompt, writeUserPrompt } = require('./prompts');
 const {
   isVagueHeadline,
   isCommunityHelpRequest,
   isUnansweredCommunityQuestion,
   missingTextFields,
+  isNonNewsEssay,
+  isProjectPost,
+  projectDropReason,
+  isSportStory,
+  sportDropReason,
+  writingRetryReasons,
   validateWrite,
 } = require('./validate');
 
@@ -16,6 +22,55 @@ const SAME_EVENT_MIN_SHARED_WORDS = 5;
 const HEADLINE_ECHO_SIMILARITY = 0.8;
 const HEADLINE_ECHO_MIN_SHARED_WORDS = 4;
 const HEADLINE_ECHO_PADDING = new Set(['report', 'reportedly']);
+
+function countWords(text) {
+  return (String(text || '').trim().match(/\S+/g) || []).length;
+}
+
+function hasUsablePhoto(item) {
+  const values = [...(Array.isArray(item.images) ? item.images : []), item.image];
+  return values.some(value => {
+    try { return /^https?:$/.test(new URL(value).protocol); } catch (_) { return false; }
+  });
+}
+
+function distinctOutletCount(item) {
+  const names = (item.sources || []).map(source => String(source && source.name || '').trim().toLowerCase()).filter(Boolean);
+  if (names.length === 0 && item.source_name) names.push(String(item.source_name).trim().toLowerCase());
+  return new Set(names).size;
+}
+
+function preWriteDropReason(item, { ignorePhoto = false } = {}) {
+  if (item.source_kind === 'warning' || item.source_kind === 'release') return null;
+  const title = String(item.title || '');
+  const url = String(item.canonical_url || item.url || '');
+  const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
+    .filter(Boolean).join('\n');
+  const isGuardian = /(?:^|\.)theguardian\.com$/i.test((() => {
+    try { return new URL(url).hostname; } catch (_) { return ''; }
+  })()) || /\bGuardian\b/i.test(sourceNames);
+  if (isGuardian && (/\/live\//i.test(url) || /[–—-]\s*live\s*$/i.test(title))) return 'Guardian live blog';
+  const articleWords = countWords(item.article_content);
+  const replyCount = Number(item.real_reply_count) || communityReplies(item).length;
+  const discussion = isCommunityItem(item) && replyCount >= 3;
+  const photo = !ignorePhoto && hasUsablePhoto(item);
+  const photoPost = photo && String(item.source_type || '').toLowerCase() === 'reddit';
+  if (articleWords < 40 && !discussion && !photo) return 'nothing behind headline';
+  if (distinctOutletCount(item) <= 1 && articleWords < 150 && !discussion && !photoPost) {
+    return 'single-outlet teaser under 150 words';
+  }
+  return null;
+}
+
+function isPhotoSubstance(item) {
+  return String(item.source_type || '').toLowerCase() === 'reddit'
+    && hasUsablePhoto(item)
+    && countWords(item.description) < 40;
+}
+
+function isPageDescription(value) {
+  return /\b(?:no substantial news content|promotional material|subscrib(?:e|er|ing|tion)|membership|this article|this page|the page)\b/i.test(String(value && value.summary || ''));
+}
 
 // True when the app has nothing but the headline: no article text, and every
 // teaser is just the headline again plus the outlet's name (Google News).
@@ -210,9 +265,38 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     const rank = item.rank == null ? index + 1 : item.rank;
     let validation;
     let writtenBy = writer.name;
+    let imageDescribed = false;
 
-    async function request(prompt) {
-      const response = await writer.write(writeSystemPrompt(), prompt, WRITE_SCHEMA);
+    function dropWithoutWriting(reason) {
+      droppedByIndex[index] = {
+        ...item,
+        rank,
+        id,
+        is_news: false,
+        headline: item.title || '',
+        summary: '',
+        kicker: '',
+        section: 'australia',
+        written_by: writtenBy,
+        write_ok: true,
+        write_problems: [`not news: ${reason}`],
+      };
+      stats.not_news++;
+      if (log && log.info) log.info('pipeline:writer', `Not news: "${item.title}" (${reason})`);
+    }
+
+    if (Array.isArray(item.outlet_versions)) {
+      const earlyReason = preWriteDropReason(item) || projectDropReason(item);
+      if (earlyReason) {
+        dropWithoutWriting(earlyReason);
+        return;
+      }
+    }
+
+    async function request(prompt, { vision = false } = {}) {
+      const response = vision
+        ? await writer.vision(writeSystemPrompt(), prompt, WRITE_SCHEMA, item.images?.[0] || item.image)
+        : await writer.write(writeSystemPrompt(), prompt, WRITE_SCHEMA);
       const usage = response.usage || {};
       stats.input_tokens += Number(usage.input_tokens) || 0;
       stats.output_tokens += Number(usage.output_tokens) || 0;
@@ -224,12 +308,44 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     const overrideNotNews = !isCommunityItem(item)
       && String(item.article_content || '').trim().length < 500;
     const headlineOnly = isHeadlineOnly(item);
+    const photoSubstance = isPhotoSubstance(item);
 
     try {
-      const userPrompt = writeUserPrompt(item, { articleChars: settings.getWriterArticleChars() });
-      const first = await request(userPrompt);
+      const textPrompt = writeUserPrompt(item, { articleChars: settings.getWriterArticleChars() });
+      const userPrompt = photoSubstance
+        ? photoUserPrompt(item, { articleChars: settings.getWriterArticleChars() })
+        : textPrompt;
+      let first;
+      if (photoSubstance) {
+        try {
+          first = await request(userPrompt, { vision: true });
+          imageDescribed = true;
+        } catch (error) {
+          const fallbackReason = preWriteDropReason(item, { ignorePhoto: true });
+          if (fallbackReason) {
+            dropWithoutWriting(`photo unavailable; ${fallbackReason}`);
+            return;
+          }
+          first = await request(textPrompt);
+        }
+      } else {
+        first = await request(userPrompt);
+      }
       validation = first.validation;
       writtenBy = first.backend;
+      if (isPageDescription(validation.value)) {
+        try {
+          const retry = await request(`${textPrompt}\n\nWrite the news itself. Do not describe the page, article, subscription, membership, promotion or lack of content.`);
+          validation = retry.validation;
+          writtenBy = retry.backend;
+        } catch (error) {
+          validation.problems.push(`page-description retry failed: ${error.message}`);
+        }
+        if (isPageDescription(validation.value)) {
+          validation.value.is_news = false;
+          validation.problems = ['page-description retry still described the page'];
+        }
+      }
       if (validation.ok && (validation.value.is_news || overrideNotNews)
         && (validation.missingTextFields || []).length > 0) {
         if (!headlineOnly) {
@@ -245,19 +361,34 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
             validation.problems.push(`Missing-text retry failed: ${error.message}`);
           }
         }
-        applyMissingTextFallback(validation, item);
+        if (missingTextFields(validation.value).length > 0) {
+          validation.value.is_news = false;
+          validation.problems = ['page-description retry still described unavailable source content'];
+        } else {
+          // The same retry path also handles an unrelated very-short summary;
+          // unlike page-description prose, that can safely fall back to a real
+          // publisher teaser.
+          applyMissingTextFallback(validation, item);
+        }
       }
-      const retryReason = !headlineOnly && validation.ok && (validation.value.is_news || overrideNotNews)
+      const canRetryWriting = !headlineOnly && validation.ok && (validation.value.is_news || overrideNotNews)
+        && !validation.problems.some(problem => problem.startsWith('page-description retry'));
+      const retryReason = canRetryWriting
         ? headlineRetryReason(validation.value.headline, item)
         : null;
-      if (retryReason) {
+      const writingReasons = canRetryWriting
+        ? writingRetryReasons(validation.value)
+        : [];
+      if (retryReason || writingReasons.length > 0) {
         stats.headline_retries++;
-        const note = `Headline "${validation.value.headline}" is ${retryReason}; write a specific headline of 6–14 words saying what happened, from the supplied text only.`;
+        const note = retryReason && writingReasons.length === 0
+          ? `Headline "${validation.value.headline}" is ${retryReason}; write a specific headline of 6–14 words saying what happened, from the supplied text only.`
+          : `Rewrite the headline or first summary sentence to name the subject and stand alone. Problems: ${[...new Set(writingReasons)].join('; ')}.`;
         try {
           const retry = await request(`${userPrompt}\n\n${note}`);
           if (!retry.validation.ok) {
             validation.problems.push('Headline retry was invalid');
-          } else if (headlineRetryReason(retry.validation.value.headline, item)) {
+          } else if (headlineRetryReason(retry.validation.value.headline, item) || writingRetryReasons(retry.validation.value).length > 0) {
             const stillReason = headlineRetryReason(retry.validation.value.headline, item);
             validation.problems.push(stillReason === 'too vague'
               ? `Headline retry was still vague: "${retry.validation.value.headline}"`
@@ -282,12 +413,27 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: community question has fewer than two real replies');
       }
+      if (isNonNewsEssay(item) && validation.value.is_news) {
+        validation.value.is_news = false;
+        validation.problems.push('not news: programming tutorial or personal essay');
+      }
+      if (isSportStory(item, validation.value)) {
+        validation.value.section = 'sport';
+        const sportReason = sportDropReason(item, validation.value);
+        if (sportReason && validation.value.is_news) {
+          validation.value.is_news = false;
+          validation.problems.push(`not news: ${sportReason}`);
+        }
+      }
       if (validation.value.is_news && isLowTextHeadlineEcho(item, validation.value)) {
         validation.value.is_news = false;
         validation.problems.push('not news: nothing beyond the headline');
       }
       if (!validation.value.is_news && overrideNotNews && !headlineOnly
-        && !validation.problems.includes('not news: nothing beyond the headline')) {
+        && !validation.problems.some(problem => problem === 'not news: nothing beyond the headline'
+          || problem.startsWith('not news: programming tutorial')
+          || problem.startsWith('not news: sport below')
+          || problem.startsWith('page-description retry'))) {
         validation.value.is_news = true;
         validation.problems.push('kept: no article text, not-news ignored');
         stats.not_news_overridden++;
@@ -325,6 +471,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       rank,
       id,
       ...validation.value,
+      ...(imageDescribed && validation.value.is_news ? { image_described: true } : {}),
       written_by: writtenBy,
       write_ok: validation.ok,
       write_problems: validation.problems,
@@ -376,4 +523,6 @@ module.exports = {
   isLowTextHeadlineEcho,
   writtenStorySimilarity,
   dropWrittenDuplicates,
+  preWriteDropReason,
+  isPhotoSubstance,
 };

@@ -592,6 +592,10 @@ var SECTION_ICON_SHAPES = {
     ['path', { d: 'M7 8h10a4 4 0 0 1 3.9 4.9l-1 4.3a2.2 2.2 0 0 1-3.8.9L14 16h-4l-2.1 2.1a2.2 2.2 0 0 1-3.8-.9l-1-4.3A4 4 0 0 1 7 8z' }],
     ['path', { d: 'M8 11v3M6.5 12.5h3M15.5 12h.01M17.5 13.5h.01' }]
   ],
+  sport: [
+    ['path', { d: 'M8 4h8v3.2c0 3.1-1.5 5.5-4 6.8-2.5-1.3-4-3.7-4-6.8z' }],
+    ['path', { d: 'M8 6H4.5v1.5c0 2.3 1.5 4 4 4.5M16 6h3.5v1.5c0 2.3-1.5 4-4 4.5M12 14v3M8.5 20h7M10 17h4' }]
+  ],
   internet: [
     ['path', { d: 'M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z' }],
     ['path', { d: 'M7 10h10M7 13h6' }]
@@ -928,6 +932,17 @@ $('#briefing-page').addEventListener('scroll', syncThumbIndexHere, { passive: tr
 // 5. Paper briefing rendering
 // ============================================================
 
+function syncEditionLayout() {
+  if (!window.EditionLayout) return;
+  var layout = window.EditionLayout.layoutForWidth(window.innerWidth);
+  var app = $('#app');
+  if (!app) return;
+  app.style.setProperty('--paper-side-margin', layout.sideMargin + 'px');
+  app.style.setProperty('--reading-columns', String(layout.columns));
+  app.style.setProperty('--reading-pair-columns', String(layout.pairedColumns));
+  app.style.setProperty('--reading-top-rest-columns', String(layout.topRemainderColumns));
+}
+
 async function loadBriefing(id) {
   var url = id ? '/api/briefing/' + id : '/api/briefing';
   var loading = $('#loading');
@@ -975,18 +990,22 @@ async function loadBriefing(id) {
       archiveItem.classList.toggle('active', archiveItem.dataset.id === String(json.id));
     });
 
+    syncEditionLayout();
     var thumbSections = [];
-    var prepared = window.ReadingLogic.prepareSections(briefing.sections || []);
-    prepared.forEach(function(group) {
-      if (group.shown.length === 0 && group.hidden.length === 0) return;
-      var sectionNode = renderReadingSection(group);
-      container.appendChild(sectionNode);
-      var section = group.section;
-      var topSection = isTopReadingSection(section);
-      thumbSections.push({
-        el: sectionNode,
-        id: section.id || sectionFallbackId(section),
-        title: topSection ? 'You should know' : (section.title || 'News')
+    var prepared = window.ReadingLogic.prepareSections(briefing.sections || []).filter(function(group) {
+      return group.shown.length > 0 || group.hidden.length > 0;
+    });
+    window.EditionLayout.planSectionBands(prepared).forEach(function(band) {
+      var renderedBand = renderReadingBand(band);
+      container.appendChild(renderedBand.node);
+      renderedBand.sections.forEach(function(renderedSection) {
+        var section = renderedSection.group.section;
+        var topSection = isTopReadingSection(section);
+        thumbSections.push({
+          el: renderedSection.node,
+          id: section.id || sectionFallbackId(section),
+          title: topSection ? 'You should know' : (section.title || 'News')
+        });
       });
     });
     renderThumbIndex(thumbSections);
@@ -1000,6 +1019,18 @@ async function loadBriefing(id) {
     syncReaderFromLocation();
     console.error('Failed to load briefing:', err);
   }
+}
+
+function renderReadingBand(band) {
+  var bandEl = el('div', {
+    className: 'reading-band' + (band.shared ? ' reading-band--shared' : '')
+  });
+  var rendered = band.sections.map(function(group) {
+    var sectionNode = renderReadingSection(group);
+    bandEl.appendChild(sectionNode);
+    return { group: group, node: sectionNode };
+  });
+  return { node: bandEl, sections: rendered };
 }
 
 function renderReadingSection(group) {
@@ -1017,22 +1048,119 @@ function renderReadingSection(group) {
   sectionEl.appendChild(heading);
 
   var shownList = el('div', { className: 'reading-story-list' });
-  group.shown.forEach(function(item, index) {
-    storyKey(item);
-    shownList.appendChild(renderReadingStory(item, isTop && index === 0));
-  });
+  var pictureIndex = window.EditionLayout.frontPagePictureIndex(group.shown, isTop);
+  if (isTop && group.shown.length) {
+    storyKey(group.shown[0]);
+    shownList.appendChild(renderReadingStory(group.shown[0], true, pictureIndex === 0));
+    var remainder = el('div', { className: 'reading-top-rest' });
+    group.shown.slice(1).forEach(function(item) {
+      storyKey(item);
+      remainder.appendChild(renderReadingStory(item, false, false));
+    });
+    shownList.appendChild(remainder);
+  } else {
+    group.shown.forEach(function(item, index) {
+      storyKey(item);
+      shownList.appendChild(renderReadingStory(item, false, pictureIndex === index));
+    });
+  }
   sectionEl.appendChild(shownList);
   return sectionEl;
 }
 
-function renderReadingStory(item, lead) {
+function renderFrontPagePicture(item, lead) {
+  var url = safeUrl(window.EditionLayout.storyImageUrl(item));
+  if (!url) return null;
+  var frame = el('span', {
+    className: 'reading-story-picture' + (lead ? ' reading-story-picture--lead' : ' reading-story-picture--section')
+  });
+  var image = el('img', {
+    src: url,
+    alt: item.image_alt || '',
+    loading: 'lazy',
+    decoding: 'async'
+  });
+  image.addEventListener('error', function() { frame.remove(); });
+  frame.appendChild(image);
+  return frame;
+}
+
+function renderToldPanel(told, compact) {
+  var panel = window.EditionLayout.prepareToldPanel(told);
+  var section = el('section', {
+    className: 'how-told' + (compact ? ' how-told--front' : ''),
+    'aria-label': 'How it was told'
+  });
+  section.appendChild(el('div', { className: 'how-told-heading' }, [
+    el('h3', { textContent: 'How it was told' }),
+    el('span', {
+      className: 'how-told-count',
+      textContent: panel.outletCount + (panel.outletCount === 1 ? ' outlet' : ' outlets')
+    })
+  ]));
+
+  if (panel.sameWay) {
+    section.appendChild(el('p', { className: 'how-told-same', textContent: 'Told much the same way.' }));
+  }
+
+  panel.subjects.forEach(function(subject) {
+    var subjectEl = el('div', { className: 'how-told-subject' });
+    subjectEl.appendChild(el('h4', { textContent: subject.name }));
+    subject.groups.forEach(function(group) {
+      var groupEl = el('div', { className: 'how-told-group how-told-group--' + group.key });
+      groupEl.appendChild(el('h5', { textContent: group.label }));
+      var list = el('ul');
+      group.stances.forEach(function(stance) {
+        var text = stance.outlet + (stance.quote ? ': \u201c' + stance.quote + '\u201d' : '');
+        list.appendChild(el('li', { textContent: text }));
+      });
+      groupEl.appendChild(list);
+      subjectEl.appendChild(groupEl);
+    });
+    section.appendChild(subjectEl);
+  });
+
+  var headlines = el('div', { className: 'how-told-headlines' });
+  headlines.appendChild(el('h4', { textContent: 'Headlines' }));
+  var headlineList = el('ul');
+  panel.headlines.forEach(function(outlet) {
+    var row = el('li');
+    var url = safeUrl(outlet.url);
+    row.appendChild(url ? el('a', {
+      href: url,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      textContent: outlet.name
+    }) : el('span', { textContent: outlet.name }));
+    if (outlet.headline) row.appendChild(document.createTextNode(': \u201c' + outlet.headline + '\u201d'));
+    headlineList.appendChild(row);
+  });
+  headlines.appendChild(headlineList);
+  section.appendChild(headlines);
+  return section;
+}
+
+function renderReadingStory(item, lead, showPicture) {
   var key = storyKey(item);
+  var picture = showPicture ? renderFrontPagePicture(item, lead) : null;
+  var toldPanel = item.told ? window.EditionLayout.prepareToldPanel(item.told) : null;
+  var leadShowsTold = Boolean(lead && !picture && toldPanel);
   var story = el('article', {
-    className: 'reading-story' + (lead ? ' reading-story--lead' : ''),
+    className: 'reading-story' + (lead ? ' reading-story--lead' : '') +
+      (picture ? ' reading-story--pictured' : '') +
+      (leadShowsTold ? ' reading-story--lead-told' : '') +
+      (lead && !picture && !leadShowsTold ? ' reading-story--lead-type' : ''),
     'data-story-id': key
   });
   var summaryChildren = [];
+  if (picture) summaryChildren.push(picture);
   if (item.kicker) summaryChildren.push(el('span', { className: 'reading-story-kicker', textContent: item.kicker }));
+  if (toldPanel && toldPanel.differs) {
+    summaryChildren.push(el('span', {
+      className: 'reading-story-told-mark',
+      textContent: 'Told differently \u00b7 ' + toldPanel.outletCount + ' outlets'
+    }));
+  }
   summaryChildren.push(el('span', { className: 'reading-story-title', textContent: item.title || 'Untitled story' }));
   if (item.summary) summaryChildren.push(el('span', { className: 'reading-story-summary', textContent: item.summary }));
   var opener = el('button', {
@@ -1043,6 +1171,7 @@ function renderReadingStory(item, lead) {
   }, summaryChildren);
   if (!readingStoryOpeners.has(key)) readingStoryOpeners.set(key, opener);
   story.appendChild(opener);
+  if (leadShowsTold) story.appendChild(renderToldPanel(item.told, true));
   return story;
 }
 
@@ -1096,12 +1225,37 @@ function renderReader(item) {
   if (time) metadata.push(time);
   if (metadata.length) header.appendChild(el('p', { className: 'reader-byline', textContent: metadata.join(' · ') }));
 
-  var heroUrl = safeUrl(item.image);
-  if (heroUrl) {
-    var hero = el('img', { className: 'reader-hero', src: heroUrl, alt: item.image_alt || '', loading: 'eager' });
-    hero.addEventListener('error', function() { hero.remove(); });
-    body.appendChild(hero);
+  var readerImages = window.EditionLayout.readerImageUrls(item).map(safeUrl).filter(Boolean);
+  if (readerImages.length) {
+    var gallery = el('div', {
+      className: 'reader-gallery' + (readerImages.length > 1 ? ' reader-gallery--multiple' : '')
+    });
+    readerImages.forEach(function(url, index) {
+      var link = el('a', {
+        className: 'reader-image-link',
+        href: url,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        'aria-label': 'Open photo ' + (index + 1) + ' full size'
+      });
+      var image = el('img', {
+        className: 'reader-hero',
+        src: url,
+        alt: item.image_alt || '',
+        loading: index === 0 ? 'eager' : 'lazy',
+        decoding: 'async'
+      });
+      image.addEventListener('error', function() { link.remove(); });
+      link.appendChild(image);
+      gallery.appendChild(link);
+    });
+    body.appendChild(gallery);
   }
+
+  if (item.told && item.summary) {
+    body.appendChild(el('p', { className: 'reader-summary', textContent: item.summary }));
+  }
+  if (item.told) body.appendChild(renderToldPanel(item.told, false));
 
   var hasArticle = false;
   if (typeof item.article_html === 'string' && item.article_html.trim()) {
@@ -1113,7 +1267,7 @@ function renderReader(item) {
     if (hasArticle) body.appendChild(template.content.cloneNode(true));
   }
   var readerContent = window.ReadingLogic.prepareReaderContent(item, hasArticle);
-  if (readerContent.fallback) {
+  if (readerContent.fallback && !item.told) {
     body.appendChild(el('p', { className: 'reader-fallback', textContent: readerContent.fallback }));
   }
   if (readerContent.post) {
@@ -1404,6 +1558,7 @@ function suppressMovedPointerClick(event) {
 });
 
 function rerenderCurlAfterResize() {
+  syncEditionLayout();
   if (curlState.gesture && curlState.gesture.story && !curlState.gesture.story.isConnected) {
     finishCurlGesture(true);
     return;

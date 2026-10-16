@@ -35,9 +35,9 @@ it('repairs editor ids and reports measured edit stats', async () => {
   });
 
   assert.deepStrictEqual(output, {
-    top: ['s2', 's1', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    top: ['s1', 's2', 's3', 's4', 's5'],
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     problems: [
       'Unknown top story id: missing',
       'Duplicate top story id: s2',
@@ -67,8 +67,8 @@ it('uses the deterministic edit entirely when the editor throws', async () => {
   });
   assert.deepStrictEqual(output, {
     top: ['s1', 's2', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     problems: [],
     stats: { input_tokens: 0, output_tokens: 0, duration_ms: 0, edit_fallback: 'full', top_replacements: 0 },
   });
@@ -93,8 +93,8 @@ it('records deterministic top-story replacements in edit stats', async () => {
   }, settings, { info() {}, warn() {} });
   assert.deepStrictEqual(output, {
     top: ['s2', 's3', 's5', 's6', 's7'],
-    sections: { tasmania: [], australia: [], world: [], tech: ['s1'], homelab: [], gaming: ['s4'], internet: [] },
-    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: [], tech: ['s1'], homelab: [], gaming: ['s4'], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     problems: [
       'Top story s1 was replaced by s6 (community-only source)',
       'Top story s4 was replaced by s7 (more than two tech/community sections)',

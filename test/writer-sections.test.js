@@ -12,6 +12,7 @@ it('defines the ordered briefing sections and top section exactly', () => {
     { id: 'tech', title: 'Tech & Security' },
     { id: 'homelab', title: 'Homelab & Self-hosting' },
     { id: 'gaming', title: 'Gaming' },
+    { id: 'sport', title: 'Sport' },
     { id: 'internet', title: 'Around the internet' },
   ]);
   assert.deepStrictEqual(TOP_SECTION, { id: 'top', title: 'You should know' });
@@ -22,8 +23,8 @@ it('defines the ordered briefing sections and top section exactly', () => {
 
 it('recognises only regular section ids', () => {
   assert.deepStrictEqual(
-    ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet', 'top', '', null]
+    ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet', 'top', '', null]
       .map(isSectionId),
-    [true, true, true, true, true, true, true, false, false, false]
+    [true, true, true, true, true, true, true, true, false, false, false]
   );
 });

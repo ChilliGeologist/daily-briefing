@@ -26,13 +26,31 @@ function toItem(rankedCluster) {
     descriptions.push(item.description);
   }
 
+  const image = leadFirst.map(item => item.image).find(value => typeof value === 'string' && value) ?? null;
+  const hasPhotoImages = leadFirst.some(item => Array.isArray(item.images) && item.images.length > 0);
+  const images = [];
+  if (hasPhotoImages) {
+    for (const value of [image, ...leadFirst.flatMap(item => item.images || [])]) {
+      if (typeof value === 'string' && value && !images.includes(value)) images.push(value);
+      if (images.length === 4) break;
+    }
+  }
+
   return {
     ...lead,
     title: lead.title,
     description: lead.description,
     sources: items.map(item => ({ name: item.source_name, url: item.url })),
+    outlet_versions: items.map(item => ({
+      name: item.source_name,
+      headline: item.title,
+      description: item.description || '',
+      url: item.url,
+      text: item.article_content || item.description || '',
+    })),
     merged_descriptions: descriptions,
-    image: leadFirst.map(item => item.image).find(image => image != null) ?? null,
+    image,
+    ...(images.length > 0 ? { images } : {}),
     published: newestPublished(items, lead.published),
     relevance_score: rankedCluster.rank_score,
     article_content: rankedCluster.article_text,
@@ -40,6 +58,7 @@ function toItem(rankedCluster) {
     article_url: rankedCluster.article_url,
     canonical_url: lead.canonical_url,
     top_comments: rankedCluster.top_comments,
+    ...(rankedCluster.real_reply_count != null ? { real_reply_count: rankedCluster.real_reply_count } : {}),
     interest_matches: rankedCluster.interest_matches || [],
     coverage: rankedCluster.coverage,
     rank: rankedCluster.rank,

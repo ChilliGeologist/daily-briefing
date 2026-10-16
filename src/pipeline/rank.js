@@ -57,14 +57,19 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests 
   const coverageScore = 25 * Math.log2(Math.max(1, cluster.coverage));
   const recency = recencyScore(newestItem(cluster), now);
   const position = positionScore(cluster.items);
+  const noSoloTop = cluster.coverage <= 1 && cluster.items.some(item => item.no_solo_top);
   const keywords = keywordBonus(cluster.lead, {
-    boost_keywords: boostKeywords || [],
+    boost_keywords: noSoloTop ? [] : (boostKeywords || []),
     penalty_keywords: penaltyKeywords || [],
   });
   const interestText = cluster.items
     .map(item => `${item.title || ''} ${item.description || ''}`)
     .join('\n');
   const interest_matches = matchInterests(interestText, interests || []);
+  if (cluster.items.some(item => item.source_kind === 'warning')
+    && !interest_matches.some(match => match.label === 'Emergencies')) {
+    interest_matches.push({ label: 'Emergencies', kind: 'topic', weight: 3, urgent: true, term: 'warning' });
+  }
   const interestPoints = interestScore(interest_matches) * INTEREST_POINTS;
   const priority = Math.max(...cluster.items.map(item => item.source_priority ?? 1));
   const rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);

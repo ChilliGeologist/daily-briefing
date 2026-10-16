@@ -35,6 +35,14 @@ function createWriter(settings, log, deps = {}) {
     write(system, user, schema) {
       return writer.write(system, user, schema).then(record);
     },
+    vision(system, user, schema, imageUrl) {
+      if (typeof writer.vision !== 'function') return Promise.reject(new Error('Writer has no vision support'));
+      return writer.vision(system, user, schema, imageUrl).then(record);
+    },
+    tell(system, user, schema) {
+      const method = typeof writer.tell === 'function' ? writer.tell.bind(writer) : writer.write.bind(writer);
+      return method(system, user, schema).then(record);
+    },
     edit(system, user, schema) {
       return writer.edit(system, user, schema).then(record);
     },

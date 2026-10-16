@@ -30,6 +30,7 @@ const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies
 // not a genuine news story and appears to be a paywall or subscription
 // prompt" (404 Media, 2026-10-15).
 const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content|article|story)\s+(?:is|was)\s+(?:not\b|(?:a\s+)?paywalled\s+(?:article|page|story)\b)|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
+const PAGE_DESCRIPTION = /\b(?:no substantial news content|promotional material|subscrib(?:e|er|ing|tion)|membership|this article|this page|the page)\b/i;
 const META_REFERENCE = /\b(?:this\s+(?:story|article|post|text|page)|the\s+(?:provided|supplied)\s+(?:text|content))\b/i;
 const META_KICKER = /^(?:headline mystery|no story|no details|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
@@ -65,7 +66,7 @@ function firstSentence(teaser) {
 function missingTextFields(value) {
   return ['summary', 'kicker'].filter(field => {
     const text = String(value?.[field] || '').trim();
-    return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text)
+    return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text) || PAGE_DESCRIPTION.test(text)
       || text.split(/(?<=[.!?])\s+|\n+/u).some(sentence =>
         /\b(?:no|not)\b/i.test(sentence) && META_REFERENCE.test(sentence)
       )
@@ -81,7 +82,7 @@ function isCommunityHelpRequest(item) {
   if (!isCommunityItem(item) || hasHighCommunityEngagement(item)) return false;
   const title = String(item.title || '').trim();
   const description = String(item.description || '').trim();
-  if (/^help me\b/i.test(title) || /\bhow do i\b/i.test(title)) return true;
+  if (/^help me\b/i.test(title) || /\bhow do i\b/i.test(title) || /\bhow to handle\b/i.test(title)) return true;
   if (/\b(?:what should i|should i)\b/i.test(title)) return true;
   if (/\bquestions?\s*\??$/i.test(title)) return true;
   if (/\bfor (?:a )?beginner\b/i.test(title)) return true;
@@ -92,6 +93,10 @@ function isCommunityHelpRequest(item) {
   if (/^looking for\b/i.test(title) || /\bideas?\s*\??$/i.test(title)) return true;
   if (/^is\b.+\bgood enough for\b/i.test(title) || /^moving to\b.+\bor\b/i.test(title)) return true;
   if (/\bquestions?\s+about\b/i.test(title)) return true;
+  if (/\bwhich\b.+\bshould\b/i.test(title)) return true;
+  if (/\b(?:advice|suggestions?|feature request)\b/i.test(title)) return true;
+  if (/\b(?:instead of adding|please add)\b/i.test(title)) return true;
+  if (/\b(?:suggestion|feature request)\b/i.test(String(item.link_flair_text || item.flair || ''))) return true;
   if (words(title).length <= 12
     && (/\b(?:any|some)\s+(?:advice|recommendations?|suggestions?|guidance|tips?)\b/i.test(description)
       || /\b(?:want(?:ed)?|would like|(?:am|'m)\s+(?:looking|hoping))\s+to\s+know\b/i.test(description))) {
@@ -102,6 +107,70 @@ function isCommunityHelpRequest(item) {
   // dress it up as a headline.
   return words(title).length <= 6
     && /\b(?:just bought|good purchase|any advice|any suggestions?|please suggest|please help|need(?:s)? help|(?:can|could|would)\s+(?:someone|anyone|somebody)\s+(?:please\s+)?(?:help|explain|tell|suggest)|any ideas|what am i doing wrong)\b/i.test(description);
+}
+
+function isHackerNewsItem(item) {
+  return /^(?:hacker news|hn)\b/i.test(String(item.source_name || ''))
+    || ['hackernews', 'hacker_news', 'hn'].includes(String(item.source_type || '').toLowerCase());
+}
+
+function isProjectPost(item) {
+  const text = `${item.title || ''}\n${item.description || ''}`;
+  if (isHackerNewsItem(item) && /^\s*Show HN\b/i.test(String(item.title || ''))) return true;
+  if (!isCommunityItem(item) && !isHackerNewsItem(item)) return false;
+  return /\b(?:I made|I built|my app|I created|I wrote|introducing|just released|I released|we released|we build|we built|we made)\b/i.test(text)
+    || /\b(?:I['’]m|I am|we['’]re|we are)\s+(?:an?\s+|the\s+)?(?:developer|creator|author)\s+of\b/i.test(text)
+    || /\bv?\d+\.\d+(?:\.\d+)?\b.{0,40}\b(?:release[ds]?|launch(?:ed)?)\b/i.test(text)
+    || /\b(?:release[ds]?|launch(?:ed)?)\b.{0,40}\bv?\d+\.\d+(?:\.\d+)?\b/i.test(text);
+}
+
+function projectDropReason(item) {
+  if (!isProjectPost(item)) return null;
+  if ((item.interest_matches || []).some(match => match.kind === 'product')) return null;
+  if (isHackerNewsItem(item) && (Number(item.score) || 0) >= 150) return null;
+  if (String(item.source_type || '').toLowerCase() === 'reddit'
+    && Number(item.list_position) >= 1 && Number(item.list_position) <= 5
+    && (Number(item.real_reply_count) || communityReplies(item).length) >= 10) return null;
+  return 'project post without enough attention';
+}
+
+function isNonNewsEssay(item) {
+  const title = String(item.title || '').trim();
+  return /^(?:The Double Headed Stack Allocator|Things to know when you get cancer)$/i.test(title)
+    || /\b(?:tutorial|how to (?:code|program|implement|build a (?:compiler|allocator|data structure)))\b/i.test(title)
+    || /^(?:Things|Lessons|Thoughts|Notes)\s+(?:I|we|to know)\b/i.test(title);
+}
+
+function isSportStory(item, value = item) {
+  return value.section === 'sport' || item.default_category === 'sport';
+}
+
+function sportDropReason(item, value = item) {
+  const text = `${item.title || ''} ${item.description || ''} ${value.headline || ''} ${value.summary || ''}`;
+  const bigEvent = /\b(?:grand final|Olympic(?:s)?|Paralympic(?:s)?|Melbourne Cup|NBA Finals|Super Bowl|Ashes|Bledisloe\s+(?:Cup\s+)?decider|Australian Open|State of Origin\s+decider)\b/i.test(text)
+    || (/\bBledisloe Cup\b/i.test(text) && /\bfinal All Blacks Test\b/i.test(text))
+    || /\bWorld Cup\b.{0,60}\b(?:final|semi-?final|quarter-?final|knockout|champion|decider)\b|\b(?:final|semi-?final|quarter-?final|knockout|champion|decider)\b.{0,60}\bWorld Cup\b/i.test(text);
+  if (bigEvent || (Number(item.coverage) || 0) >= 4) return null;
+  const tasmanianTeam = /\b(?:JackJumpers|Tasmania Devils)\b/i.test(text)
+    || (item.interest_matches || []).some(match => ['JackJumpers', 'Tasmania Devils'].includes(match.label));
+  if (tasmanianTeam && (Number(item.coverage) || 0) >= 2) return null;
+  return 'sport below significance threshold';
+}
+
+function writingRetryReasons(value) {
+  const reasons = [];
+  const headline = String(value && value.headline || '').trim();
+  if (/^\p{Ll}/u.test(headline)) reasons.push('headline starts with a lower-case letter');
+  const quoteLike = /^["“‘].+["”’]$/u.test(headline)
+    || /^(?:I|We|They|He|She)(?:['’](?:d|ll|m|re|ve|s|t))\b/i.test(headline);
+  const namedAfterFirst = (headline.match(/\b[A-Z][\p{L}'’.-]+\b/gu) || []).slice(1).length > 0;
+  if (quoteLike && !namedAfterFirst) reasons.push('headline is only a quote with no named subject');
+  const first = String(value && value.summary || '').trim().split(/(?<=[.!?])\s+/u)[0] || '';
+  if (/^(?:It|This|These|Those|They|He|She)\b/i.test(first)
+    || /^The\s+\p{Ll}/u.test(first)) {
+    reasons.push('summary opens without naming anyone');
+  }
+  return reasons;
 }
 
 function isUnansweredCommunityQuestion(item) {
@@ -135,6 +204,21 @@ function sectionEvidence(item, value) {
 }
 
 function enforceSectionRequirements(value, item, interests, problems) {
+  const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
+    .filter(Boolean).join('\n');
+  let fixedSourceSection = null;
+  if (/^(?:Bleeping Computer|The Register|Krebs(?: on Security)?|Australian Cyber Security Centre|ACSC)$/im.test(sourceNames)) {
+    fixedSourceSection = 'tech';
+  } else if (TOP_NEWS_SECTIONS.has(value.section) && /^(?:Hacker News|HN|r\/linux)\b/im.test(sourceNames)) {
+    fixedSourceSection = 'tech';
+  } else if (TOP_NEWS_SECTIONS.has(value.section) && /^(?:Waxy|Kottke|404 Media)\b/im.test(sourceNames)) {
+    fixedSourceSection = 'internet';
+  }
+  if (fixedSourceSection && value.section !== fixedSourceSection) {
+    problems.push(`section moved: ${value.section} -> ${fixedSourceSection} (${item.source_name || 'source'} source)`);
+    value.section = fixedSourceSection;
+    return true;
+  }
   const sourceSection = SECTION_BY_SOURCE_CATEGORY[item.default_category]
     || ((Number(item.coverage) || 1) <= 1 ? SECTION_BY_SINGLE_SOURCE_CATEGORY[item.default_category] : undefined);
   if (sourceSection && (TOP_NEWS_SECTIONS.has(value.section)
@@ -448,6 +532,7 @@ function isSingleOutletWithoutInterest(story) {
 function eligibleTopCandidate(story, techCount) {
   return !hasOnlyCommunitySources(story)
     && !isSingleOutletWithoutInterest(story)
+    && !(story.no_solo_top && sourceOutletCount(story) <= 1)
     && (!TOP_TECH_SECTIONS.has(story.section) || techCount < 2);
 }
 
@@ -460,6 +545,7 @@ function repairTopSelection(initialTop, stories, target) {
     const story = byId.get(id);
     let reason = null;
     if (hasOnlyCommunitySources(story)) reason = 'community-only source';
+    else if (story.no_solo_top && sourceOutletCount(story) <= 1) reason = 'source is not eligible for solo top';
     else if (isSingleOutletWithoutInterest(story)) {
       reason = 'single-outlet story without an interest match';
     } else if (TOP_TECH_SECTIONS.has(story.section) && techCount >= 2) {
@@ -487,6 +573,27 @@ function repairTopSelection(initialTop, stories, target) {
     if (replacement) replacement.added = story.id;
   }
   return { top, replacements: removed };
+}
+
+function reportsDeath(story) {
+  return /\b(?:dies?|died|dead|death|killed|fatal|body found)\b/i.test(`${story.headline || story.title || ''} ${story.summary || ''}`);
+}
+
+function canLead(story) {
+  const placeMatched = (story.interest_matches || []).some(match => match.kind === 'place');
+  const urgent = (story.interest_matches || []).some(match => match.urgent);
+  return !placeMatched || urgent || reportsDeath(story);
+}
+
+function enforceLead(top, stories) {
+  if (top.length === 0) return top;
+  const byId = new Map(stories.map(story => [story.id, story]));
+  const candidates = deterministicOrder(stories).filter(story => canLead(story) && eligibleTopCandidate(story, 0));
+  const lead = candidates[0];
+  if (!lead) return top;
+  const reordered = top.filter(id => id !== lead.id);
+  if (!top.includes(lead.id)) reordered.pop();
+  return [lead.id, ...reordered];
 }
 
 function placeRemaining(stories, top, sectionSize, preferred = emptySections()) {
@@ -539,7 +646,7 @@ function deterministicEdit(stories, { sectionSize, topSize }) {
   const rest = ordered.filter(story => !qualified.includes(story));
   const initialTop = [...qualified, ...rest].slice(0, Math.min(topSize.min, stories.length)).map(story => story.id);
   const repaired = repairTopSelection(initialTop, stories, Math.min(topSize.min, stories.length));
-  const top = repaired.top;
+  const top = enforceLead(repaired.top, stories);
   const placed = placeRemaining(stories, top, sectionSize);
   return {
     top,
@@ -585,7 +692,7 @@ function validateEdit(raw, stories, { sectionSize, topSize }) {
   const targetTop = Math.min(topSize.max, Math.max(minimumTop, top.length));
   const repairedTop = repairTopSelection(top, stories, targetTop);
   top.length = 0;
-  top.push(...repairedTop.top);
+  top.push(...enforceLead(repairedTop.top, stories));
   for (const replacement of repairedTop.replacements) {
     problems.push(replacement.added
       ? `Top story ${replacement.removed} was replaced by ${replacement.added} (${replacement.reason})`
@@ -643,6 +750,12 @@ module.exports = {
   missingTextFields,
   isCommunityHelpRequest,
   isUnansweredCommunityQuestion,
+  isProjectPost,
+  projectDropReason,
+  isNonNewsEssay,
+  isSportStory,
+  sportDropReason,
+  writingRetryReasons,
   validateWrite,
   validateEdit,
   deterministicEdit,

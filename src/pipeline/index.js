@@ -16,6 +16,7 @@ const { assemble } = require('./assembler');
 const { createWriter } = require('./writer');
 const { writeStories } = require('./writer/write');
 const { editStories } = require('./writer/edit');
+const { addToldToStories } = require('./writer/told');
 
 let currentRun = null;
 let cancelRequested = false;
@@ -179,6 +180,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     const { stories, dropped, stats: writeStats } = await writeStories(
       extracted, writer, settings, runLog, emitProgress, checkCancelled
     );
+    await addToldToStories(stories, writer, runLog);
     db.updateRun(runId, { items_curated: stories.length });
     emit({ type: 'stage', stage: 'write', status: 'complete', stats: writeStats });
     checkCancelled();

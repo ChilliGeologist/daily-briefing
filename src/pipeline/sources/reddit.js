@@ -35,6 +35,53 @@ function decodeAttribute(value) {
     .replace(/&#039;|&apos;|&#x27;/g, "'");
 }
 
+function isRedditImageUrl(value) {
+  try {
+    return /^(?:i|preview)\.(?:redd\.it|imgur\.com)$/i.test(new URL(value).hostname)
+      || /^(?:i\.imgur\.com)$/i.test(new URL(value).hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function imageKey(value) {
+  try {
+    const url = new URL(value);
+    return url.pathname.toLowerCase();
+  } catch (_) {
+    return value;
+  }
+}
+
+function imageQuality(value) {
+  try {
+    const url = new URL(value);
+    if (/^i\.(?:redd\.it|imgur\.com)$/i.test(url.hostname)) return Number.MAX_SAFE_INTEGER;
+    return Number(url.searchParams.get('width')) || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+// Reddit's thumbnail is deliberately small. The Atom entry contains the
+// original in the [link] anchor for ordinary image posts, while gallery
+// entries expose their members as images in the post content.
+function extractImages(item) {
+  const content = item && item.content || '';
+  const links = [...content.matchAll(/<a\s+[^>]*href="([^"]+)"[^>]*>\s*\[link\]\s*<\/a>/gi)]
+    .map(match => decodeAttribute(match[1]));
+  const embedded = [...content.matchAll(/<(?:img|a)\s+[^>]*(?:src|href)="([^"]+)"/gi)]
+    .map(match => decodeAttribute(match[1]));
+  const candidates = [...links, ...embedded].filter(isRedditImageUrl);
+  const byImage = new Map();
+  for (const candidate of candidates) {
+    const key = imageKey(candidate);
+    const existing = byImage.get(key);
+    if (!existing || imageQuality(candidate) > imageQuality(existing)) byImage.set(key, candidate);
+  }
+  return [...byImage.values()].slice(0, 4);
+}
+
 function extractExternalUrl(item) {
   const content = item.content || '';
   const matches = [...content.matchAll(/<a\s+[^>]*href="([^"]+)"[^>]*>\s*\[link\]\s*<\/a>/gi)];
@@ -53,12 +100,15 @@ function extractDescription(item) {
   const text = item.contentSnippet || '';
   return text
     .replace(/\s*submitted by\s+[\s\S]*?\[link\]\s+\[comments\]\s*$/i, '')
+    .replace(/^\s*\[link\]\s+\[comments\]\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, 500);
 }
 
 function extractImage(item) {
+  const full = extractImages(item)[0];
+  if (full) return full;
   const thumbnail = item && item['media:thumbnail'];
   return thumbnail && thumbnail.$ && thumbnail.$.url ? thumbnail.$.url : null;
 }
@@ -80,18 +130,23 @@ async function parseRedditFeed(xml, source, now = Date.now()) {
     const published = publishedDate(item);
     if (published && Date.parse(published) < cutoff) continue;
 
+    const images = extractImages(item);
+    const image = images[0] || extractImage(item);
     items.push({
       title: item.title || '',
       url: item.link || '',
       external_url: extractExternalUrl(item),
       description: extractDescription(item),
-      image: extractImage(item),
+      image,
+      ...(images.length > 0 ? { images } : {}),
       published,
       score: null,
       comment_count: null,
       source_name: `r/${sub}`,
       source_type: 'reddit',
       default_category: source.default_category,
+      ...(source.config && source.config.kind ? { source_kind: source.config.kind } : {}),
+      ...(source.config && source.config.no_solo_top ? { no_solo_top: true } : {}),
     });
   }
 
@@ -130,6 +185,7 @@ async function fetchReddit(source, log) {
 module.exports = {
   fetchReddit,
   extractImage,
+  extractImages,
   extractExternalUrl,
   extractDescription,
   parseRedditFeed,

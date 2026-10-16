@@ -49,9 +49,10 @@ Choose exactly one section:
 - tech — General technology, privacy and security news.
 - homelab — Homelab, self-hosting, servers, networking and related products.
 - gaming — Video games and gaming communities.
+- sport — only major sport: final stages of major events or stories carried by many outlets.
 - internet — internet culture: viral trends, memes, platform drama, online communities and oddities.
 
-The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. Overseas sport, entertainment and celebrity stories are world unless an Australian team, player or event is central.
+The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. All sport goes in sport, never Tasmania or Australia.
 
 Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
@@ -61,7 +62,7 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`;
+The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Programming tutorials and personal essays are not news. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question, a suggestion, a feature request or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`;
 
 const EDIT_SYSTEM_PROMPT = `You edit a complete morning briefing. Pick 5–7 stories for "You should know". Wide coverage marks a big story, but celebrity, entertainment and gossip stories never go in "You should know" however wide their coverage. Public safety and deaths in Tasmania, and major world events, outrank technology news unless the technology story is a security hole in something the reader runs. Prefer consequence: public safety, money, law and policy, major sport results, and the reader's interests, such as an emergency near home, a security hole in something he runs, or a price change he pays. Include at most two stories from tech, homelab, gaming and internet combined, and never include a story whose only sources are Reddit or Hacker News. A story in "You should know" must not be repeated in its section. Order each section best first and include at most N stories, where N is supplied with the stories. Answer only with story ids such as s12, never headlines.`;
 
@@ -120,6 +121,10 @@ function writeUserPrompt(item, { articleChars }) {
   return lines.join('\n');
 }
 
+function photoUserPrompt(item, options) {
+  return `${writeUserPrompt(item, options)}\n\nPHOTO POST: Inspect the attached image. Summarise what the photo actually shows, then add useful context from the real community replies. Do not infer details that are not visible or stated.`;
+}
+
 function editSystemPrompt() {
   return EDIT_SYSTEM_PROMPT;
 }
@@ -149,6 +154,7 @@ module.exports = {
   communityReplies,
   writeSystemPrompt,
   writeUserPrompt,
+  photoUserPrompt,
   editSystemPrompt,
   editUserPrompt,
 };

@@ -7,6 +7,7 @@ const SECTIONS = Object.freeze([
   Object.freeze({ id: 'tech', title: 'Tech & Security' }),
   Object.freeze({ id: 'homelab', title: 'Homelab & Self-hosting' }),
   Object.freeze({ id: 'gaming', title: 'Gaming' }),
+  Object.freeze({ id: 'sport', title: 'Sport' }),
   Object.freeze({ id: 'internet', title: 'Around the internet' }),
 ]);
 
@@ -36,7 +37,7 @@ const SECTION_REQUIRES_PLACE = Object.freeze({
 
 // A source whose whole feed is one topic (a game's subreddit, a gaming news
 // site, r/homelab) never lands in a news section, whatever the writer chose.
-const SECTION_BY_SOURCE_CATEGORY = Object.freeze({ gaming: 'gaming', homelab: 'homelab' });
+const SECTION_BY_SOURCE_CATEGORY = Object.freeze({ gaming: 'gaming', homelab: 'homelab', sport: 'sport' });
 // An internet-culture feed's story stays in Around the internet unless other
 // outlets carried it too (then it is news, e.g. a Lifeblood appeal that
 // r/popular also posted).

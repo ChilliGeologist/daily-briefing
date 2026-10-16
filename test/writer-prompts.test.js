@@ -23,7 +23,7 @@ it('defines the exact closed write schema', () => {
       headline: { type: 'string' },
       summary: { type: 'string' },
       kicker: { type: 'string' },
-      section: { type: 'string', enum: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'] },
+      section: { type: 'string', enum: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'] },
     },
   });
 });
@@ -50,9 +50,10 @@ Choose exactly one section:
 - tech — General technology, privacy and security news.
 - homelab — Homelab, self-hosting, servers, networking and related products.
 - gaming — Video games and gaming communities.
+- sport — only major sport: final stages of major events or stories carried by many outlets.
 - internet — internet culture: viral trends, memes, platform drama, online communities and oddities.
 
-The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. Overseas sport, entertainment and celebrity stories are world unless an Australian team, player or event is central.
+The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. All sport goes in sport, never Tasmania or Australia.
 
 Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
@@ -62,7 +63,7 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
+The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Programming tutorials and personal essays are not news. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question, a suggestion, a feature request or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
 });
 
 it('builds a complete per-story prompt with capped article and five real community comments', () => {
@@ -130,7 +131,7 @@ it('defines an edit schema constrained to the supplied story ids and fixed edito
       sections: {
         type: 'object',
         additionalProperties: false,
-        required: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'],
+        required: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'],
         properties: {
           tasmania: sectionArray,
           australia: sectionArray,
@@ -138,6 +139,7 @@ it('defines an edit schema constrained to the supplied story ids and fixed edito
           tech: sectionArray,
           homelab: sectionArray,
           gaming: sectionArray,
+          sport: sectionArray,
           internet: sectionArray,
         },
       },

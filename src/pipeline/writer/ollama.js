@@ -5,7 +5,7 @@ const TIMEOUT_MS = 300000;
 function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, log }) {
   const endpoint = `${String(url).replace(/\/$/, '')}/api/chat`;
 
-  async function call(system, user, schema, numPredict) {
+  async function call(system, user, schema, numPredict, images = []) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const started = Date.now();
@@ -17,7 +17,7 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
           model,
           messages: [
             { role: 'system', content: system },
-            { role: 'user', content: user },
+            { role: 'user', content: user, ...(images.length > 0 ? { images } : {}) },
           ],
           format: schema,
           stream: false,
@@ -58,6 +58,15 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
     concurrency: 1,
     write(system, user, schema) {
       return call(system, user, schema, 700);
+    },
+    async vision(system, user, schema, imageUrl) {
+      const image = await fetchImpl(imageUrl);
+      if (!image.ok) throw new Error(`Image HTTP ${image.status || 'error'}`);
+      const bytes = Buffer.from(await image.arrayBuffer());
+      return call(system, user, schema, 700, [bytes.toString('base64')]);
+    },
+    tell(system, user, schema) {
+      return call(system, user, schema, 1200);
     },
     edit(system, user, schema) {
       return call(system, user, schema, 1500);

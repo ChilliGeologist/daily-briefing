@@ -193,12 +193,12 @@ it('counts removed facts and unsupported numbers in writer statistics and loggin
   );
 
   assert.deepStrictEqual(output.stats, {
-    written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0,
+    written: 1, repairs: 1, headline_retries: 1, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0,
     facts_removed: 1, numbers_unsupported: 2, input_tokens: 0, output_tokens: 0, duration_ms: 0,
   });
   assert.deepStrictEqual(logs, [[
     'pipeline:writer',
-    'Wrote 1 stories: 1 repair, 0 headline retries, 0 fallbacks, 0 not news, 0 not-news overrides, 0 section moves, 1 fact removed, 2 unsupported numbers',
+    'Wrote 1 stories: 1 repair, 1 headline retry, 0 fallbacks, 0 not news, 0 not-news overrides, 0 section moves, 1 fact removed, 2 unsupported numbers',
   ]]);
 });
 
@@ -344,7 +344,7 @@ it('keeps the not-news override on a retried unread publisher story', async () =
   assert.deepStrictEqual(output.dropped, []);
 });
 
-it('retries missing-text meta writing once and falls back to the teaser sentence if it persists', async () => {
+it('retries missing-text meta writing once and drops it if it persists', async () => {
   const source = {
     title: 'Hobart CBD jobs face cuts',
     description: 'Job cuts are expected in the Hobart CBD. A decision is due next week.',
@@ -370,21 +370,18 @@ it('retries missing-text meta writing once and falls back to the teaser sentence
     [writeSystemPrompt(), `${prompt}\n\nRewrite any affected summary or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.`, WRITE_SCHEMA],
   ]);
   assert.deepStrictEqual(output, {
-    stories: [{
+    stories: [],
+    dropped: [{
       ...source,
       rank: 1,
       id: 's1',
       ...bad,
-      summary: 'Job cuts are expected in the Hobart CBD.',
+      is_news: false,
       written_by: 'test',
       write_ok: true,
-      write_problems: [
-        'Missing-text retry still referred to unavailable source text',
-        'Summary replaced with the first teaser sentence',
-      ],
+      write_problems: ['page-description retry still described unavailable source content'],
     }],
-    dropped: [],
-    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 0, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 0, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
 });
 
@@ -417,13 +414,9 @@ it('drops persistent headline-meta writing when there is no teaser to fall back 
       id: 's1',
       ...bad,
       is_news: false,
-      summary: '',
       written_by: 'test',
       write_ok: true,
-      write_problems: [
-        'Missing-text retry still referred to unavailable source text',
-        'not news: nothing beyond the headline',
-      ],
+      write_problems: ['page-description retry still described unavailable source content'],
     }],
     stats: { written: 0, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
@@ -700,7 +693,7 @@ it('retries over-18-word and quote-only Reddit headlines once', async () => {
       name: 'test', async write() {
         count++;
         calls.push(headline);
-        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'The move was announced to the online community today.', kicker: 'Code Rules', section: 'tech' } };
+        return { json: { is_news: true, headline: count === 1 ? headline : replacement, summary: 'Reddit users discussed the announced move and its consequences today.', kicker: 'Code Rules', section: 'tech' } };
       },
     }, retrySettings);
     assert.deepStrictEqual({ count, headline: output.stories[0].headline, retries: output.stats.headline_retries }, {
@@ -754,10 +747,13 @@ it('drops a low-text headline echo but keeps a summary that adds a substantive f
       ...items[1], rank: 2, id: 's2', ...values[1], written_by: 'test', write_ok: true, write_problems: [],
     }],
     dropped: [{
-      ...items[0], rank: 1, id: 's1', ...values[0], is_news: false,
-      written_by: 'test', write_ok: true, write_problems: ['not news: nothing beyond the headline'],
+      ...items[0], rank: 1, id: 's1', ...values[0], is_news: false, section: 'tech',
+      written_by: 'test', write_ok: true, write_problems: [
+        'section moved: world -> tech (Hacker News source)',
+        'not news: nothing beyond the headline',
+      ],
     }],
-    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 1, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
 });
 

@@ -472,8 +472,8 @@ function stories() {
 it('builds a deterministic top, sections and more without losing stories', () => {
   assert.deepStrictEqual(deterministicEdit(stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
     top: ['s1', 's2', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
   });
 });
 
@@ -483,9 +483,9 @@ it('qualifies top stories only at three-outlet coverage or with an interest matc
     { id: 'reader-interest', section: 'tasmania', coverage: 1, interest_matches: [{ weight: 1 }], rank: 2 },
   ];
   assert.deepStrictEqual(deterministicEdit(candidates, { sectionSize: 2, topSize: { min: 1, max: 1 } }), {
-    top: ['reader-interest'],
-    sections: { tasmania: [], australia: [], world: ['coverage-two'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    top: ['coverage-two'],
+    sections: { tasmania: ['reader-interest'], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
   });
 });
 
@@ -494,9 +494,9 @@ it('drops invalid and duplicate editor ids, clamps top, and fills deterministica
     top: ['missing', 's2', 's2'],
     sections: { world: ['s1', 's3', 's3', 'missing'] },
   }, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
-    top: ['s2', 's1', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    top: ['s1', 's2', 's3', 's4', 's5'],
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'partial',
     problems: [
       'Unknown top story id: missing',
@@ -522,8 +522,8 @@ it('clamps twelve valid editor top picks to the configured maximum', () => {
     sections: {},
   }, many, { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
     top: ['s1', 's2', 's3', 's4', 's5', 's6', 's7'],
-    sections: { tasmania: [], australia: [], world: ['s8'], tech: ['s9', 's10'], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: [], tech: ['s11', 's12'], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: ['s8'], tech: ['s9', 's10'], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: ['s11', 's12'], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'partial',
     problems: ['Top list had more than 7 valid stories and was clamped'],
   });
@@ -543,8 +543,8 @@ it('reports a partial fallback when one editor id is invalid', () => {
     sections: { world: ['s5', 's6'] },
   }, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
     top: ['s1', 's2', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'partial',
     problems: [
       'Unknown top story id: missing',
@@ -560,8 +560,8 @@ it('reports no fallback for a clean editor selection', () => {
     sections: { world: ['s6', 's7'] },
   }, stories(), { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
     top: ['s1', 's2', 's3', 's4', 's5'],
-    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: ['s6', 's7'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: ['s8'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'none',
     problems: [],
   });
@@ -583,8 +583,8 @@ it('repairs community-only and over-balanced tech top picks with ranked general 
     sections: {},
   }, candidates, { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
     top: ['s2', 's3', 's5', 's6', 's7'],
-    sections: { tasmania: [], australia: [], world: [], tech: ['s1'], homelab: [], gaming: ['s4'], internet: ['s8'] },
-    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    sections: { tasmania: [], australia: [], world: [], tech: ['s1'], homelab: [], gaming: ['s4'], sport: [], internet: ['s8'] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'partial',
     problems: [
       'Top story s1 was replaced by s6 (community-only source)',
@@ -863,9 +863,9 @@ it('replaces a single-outlet top story without an interest by widest-covered rem
     top: ['fine', 'local', 'interest', 'policy', 'security'],
     sections: {},
   }, candidates, { sectionSize: 2, topSize: { min: 5, max: 7 } }), {
-    top: ['local', 'interest', 'policy', 'security', 'starlink'],
-    sections: { tasmania: [], australia: ['fine'], world: ['pope', 'brand'], tech: [], homelab: [], gaming: [], internet: [] },
-    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], internet: [] },
+    top: ['starlink', 'local', 'interest', 'policy', 'security'],
+    sections: { tasmania: [], australia: ['fine'], world: ['pope', 'brand'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     fallback: 'partial',
     problems: ['Top story fine was replaced by starlink (single-outlet story without an interest match)'],
     topReplacements: [{ removed: 'fine', added: 'starlink', reason: 'single-outlet story without an interest match' }],

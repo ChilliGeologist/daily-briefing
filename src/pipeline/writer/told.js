@@ -1,0 +1,147 @@
+'use strict';
+
+const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain and quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+
+const TOLD_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  required: ['subjects'],
+  properties: {
+    subjects: {
+      type: 'array', maxItems: 3,
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['name', 'kind', 'stances'],
+        properties: {
+          name: { type: 'string' },
+          kind: { type: 'string', enum: ['person', 'party', 'organisation', 'cause', 'government'] },
+          stances: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              required: ['outlet', 'stance', 'quote'],
+              properties: {
+                outlet: { type: 'string' },
+                stance: { type: 'string', enum: ['toward', 'against', 'plain'] },
+                quote: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+function isRedditOutlet(version) {
+  return /^(?:reddit|r\/)\b/i.test(String(version.name || ''))
+    || /(?:^|\.)reddit\.com\//i.test(String(version.url || ''));
+}
+
+function distinctNonRedditVersions(story) {
+  const seen = new Set();
+  const output = [];
+  for (const version of (story.outlet_versions || [])) {
+    if (!version || isRedditOutlet(version)) continue;
+    const key = String(version.name || '').trim().toLocaleLowerCase('en-AU');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push({
+      name: String(version.name).trim(),
+      headline: String(version.headline || '').trim(),
+      description: String(version.description || '').trim(),
+      url: String(version.url || '').trim(),
+      text: String(version.text || version.description || '').trim(),
+    });
+  }
+  return output;
+}
+
+function quoteComparable(text) {
+  return String(text || '')
+    .normalize('NFKC')
+    .replace(/["'“”‘’]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('en-AU');
+}
+
+function outletWords(version) {
+  return `${version.headline || ''}\n${version.description || ''}\n${version.text || ''}`;
+}
+
+function buildTold(versions, raw) {
+  const cleanVersions = distinctNonRedditVersions({ outlet_versions: versions });
+  const outlets = cleanVersions.map(({ name, headline, url }) => ({ name, headline, url }));
+  const byName = new Map(cleanVersions.map(version => [version.name.toLocaleLowerCase('en-AU'), version]));
+  const kinds = new Set(['person', 'party', 'organisation', 'cause', 'government']);
+  const stances = new Set(['toward', 'against', 'plain']);
+  const subjects = [];
+  for (const candidate of (raw && Array.isArray(raw.subjects) ? raw.subjects : []).slice(0, 3)) {
+    if (!candidate || typeof candidate.name !== 'string' || !candidate.name.trim() || !kinds.has(candidate.kind)) continue;
+    const valid = [];
+    const usedOutlets = new Set();
+    for (const stance of (Array.isArray(candidate.stances) ? candidate.stances : [])) {
+      if (!stance || !stances.has(stance.stance) || typeof stance.quote !== 'string') continue;
+      const version = byName.get(String(stance.outlet || '').trim().toLocaleLowerCase('en-AU'));
+      const quote = stance.quote.trim();
+      const quoteWords = quote.match(/\S+/g) || [];
+      if (!version || !quote || quoteWords.length > 12 || usedOutlets.has(version.name)) continue;
+      const comparableQuote = quoteComparable(quote);
+      if (!comparableQuote || !quoteComparable(outletWords(version)).includes(comparableQuote)) continue;
+      usedOutlets.add(version.name);
+      valid.push({ outlet: version.name, stance: stance.stance, quote });
+    }
+    if (valid.length >= 2) subjects.push({ name: candidate.name.trim(), kind: candidate.kind, stances: valid });
+  }
+  if (subjects.length === 0) return { outlets };
+  return {
+    outlets,
+    subjects,
+    differs: subjects.some(subject => new Set(subject.stances.map(stance => stance.stance)).size > 1),
+  };
+}
+
+function toldUserPrompt(story, versions) {
+  const lines = [`STORY: ${story.headline || story.title || ''}`];
+  versions.forEach((version, index) => {
+    const excerpt = version.text.split(/\s+/).filter(Boolean).slice(0, 250).join(' ');
+    lines.push(`\nOUTLET ${index + 1}: ${version.name}`);
+    lines.push(`HEADLINE: ${version.headline}`);
+    lines.push(`DESCRIPTION: ${version.description}`);
+    lines.push(`TEXT: ${excerpt}`);
+  });
+  return lines.join('\n');
+}
+
+async function addToldToStories(stories, writer, log) {
+  const eligible = stories.map(story => ({ story, versions: distinctNonRedditVersions(story) }))
+    .filter(entry => entry.versions.length >= 2);
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const entry = eligible[cursor++];
+      if (!entry) return;
+      const { story, versions } = entry;
+      try {
+        const response = await writer.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
+        story.told = buildTold(versions, response && response.json);
+      } catch (error) {
+        story.told = buildTold(versions, null);
+        if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${story.title}": ${error.message}`);
+      }
+    }
+  }
+  const concurrency = Math.min(4, Math.max(1, Number(writer.concurrency) || 1), Math.max(1, eligible.length));
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return stories;
+}
+
+module.exports = {
+  TOLD_SYSTEM_PROMPT,
+  TOLD_SCHEMA,
+  distinctNonRedditVersions,
+  buildTold,
+  toldUserPrompt,
+  addToldToStories,
+};
