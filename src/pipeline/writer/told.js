@@ -121,6 +121,9 @@ function buildTold(versions, raw) {
   const subjects = [];
   for (const candidate of (raw && Array.isArray(raw.subjects) ? raw.subjects : []).slice(0, 3)) {
     if (!candidate || typeof candidate.name !== 'string' || !candidate.name.trim() || !kinds.has(candidate.kind)) continue;
+    // A slashed name ("Minibus/Bus", "School/Education System") is the model
+    // hedging between things, not one party or person a story can lean on.
+    if (candidate.name.includes('/')) continue;
     const valid = [];
     const usedOutlets = new Set();
     for (const stance of (Array.isArray(candidate.stances) ? candidate.stances : [])) {

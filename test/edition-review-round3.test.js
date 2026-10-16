@@ -334,3 +334,34 @@ describe('Round 3 item 5 — shared Tasmanian names need independent evidence', 
     });
   });
 });
+
+describe('Final pass — slashed subjects and more help requests', () => {
+  it('drops a slashed subject but keeps a named one from the same story', () => {
+    const versions = [
+      { name: 'AP', headline: 'Minibus slams into Channel Tunnel shuttle train, injuring 19', url: 'https://ap.test/a', text: 'Trump backflips on the plan.' },
+      { name: 'BBC', headline: 'Bus hits train in Channel Tunnel', url: 'https://bbc.test/a', text: 'For a reason that remains unknown, the minibus collided with the train. Trump shuts down the plan.' },
+    ];
+    const told = buildTold(versions, { subjects: [
+      { name: 'Minibus/Bus', kind: 'organisation', stances: [
+        { outlet: 'AP', stance: 'against', quote: 'Minibus slams into Channel Tunnel shuttle train' },
+        { outlet: 'BBC', stance: 'plain', quote: 'the minibus collided with the train' },
+      ] },
+      { name: 'Donald Trump', kind: 'person', stances: [
+        { outlet: 'AP', stance: 'against', quote: 'Trump backflips on the plan' },
+        { outlet: 'BBC', stance: 'plain', quote: 'Trump shuts down the plan' },
+      ] },
+    ] });
+    assert.deepStrictEqual(told.subjects.map(subject => subject.name), ['Donald Trump']);
+    assert.strictEqual(told.differs, true);
+  });
+
+  it('drops "where would you start" and "tell me what I bought" posts', () => {
+    const { isCommunityHelpRequest } = require('../src/pipeline/writer/validate');
+    const reddit = title => ({ title, source_type: 'reddit', real_reply_count: 40 });
+    assert.deepStrictEqual([
+      isCommunityHelpRequest(reddit('Where would you start? .. Tech-savvy but rusty, freshly wiped 2018 era MacBook Pro')),
+      isCommunityHelpRequest(reddit('Tell me what I bought, Super Micro JBODs')),
+      isCommunityHelpRequest(reddit('Do you not patch your docker images against CVEs?')),
+    ], [true, true, false]);
+  });
+});

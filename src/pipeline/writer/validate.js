@@ -101,6 +101,8 @@ function isCommunityHelpRequest(item) {
   if (/\bquestions?\s+about\b/i.test(title)) return true;
   if (/\bwhich\b.+\bshould\b/i.test(title)) return true;
   if (/\b(?:advice|suggestions?|feature request)\b/i.test(title)) return true;
+  if (/\bwhere (?:would|should|do) (?:you|i) start\b/i.test(title) || /^tell me what\b/i.test(title)
+    || /\bwhat (?:did i|have i) (?:buy|bought|get|got)\b/i.test(title)) return true;
   if (/\b(?:instead of adding|please add)\b/i.test(title)) return true;
   if (/\b(?:suggestion|feature request)\b/i.test(String(item.link_flair_text || item.flair || ''))) return true;
   if (words(title).length <= 12
