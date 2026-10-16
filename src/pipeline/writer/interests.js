@@ -24,7 +24,7 @@ const DEFAULT_INTERESTS = Object.freeze([
   interest('State politics', 'topic', ['Tasmanian parliament', 'House of Assembly', 'Tasmanian government', 'premier', 'state budget'], 2, false, true),
   interest('Federal politics', 'topic', ['federal parliament', 'prime minister', 'Senate', 'federal budget', 'federal election'], 1),
   interest('Emergencies', 'topic', ['bushfire', 'fire warning', 'flood', 'severe weather', 'evacuate', 'emergency warning', 'road closed', 'road closure'], 3, true, true),
-  interest('Events', 'topic', ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Launceston Show'], 1, false, true),
+  interest('Events', 'topic', ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Tasmania Jewels', 'Jewels', 'Launceston Show'], 1, false, true),
   interest('Unraid', 'product', ['Unraid'], 2, true),
   interest('Plex', 'product', ['Plex'], 2, true),
   interest('Sonarr', 'product', ['Sonarr'], 2, true),

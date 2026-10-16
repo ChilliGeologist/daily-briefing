@@ -225,7 +225,7 @@ it('detects only missing-source meta writing in summaries and kickers and ignore
   ]);
 });
 
-it('forces patterned community help and buying requests to not-news unless engagement is high', () => {
+it('forces patterned community help and buying requests to not-news regardless of engagement', () => {
   const catches = [
     { title: 'Hardware question' },
     { title: 'Help me pick a size of a wall-mounted rack please' },
@@ -247,7 +247,7 @@ it('forces patterned community help and buying requests to not-news unless engag
     ...catches.map(isCommunityHelpRequest),
     ...nearMisses.map(isCommunityHelpRequest),
     isCommunityHelpRequest({ ...catches[0], score: 500, comment_count: 80 }),
-  ], [true, true, true, true, true, true, true, true, false, false, false, false, false, false]);
+  ], [true, true, true, true, true, true, true, true, false, false, false, false, false, true]);
 });
 
 it('rejects community question titles with fewer than two real replies', () => {

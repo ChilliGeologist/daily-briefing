@@ -70,6 +70,43 @@ function outletWords(version) {
   return `${version.headline || ''}\n${version.description || ''}\n${version.text || ''}`;
 }
 
+function quoteSentence(version, quote) {
+  const comparable = quoteComparable(quote);
+  for (const field of ['headline', 'description', 'text']) {
+    const text = String(version[field] || '');
+    const sentences = text.split(/(?<=[.!?])(?:\s+|(?=["“‘]*[A-Z]))|\n+/u);
+    const found = sentences.find(sentence => quoteComparable(sentence).includes(comparable));
+    if (found) return found;
+  }
+  return '';
+}
+
+function quoteIsInsideQuotation(sentence, quote) {
+  const comparable = quoteComparable(quote);
+  const text = String(sentence);
+  const quoted = [
+    ...[...text.matchAll(/["“][^"”]+["”]/gu)].map(match => match[0]),
+    ...[...text.matchAll(/‘[^’]+’/gu)].map(match => match[0]),
+    ...[...text.matchAll(/(^|[\s([{])'([^'\n]{2,})'(?=$|[\s.,;:!?)}\]])/gu)].map(match => match[2]),
+  ];
+  return quoted.some(rawSpan => {
+    const span = quoteComparable(rawSpan);
+    return span.includes(comparable) || comparable.includes(span);
+  });
+}
+
+const ATTRIBUTION = /\b(?:said|says|called|calls|told|according to|claimed|described\b.{0,30}\bas)\b/i;
+const LEGAL_REPORT = /\b(?:accus(?:e[ds]?|ed|ation)|charg(?:e[ds]?|ed)|alleg(?:e[ds]?|ed|edly|ation)|pleads?|verdict|denies|denied|found guilty|sentenced)\b/i;
+const LOADED_WORD = /\b(?:shock(?:ing)?|slams?|rage|disgraced|hero(?:ic)?|brave|cruel|reprehensible|despicable|betrayal|chaos|outrage(?:ous)?|humiliat(?:e[ds]?|ing)|coward(?:ly)?|evil|brutal)\b/i;
+
+function validatedStance(version, stance, quote) {
+  const sentence = quoteSentence(version, quote);
+  if (!sentence) return null;
+  if (quoteIsInsideQuotation(sentence, quote) || ATTRIBUTION.test(sentence)) return null;
+  if (stance !== 'plain' && LEGAL_REPORT.test(quote) && !LOADED_WORD.test(quote)) return 'plain';
+  return stance;
+}
+
 function buildTold(versions, raw) {
   const cleanVersions = distinctNonRedditVersions({ outlet_versions: versions });
   const outlets = cleanVersions.map(({ name, headline, url }) => ({ name, headline, url }));
@@ -89,10 +126,14 @@ function buildTold(versions, raw) {
       if (!version || !quote || quoteWords.length > 12 || usedOutlets.has(version.name)) continue;
       const comparableQuote = quoteComparable(quote);
       if (!comparableQuote || !quoteComparable(outletWords(version)).includes(comparableQuote)) continue;
+      const cleanStance = validatedStance(version, stance.stance, quote);
+      if (!cleanStance) continue;
       usedOutlets.add(version.name);
-      valid.push({ outlet: version.name, stance: stance.stance, quote });
+      valid.push({ outlet: version.name, stance: cleanStance, quote });
     }
-    if (valid.length >= 2) subjects.push({ name: candidate.name.trim(), kind: candidate.kind, stances: valid });
+    if (valid.length >= 2 && valid.some(stance => stance.stance !== 'plain')) {
+      subjects.push({ name: candidate.name.trim(), kind: candidate.kind, stances: valid });
+    }
   }
   if (subjects.length === 0) return { outlets };
   return {

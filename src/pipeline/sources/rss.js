@@ -1,6 +1,7 @@
 'use strict';
 
 const RSSParser = require('rss-parser');
+const WARNING_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
 function stripHTML(html) {
   if (!html) return '';
@@ -66,6 +67,7 @@ function sourceFields(source, defaults = {}) {
     default_category: defaults.default_category || source.default_category,
     ...(source.config && source.config.kind ? { source_kind: source.config.kind } : {}),
     ...(source.config && source.config.no_solo_top ? { no_solo_top: true } : {}),
+    ...(source.config && source.config.short_ok ? { short_ok: true } : {}),
   };
 }
 
@@ -143,7 +145,7 @@ async function fetchRSS(source, log) {
       response = await fetch(source.url, {
         headers: {
           'User-Agent': source.config && source.config.kind === 'warning'
-            ? 'Mozilla/5.0 (compatible; DailyBriefing/2.0; +https://localhost)'
+            ? WARNING_USER_AGENT
             : 'DailyBriefing/2.0',
         },
         signal: controller.signal,
@@ -206,4 +208,5 @@ module.exports = {
   parseWarningFeed,
   parseReleaseFeed,
   versionOf,
+  WARNING_USER_AGENT,
 };

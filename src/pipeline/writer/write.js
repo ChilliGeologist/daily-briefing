@@ -8,6 +8,7 @@ const {
   isUnansweredCommunityQuestion,
   missingTextFields,
   isNonNewsEssay,
+  isProtectedGamingNews,
   isProjectPost,
   projectDropReason,
   isSportStory,
@@ -34,6 +35,66 @@ function hasUsablePhoto(item) {
   });
 }
 
+function validUrl(value) {
+  try { return new URL(value); } catch (_) { return null; }
+}
+
+function isRedditOwnedImage(value) {
+  const parsed = validUrl(value);
+  return Boolean(parsed && /^(?:i\.redd\.it|preview\.redd\.it|i\.imgur\.com)$/i.test(parsed.hostname));
+}
+
+function inferredExternalUrl(item) {
+  if (item.external_url) return item.external_url;
+  const description = String(item.description || '').trim();
+  return /^https?:\/\/\S+$/i.test(description) ? description : null;
+}
+
+function isRedditLinkPost(item) {
+  if (String(item.source_type || '').toLowerCase() !== 'reddit') return false;
+  const external = inferredExternalUrl(item);
+  if (!external) return false;
+  const parsed = validUrl(external);
+  if (!parsed) return false;
+  return !/(?:^|\.)reddit\.com$/i.test(parsed.hostname) && !isRedditOwnedImage(external);
+}
+
+function isRedditPhotoPost(item) {
+  if (String(item.source_type || '').toLowerCase() !== 'reddit' || isRedditLinkPost(item)) return false;
+  const postUrl = validUrl(item.url);
+  const gallery = Boolean(postUrl && /\/gallery\//i.test(postUrl.pathname));
+  return [...(Array.isArray(item.images) ? item.images : []), item.image].some(value => {
+    const parsed = validUrl(value);
+    if (!parsed) return false;
+    if (/^(?:i\.redd\.it|i\.imgur\.com)$/i.test(parsed.hostname)) return true;
+    return parsed.hostname.toLowerCase() === 'preview.redd.it' && (gallery || !inferredExternalUrl(item));
+  });
+}
+
+const ROUNDUP_PREFIX = /^(?:Morning Mail|Afternoon Update|Evening Update|Morning Update|First Edition|Weekend Reading|The Briefing|News Briefing)\b/i;
+const ROUNDUP_CATEGORIES = /\b(?:Business|Health|Entertainment|Community|Sport|Basketball|Politics|Courts and Crime|Local Council|Road Incidents|Wildlife|The Latest)(?=[A-Z])/g;
+
+function isMultiStoryRoundup(item) {
+  const title = String(item.title || '').trim();
+  if (ROUNDUP_PREFIX.test(title) || (title.match(/;/g) || []).length >= 2) return true;
+  const external = validUrl(inferredExternalUrl(item));
+  if (String(item.source_type || '').toLowerCase() !== 'reddit' || !external || external.pathname !== '/') return false;
+  const categoryRuns = String(item.article_content || '').match(ROUNDUP_CATEGORIES) || [];
+  return categoryRuns.length >= 3 || /\b(?:breaking news|top stories)\b/i.test(title);
+}
+
+function isAdvertorial(item) {
+  const title = String(item.title || '');
+  const copy = `${title}\n${item.description || ''}`;
+  if (/^Cooking with\s+\S+/i.test(title)) return true;
+  if (/\b(?:sponsored|in partnership with|brought to you by|paid partnership|advertorial)\b/i.test(copy)) return true;
+  const urls = [item.url, item.canonical_url, item.external_url, item.article_url];
+  return urls.some(raw => {
+    const parsed = validUrl(raw);
+    return Boolean(parsed && /\/(?:sponsored|branded|partner-content|advertorial)(?:\/|$)/i.test(parsed.pathname));
+  });
+}
+
 function distinctOutletCount(item) {
   const names = (item.sources || []).map(source => String(source && source.name || '').trim().toLowerCase()).filter(Boolean);
   if (names.length === 0 && item.source_name) names.push(String(item.source_name).trim().toLowerCase());
@@ -42,6 +103,7 @@ function distinctOutletCount(item) {
 
 function preWriteDropReason(item, { ignorePhoto = false } = {}) {
   if (item.source_kind === 'warning' || item.source_kind === 'release') return null;
+  if (isProtectedGamingNews(item)) return null;
   const title = String(item.title || '');
   const url = String(item.canonical_url || item.url || '');
   const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
@@ -50,21 +112,22 @@ function preWriteDropReason(item, { ignorePhoto = false } = {}) {
     try { return new URL(url).hostname; } catch (_) { return ''; }
   })()) || /\bGuardian\b/i.test(sourceNames);
   if (isGuardian && (/\/live\//i.test(url) || /[–—-]\s*live\s*$/i.test(title))) return 'Guardian live blog';
+  if (isMultiStoryRoundup(item)) return 'multi-story round-up';
+  if (isAdvertorial(item)) return 'advertorial';
   const articleWords = countWords(item.article_content);
   const replyCount = Number(item.real_reply_count) || communityReplies(item).length;
-  const discussion = isCommunityItem(item) && replyCount >= 3;
+  const discussion = isCommunityItem(item) && !isRedditLinkPost(item) && replyCount >= 3;
   const photo = !ignorePhoto && hasUsablePhoto(item);
-  const photoPost = photo && String(item.source_type || '').toLowerCase() === 'reddit';
-  if (articleWords < 40 && !discussion && !photo) return 'nothing behind headline';
-  if (distinctOutletCount(item) <= 1 && articleWords < 150 && !discussion && !photoPost) {
+  const photoPost = photo && isRedditPhotoPost(item);
+  if (articleWords < 40 && !discussion && !photoPost) return 'nothing behind headline';
+  if (distinctOutletCount(item) <= 1 && articleWords < 150 && !discussion && !photoPost && !item.short_ok) {
     return 'single-outlet teaser under 150 words';
   }
   return null;
 }
 
 function isPhotoSubstance(item) {
-  return String(item.source_type || '').toLowerCase() === 'reddit'
-    && hasUsablePhoto(item)
+  return isRedditPhotoPost(item)
     && countWords(item.description) < 40;
 }
 
@@ -307,6 +370,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
     }
     const overrideNotNews = !isCommunityItem(item)
       && String(item.article_content || '').trim().length < 500;
+    const protectedGaming = isProtectedGamingNews(item);
     const headlineOnly = isHeadlineOnly(item);
     const photoSubstance = isPhotoSubstance(item);
 
@@ -429,6 +493,12 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
         validation.value.is_news = false;
         validation.problems.push('not news: nothing beyond the headline');
       }
+      if (!validation.value.is_news && protectedGaming
+        && !validation.problems.some(problem => problem.startsWith('page-description retry'))) {
+        validation.value.is_news = true;
+        validation.problems.push('kept: interest-list gaming news');
+        stats.not_news_overridden++;
+      }
       if (!validation.value.is_news && overrideNotNews && !headlineOnly
         && !validation.problems.some(problem => problem === 'not news: nothing beyond the headline'
           || problem.startsWith('not news: programming tutorial')
@@ -525,4 +595,6 @@ module.exports = {
   dropWrittenDuplicates,
   preWriteDropReason,
   isPhotoSubstance,
+  isRedditPhotoPost,
+  isMultiStoryRoundup,
 };

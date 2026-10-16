@@ -147,6 +147,7 @@ async function parseRedditFeed(xml, source, now = Date.now()) {
       default_category: source.default_category,
       ...(source.config && source.config.kind ? { source_kind: source.config.kind } : {}),
       ...(source.config && source.config.no_solo_top ? { no_solo_top: true } : {}),
+      ...(source.config && source.config.short_ok ? { short_ok: true } : {}),
     });
   }
 

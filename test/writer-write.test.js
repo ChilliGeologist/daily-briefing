@@ -528,8 +528,8 @@ it('drops same-event stories after writing, merges their sources, and keeps same
       sources: [{ name: 'ABC', url: 'https://example.com/abc-michelin' }],
     },
     {
-      title: 'Last-minute AFL trade deals loom',
-      description: 'Multiple AFL trade deals were finalised late, involving several players and draft picks across different clubs.',
+      title: 'Last-minute company trade deals loom',
+      description: 'Multiple company trade deals were finalised late, involving several assets and contracts across different businesses.',
       article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 21,
       sources: [{ name: 'ABC', url: 'https://example.com/afl-deals' }],
     },
@@ -540,8 +540,8 @@ it('drops same-event stories after writing, merges their sources, and keeps same
       sources: [{ name: 'Guardian', url: 'https://example.com/guardian-michelin' }],
     },
     {
-      title: 'Almost perfect trade period for Roos | The player movement winners and losers',
-      description: 'The AFL trade period concluded with clubs making player movements and experts rating the winners and losers.',
+      title: 'Almost perfect corporate trade period | The deal winners and losers',
+      description: 'Companies concluded the trade period with asset movements while experts rated the winners and losers.',
       article_content: 'x'.repeat(500), interest_matches: [], section: 'australia', rank: 26,
       sources: [{ name: 'Mercury', url: 'https://example.com/afl-ratings' }],
     },
@@ -551,7 +551,7 @@ it('drops same-event stories after writing, merges their sources, and keeps same
     is_news: true,
     headline: item.title,
     summary: item.description,
-    kicker: item.title.startsWith('Michelin') || item.title.startsWith('Ten South') ? 'Dining' : 'AFL trades',
+    kicker: item.title.startsWith('Michelin') || item.title.startsWith('Ten South') ? 'Dining' : 'Deal watch',
     section: 'australia',
   }));
   const output = await writeStories(items, {
@@ -616,7 +616,7 @@ it('compares written summaries with source teasers for duplicates and ignores le
   );
 });
 
-it('forces deterministic community help requests to not-news but keeps highly engaged posts', async () => {
+it('forces deterministic community help requests to not-news regardless of engagement', async () => {
   const items = [
     { title: 'Help me pick a rack please', source_type: 'reddit', source_name: 'r/homelab', article_content: 'x'.repeat(500), interest_matches: [] },
     { title: 'Hardware question', source_type: 'reddit', source_name: 'r/homelab', score: 500, comment_count: 80, article_content: 'x'.repeat(500), interest_matches: [] },
@@ -628,16 +628,20 @@ it('forces deterministic community help requests to not-news but keeps highly en
     name: 'test', async write() { return { json: outputs[index++] }; },
   }, retrySettings);
   assert.deepStrictEqual(output, {
-    stories: [{
-      ...items[1], rank: 2, id: 's2', ...outputs[1], kicker: 'Hardware help',
-      written_by: 'test', write_ok: true, write_problems: [],
-    }],
-    dropped: [{
-      ...items[0], rank: 1, id: 's1', ...written(items[0].title), is_news: false, kicker: 'Hardware help',
-      written_by: 'test', write_ok: true,
-      write_problems: ['not news: community help or buying request'],
-    }],
-    stats: { written: 1, repairs: 1, headline_retries: 0, fallbacks: 0, not_news: 1, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
+    stories: [],
+    dropped: [
+      {
+        ...items[0], rank: 1, id: 's1', ...written(items[0].title), is_news: false, kicker: 'Hardware help',
+        written_by: 'test', write_ok: true,
+        write_problems: ['not news: community help or buying request'],
+      },
+      {
+        ...items[1], rank: 2, id: 's2', ...outputs[1], is_news: false, kicker: 'Hardware help',
+        written_by: 'test', write_ok: true,
+        write_problems: ['not news: community help or buying request'],
+      },
+    ],
+    stats: { written: 0, repairs: 2, headline_retries: 0, fallbacks: 0, not_news: 2, not_news_overridden: 0, section_moves: 0, facts_removed: 0, numbers_unsupported: 0, input_tokens: 0, output_tokens: 0, duration_ms: 0 },
   });
 });
 

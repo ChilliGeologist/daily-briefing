@@ -74,14 +74,19 @@ function missingTextFields(value) {
   });
 }
 
-function hasHighCommunityEngagement(item) {
-  return (Number(item.score) || 0) >= 250 || (Number(item.comment_count) || 0) >= 75;
-}
-
 function isCommunityHelpRequest(item) {
-  if (!isCommunityItem(item) || hasHighCommunityEngagement(item)) return false;
+  if (!isCommunityItem(item)) return false;
+  // A post sharing an outside article carries that article's headline
+  // ("…functionally illiterate. How can we fix this?"), not the poster's plea.
+  if (item.external_url) return false;
   const title = String(item.title || '').trim();
   const description = String(item.description || '').trim();
+  // Personal setup/buying help is not edition material, however popular the
+  // thread becomes. General questions to the community ("Do you patch…?")
+  // remain eligible.
+  if (/\b(?:can you|how do i|how can i|how can|what(?:'|’)s next|what next|should i|any advice|need advice|help with|help me|is it worth)\b/i.test(title)) return true;
+  if (/\bwhich\b.+\bshould\b/i.test(title) || /\brecommendations?\s*\?\s*$/i.test(title)) return true;
+  if (/^(?:my\b|i\b).+\?\s*$/i.test(title)) return true;
   if (/^help me\b/i.test(title) || /\bhow do i\b/i.test(title) || /\bhow to handle\b/i.test(title)) return true;
   if (/\b(?:what should i|should i)\b/i.test(title)) return true;
   if (/\bquestions?\s*\??$/i.test(title)) return true;
@@ -141,8 +146,27 @@ function isNonNewsEssay(item) {
     || /^(?:Things|Lessons|Thoughts|Notes)\s+(?:I|we|to know)\b/i.test(title);
 }
 
+const SPORT_TERMS = /\b(?:AFLW?|NRLW?|rugby(?: league| union)?|Wallabies|Wallaroos|Matildas|Socceroos|A-League|cricket|tennis|ATP|WTA|Supercars?|Formula\s*(?:One|1)|F1|MotoGP|NBL|WNBL|golf|Bledisloe|Olympic(?:s)?|Paralympic(?:s)?|World Cup|State of Origin|Super Bowl|Ashes|racehorse|horse racing|thoroughbred|jockey|Caulfield Cup|Melbourne Cup)\b/i;
+
 function isSportStory(item, value = item) {
-  return value.section === 'sport' || item.default_category === 'sport';
+  if (value.section === 'sport' || item.default_category === 'sport') return true;
+  const urls = [item.url, item.canonical_url, item.external_url, item.article_url,
+    ...(item.sources || []).map(source => source && source.url),
+    ...(item.outlet_versions || []).map(version => version && version.url)];
+  if (urls.some(raw => {
+    try { return /\/(?:sport|sports)(?:\/|$)/i.test(new URL(raw).pathname); } catch (_) { return false; }
+  })) return true;
+  // Extraction can include a whole site's related-story footer. Only the
+  // opening article words are topic evidence; later mentions would turn an AI
+  // or crime story into sport because a footer linked to an AFL item.
+  const articleLead = String(item.article_content || '').split(/\s+/).slice(0, 120).join(' ');
+  const text = [item.title, item.description, articleLead, value.headline, value.summary].filter(Boolean).join(' ');
+  // Stadium construction, funding and development are infrastructure/politics
+  // stories even when the venue is described as an AFL stadium.
+  if (/\bstadium\b/i.test(text)
+    && /\b(?:build(?:er|ing)?|construction|cost|price|hotel|development|planning|funding)\b/i.test(text)
+    && !/\b(?:match|game|season|player|team|coach|win|loss|grand final)\b/i.test(text)) return false;
+  return SPORT_TERMS.test(text);
 }
 
 function sportDropReason(item, value = item) {
@@ -151,10 +175,24 @@ function sportDropReason(item, value = item) {
     || (/\bBledisloe Cup\b/i.test(text) && /\bfinal All Blacks Test\b/i.test(text))
     || /\bWorld Cup\b.{0,60}\b(?:final|semi-?final|quarter-?final|knockout|champion|decider)\b|\b(?:final|semi-?final|quarter-?final|knockout|champion|decider)\b.{0,60}\bWorld Cup\b/i.test(text);
   if (bigEvent || (Number(item.coverage) || 0) >= 4) return null;
-  const tasmanianTeam = /\b(?:JackJumpers|Tasmania Devils)\b/i.test(text)
+  const tasmanianTeam = /\b(?:JackJumpers|Tasmania Devils|Tasmania(?:'s|’s)? Jewels)\b/i.test(text)
+    || (/\bJewels\b/i.test(text) && (item.interest_matches || []).some(match => match.kind === 'place'))
     || (item.interest_matches || []).some(match => ['JackJumpers', 'Tasmania Devils'].includes(match.label));
   if (tasmanianTeam && (Number(item.coverage) || 0) >= 2) return null;
   return 'sport below significance threshold';
+}
+
+function isProtectedGamingNews(item) {
+  const matchesProduct = (item.interest_matches || []).some(match =>
+    match.kind === 'product' && ['Dota 2', 'Old School RuneScape'].includes(match.label)
+  ) || /^(?:r\/DotA2|r\/(?:oldschool)?runescape|Dota 2|Old School RuneScape|RuneScape)\b/i.test(String(item.source_name || ''));
+  if (!matchesProduct) return false;
+  const title = String(item.title || '');
+  const qualifies = /\b(?:update|patch|gameplay patch|game update|hotfix|joins?|signs?|transfer|roster)\b/i.test(title)
+    || /\bwins?\b.+\b(?:tournament|major|championship|cup|league)\b/i.test(title);
+  if (!qualifies) return false;
+  const replies = Number(item.real_reply_count) || communityReplies(item).length;
+  return replies >= 3 || !isCommunityItem(item);
 }
 
 function writingRetryReasons(value) {
@@ -207,7 +245,12 @@ function enforceSectionRequirements(value, item, interests, problems) {
   const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
     .filter(Boolean).join('\n');
   let fixedSourceSection = null;
-  if (/^(?:Bleeping Computer|The Register|Krebs(?: on Security)?|Australian Cyber Security Centre|ACSC)$/im.test(sourceNames)) {
+  const homelabTitle = /\b(?:self-host(?:ed|ing)?|selfhost(?:ed|ing)?|homelab)\b/i.test(String(item.title || ''));
+  const homelabPublisher = /^(?:Jeff Geerling|ServeTheHome|selfh\.st|Home Assistant(?: Blog)?|Tailscale(?: Blog)?)$/im.test(sourceNames)
+    || item.source_kind === 'release';
+  if (homelabTitle || (sourceOutletCount(item) <= 1 && homelabPublisher)) {
+    fixedSourceSection = 'homelab';
+  } else if (/^(?:Bleeping Computer|The Register|Krebs(?: on Security)?|Australian Cyber Security Centre|ACSC)$/im.test(sourceNames)) {
     fixedSourceSection = 'tech';
   } else if (TOP_NEWS_SECTIONS.has(value.section) && /^(?:Hacker News|HN|r\/linux)\b/im.test(sourceNames)) {
     fixedSourceSection = 'tech';
@@ -753,6 +796,7 @@ module.exports = {
   isProjectPost,
   projectDropReason,
   isNonNewsEssay,
+  isProtectedGamingNews,
   isSportStory,
   sportDropReason,
   writingRetryReasons,

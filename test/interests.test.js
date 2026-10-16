@@ -35,7 +35,7 @@ it('seeds all interests in the specified order with complete values', () => {
   assert.deepStrictEqual(DEFAULT_INTERESTS.find(({ label }) => label === 'Events'), {
     label: 'Events',
     kind: 'topic',
-    terms: ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Launceston Show'],
+    terms: ['festival', 'concert', 'exhibition', 'Agfest', 'Festivale', 'Tasmania Devils', 'JackJumpers', 'Tasmania Jewels', 'Jewels', 'Launceston Show'],
     weight: 1,
     urgent: false,
     requires_place: true,
