@@ -14,8 +14,8 @@ it('exports frozen unambiguous and companion-required gazetteer tiers', () => {
   assert.strictEqual(Object.isFrozen(UNAMBIGUOUS), true);
   assert.strictEqual(Object.isFrozen(NEEDS_COMPANION), true);
   assert.deepStrictEqual(
-    ['The Nut', 'Ulverstone', 'Devonport', 'Deloraine', 'Strahan', 'Zeehan', 'Smithton', 'Bicheno', 'Huonville', 'Geeveston', 'Glenorchy', 'Legana', 'Invermay', 'kunanyi'].map(name => UNAMBIGUOUS.includes(name)),
-    [true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+    ['The Nut', 'Ulverstone', 'Devonport', 'Deloraine', 'Strahan', 'Zeehan', 'Smithton', 'Bicheno', 'Huonville', 'Geeveston', 'Glenorchy', 'Legana', 'kunanyi'].map(name => UNAMBIGUOUS.includes(name)),
+    [true, true, true, true, true, true, true, true, true, true, true, true, true]
   );
   assert.deepStrictEqual(
     ['Perth', 'Margate', 'Hamilton', 'Prospect', 'Forth', 'Riverside', 'Stanley'].map(name => NEEDS_COMPANION.includes(name)),
@@ -32,8 +32,8 @@ it('accepts companion-required names only with Tasmanian evidence in the same te
     companions: [],
   });
   assert.deepStrictEqual(matchTasmanianPlaces("Hamilton, in Tasmania's Central Highlands"), {
-    unambiguous: ['Central Highlands'],
-    needsCompanion: ['Hamilton'],
+    unambiguous: [],
+    needsCompanion: ['Hamilton', 'Central Highlands'],
     rejected: [],
     companions: ['Tasmania'],
   });

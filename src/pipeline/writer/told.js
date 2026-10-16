@@ -96,13 +96,18 @@ function quoteIsInsideQuotation(sentence, quote) {
 }
 
 const ATTRIBUTION = /\b(?:said|says|called|calls|told|according to|claimed|described\b.{0,30}\bas)\b/i;
+const TESTIMONY_ATTRIBUTION = /\b(?:court\s+(?:has\s+)?heard|the\s+court\s+was\s+told|told\s+the\s+court|jury\s+heard|the\s+jury\s+was\s+told|told\s+the\s+jury|gave\s+evidence|testified|alleges|alleged|allegedly|prosecutors?\s+(?:said|say|says)|according\s+to\s+the\s+prosecution)\b/i;
+const CLAIM_ATTRIBUTION = /\bclaims?\b/i;
+const CLAIM_NOUN = /\b(?:the|his|her|its|their|these|those|such)\s+claims?\b/i;
 const LEGAL_REPORT = /\b(?:accus(?:e[ds]?|ed|ation)|charg(?:e[ds]?|ed)|alleg(?:e[ds]?|ed|edly|ation)|pleads?|verdict|denies|denied|found guilty|sentenced)\b/i;
 const LOADED_WORD = /\b(?:shock(?:ing)?|slams?|rage|disgraced|hero(?:ic)?|brave|cruel|reprehensible|despicable|betrayal|chaos|outrage(?:ous)?|humiliat(?:e[ds]?|ing)|coward(?:ly)?|evil|brutal)\b/i;
 
 function validatedStance(version, stance, quote) {
   const sentence = quoteSentence(version, quote);
   if (!sentence) return null;
-  if (quoteIsInsideQuotation(sentence, quote) || ATTRIBUTION.test(sentence)) return null;
+  if (quoteIsInsideQuotation(sentence, quote) || ATTRIBUTION.test(sentence)
+    || TESTIMONY_ATTRIBUTION.test(sentence)
+    || (CLAIM_ATTRIBUTION.test(sentence) && !CLAIM_NOUN.test(sentence))) return null;
   if (stance !== 'plain' && LEGAL_REPORT.test(quote) && !LOADED_WORD.test(quote)) return 'plain';
   return stance;
 }

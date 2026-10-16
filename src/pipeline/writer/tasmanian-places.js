@@ -81,6 +81,12 @@ const NEEDS_COMPANION = Object.freeze([
   'Mowbray', 'Ross', 'Penguin', 'Somerset', 'Fingal', 'Kingston', 'Prospect',
   'Forth', 'Riverside', 'Lindisfarne', 'New Town', 'Sandford', 'Cambridge',
   'Franklin', 'Lauderdale', 'Orford', 'Avoca', 'Bothwell', 'Stanley', 'Scottsdale',
+  'Waverley', 'Mayfield', 'Norwood', 'Newstead', 'St Leonards', 'Windermere',
+  'Ravenswood', 'Summerhill', 'Mornington', 'Howrah', 'Rose Bay', 'Granton',
+  'Berriedale', 'Otago', 'Derby', 'Gladstone', 'St Helens', 'Falmouth', 'Gawler',
+  'Carrick', 'Hagley', 'Bracknell', 'Woodbridge', 'Kettering', 'Southport', 'Currie',
+  'Ranelagh', 'Liffey', 'Tea Tree', 'Sassafras', 'Glengarry', 'Invermay', 'Bushy Park',
+  'Seven Mile Beach', 'East Coast', 'West Coast', 'Midlands', 'Central Highlands',
 ]);
 
 const TASMANIAN_COMPANIONS = Object.freeze([

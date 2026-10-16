@@ -31,6 +31,7 @@ const MISSING_TEXT = /\b(?:the\s+headline\s+(?:suggests|indicates|states|implies
 // prompt" (404 Media, 2026-10-15).
 const PAGE_NOT_STORY = /\b(?:(?:the\s+)?(?:provided|supplied|available)\s+(?:text|page|content|article|story)\s+(?:is|was)\s+(?:not\b|(?:a\s+)?paywalled\s+(?:article|page|story)\b)|not\s+a\s+genuine\s+(?:news\s+)?(?:story|article)|appears\s+to\s+be\s+(?:a|an)\s+(?:paywall|subscription|sign-?up|login|log-in|cookie)\b)/i;
 const PAGE_DESCRIPTION = /\b(?:no substantial news content|promotional material|subscrib(?:e|er|ing|tion)|membership|this article|this page|the page)\b/i;
+const NO_FACTUAL_NEWS = /\bno\s+factual\s+news\s+(?:details?|information)\s+(?:was|were|is|are|has\s+been|have\s+been)\s+(?:provided|available|included|supplied|given)\b/i;
 const META_REFERENCE = /\b(?:this\s+(?:story|article|post|text|page)|the\s+(?:provided|supplied)\s+(?:text|content))\b/i;
 const META_KICKER = /^(?:headline mystery|no story|no details|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
@@ -66,7 +67,7 @@ function firstSentence(teaser) {
 function missingTextFields(value) {
   return ['summary', 'kicker'].filter(field => {
     const text = String(value?.[field] || '').trim();
-    return MISSING_TEXT.test(text) || PAGE_NOT_STORY.test(text) || PAGE_DESCRIPTION.test(text)
+    return MISSING_TEXT.test(text) || NO_FACTUAL_NEWS.test(text) || PAGE_NOT_STORY.test(text) || PAGE_DESCRIPTION.test(text)
       || text.split(/(?<=[.!?])\s+|\n+/u).some(sentence =>
         /\b(?:no|not)\b/i.test(sentence) && META_REFERENCE.test(sentence)
       )
@@ -242,8 +243,12 @@ function sectionEvidence(item, value) {
 }
 
 function enforceSectionRequirements(value, item, interests, problems) {
-  const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
-    .filter(Boolean).join('\n');
+  const sourceList = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
+    .filter(Boolean).map(name => String(name).trim());
+  const sourceNames = sourceList.join('\n');
+  const specialistOrReddit = sourceList.length > 0 && sourceList.every(name =>
+    /^(?:Hacker News(?:\s*\(API\))?|HN|Waxy|Kottke|404 Media|r\/[^\s]+)$/i.test(name)
+  );
   let fixedSourceSection = null;
   const homelabTitle = /\b(?:self-host(?:ed|ing)?|selfhost(?:ed|ing)?|homelab)\b/i.test(String(item.title || ''));
   const homelabPublisher = /^(?:Jeff Geerling|ServeTheHome|selfh\.st|Home Assistant(?: Blog)?|Tailscale(?: Blog)?)$/im.test(sourceNames)
@@ -252,9 +257,11 @@ function enforceSectionRequirements(value, item, interests, problems) {
     fixedSourceSection = 'homelab';
   } else if (/^(?:Bleeping Computer|The Register|Krebs(?: on Security)?|Australian Cyber Security Centre|ACSC)$/im.test(sourceNames)) {
     fixedSourceSection = 'tech';
-  } else if (TOP_NEWS_SECTIONS.has(value.section) && /^(?:Hacker News|HN|r\/linux)\b/im.test(sourceNames)) {
+  } else if (TOP_NEWS_SECTIONS.has(value.section) && specialistOrReddit
+    && /^(?:Hacker News|HN|r\/linux)\b/im.test(sourceNames)) {
     fixedSourceSection = 'tech';
-  } else if (TOP_NEWS_SECTIONS.has(value.section) && /^(?:Waxy|Kottke|404 Media)\b/im.test(sourceNames)) {
+  } else if (TOP_NEWS_SECTIONS.has(value.section) && specialistOrReddit
+    && /^(?:Waxy|Kottke|404 Media)\b/im.test(sourceNames)) {
     fixedSourceSection = 'internet';
   }
   if (fixedSourceSection && value.section !== fixedSourceSection) {
@@ -355,15 +362,31 @@ function isSectionKicker(kicker, sectionId) {
 }
 
 function kickerEvidence(item, value) {
-  // Titles are often in Title Case, so a capital there proves nothing; Google
-  // News teasers repeat the title, so strip it from them too.
+  // A sentence-style source title can establish a mid-sentence proper name.
+  // A wholly Title Case title cannot: otherwise every generated label would
+  // preserve the model's title casing.
   const title = String(item.title || '').trim();
+  const titleWords = title.match(/\b\p{L}[\p{L}'’.-]*\b/gu) || [];
+  const afterFirst = titleWords.slice(1).filter(word => /\p{L}/u.test(word));
+  const titleIsTitleCase = afterFirst.length >= 2
+    && afterFirst.every(word => /^\p{Lu}/u.test(word));
   const teasers = [item.description, ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : [])]
     .map(text => (title && typeof text === 'string' ? text.split(title).join(' ') : text));
   return [
+    ...(!titleIsTitleCase && title ? [title] : []),
     value.summary,
     ...teasers,
     item.article_content,
+    ...(item.outlet_versions || []).flatMap(version => [version && version.headline, version && version.description, version && version.text]),
+  ].filter(text => typeof text === 'string' && text.trim()).join('\n');
+}
+
+function kickerPrimaryEvidence(item, value) {
+  return [
+    item.title,
+    value.summary,
+    item.description,
+    ...(Array.isArray(item.merged_descriptions) ? item.merged_descriptions : []),
   ].filter(text => typeof text === 'string' && text.trim()).join('\n');
 }
 
@@ -371,7 +394,8 @@ function kickerEvidence(item, value) {
 function acronymForm(word, evidence) {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = evidence.match(new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'giu'));
-  return (match || []).find(found => /^[A-Z0-9]{2,}$/.test(found)) || null;
+  return (match || []).find(found => /^[A-Z0-9]{2,}$/.test(found)
+    && capitalisedMidSentence(found, evidence)) || null;
 }
 
 function capitalisedMidSentence(word, evidence) {
@@ -384,7 +408,14 @@ function capitalisedMidSentence(word, evidence) {
   return false;
 }
 
-function sentenceCaseKicker(kicker, evidence) {
+function appearsLowerCase(word, evidence) {
+  const lower = word.toLocaleLowerCase('en-AU');
+  if (word === lower) return false;
+  const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'gu').test(evidence);
+}
+
+function sentenceCaseKicker(kicker, evidence, primaryEvidence) {
   return kicker.split(/(\s+)/).map((part, index, all) => {
     if (/^\s+$/.test(part)) return part;
     const wordIndex = all.slice(0, index).filter(value => value && !/^\s+$/.test(value)).length;
@@ -392,7 +423,13 @@ function sentenceCaseKicker(kicker, evidence) {
     const match = part.match(/^([^\p{L}\p{N}]*)([\p{L}\p{N}][\p{L}\p{N}'’.-]*)([^\p{L}\p{N}]*)$/u);
     if (!match) return part.toLocaleLowerCase('en-AU');
     const [, prefix, word, suffix] = match;
-    if (/^[A-Z0-9]{2,}$/.test(word) || capitalisedMidSentence(word, evidence)) return part;
+    // The story title, summary and teasers are the clearest casing signal. A
+    // lower-case use there beats a capitalised navigation heading or named
+    // report buried later in extracted page text ("beta" beats "BETA").
+    if (appearsLowerCase(word, primaryEvidence)) {
+      return `${prefix}${word.toLocaleLowerCase('en-AU')}${suffix}`;
+    }
+    if (capitalisedMidSentence(word, evidence)) return part;
     const acronym = acronymForm(word, evidence);
     if (acronym) return `${prefix}${acronym}${suffix}`;
     return `${prefix}${word.toLocaleLowerCase('en-AU')}${suffix}`;
@@ -407,16 +444,6 @@ function replacementKicker(item, value) {
     const text = candidate.trim();
     return !isSectionKicker(text, value.section) && !isBarePlaceName(text) && !META_KICKER.test(text);
   }) || '';
-}
-
-// Interest labels and outlet names are proper names; never re-case them.
-function namedKickers(item) {
-  return new Set([
-    ...(item.interest_matches || []).map(match => match.label),
-    item.source_name,
-    ...(item.sources || []).map(source => source.name),
-    'News',
-  ].filter(name => typeof name === 'string' && name));
 }
 
 function repairKicker(value, item, problems) {
@@ -435,9 +462,11 @@ function repairKicker(value, item, problems) {
     value.kicker = replacementKicker(item, value)
       || words(value.kicker).slice(0, 2).join(' ').replace(/[^\p{L}\p{N}]+$/u, '');
   }
-  if (!namedKickers(item).has(value.kicker)) {
-    value.kicker = sentenceCaseKicker(value.kicker, kickerEvidence(item, value));
-  }
+  value.kicker = sentenceCaseKicker(
+    value.kicker,
+    kickerEvidence(item, value),
+    kickerPrimaryEvidence(item, value)
+  );
 }
 
 function shortenSummary(summary) {
@@ -461,6 +490,7 @@ function validateWrite(raw, item, interests) {
     const value = fallbackWrite(item);
     const problems = ['Writer output was not valid JSON'];
     const sectionMoved = enforceSectionRequirements(value, item, interests, problems);
+    repairKicker(value, item, problems);
     return sectionMoved ? { ok: false, value, problems, sectionMoved } : { ok: false, value, problems };
   }
 

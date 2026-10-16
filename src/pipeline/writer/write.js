@@ -238,6 +238,22 @@ function applyMissingTextFallback(validation, item) {
   }
 }
 
+function gamingTitleFallback(title) {
+  const text = String(title || '').trim().replace(/[.!?]+$/u, '');
+  const roster = text.match(/^(.+?)\s+joins\s+(.+)$/i);
+  if (roster) return `${roster[1]} has joined ${roster[2]}.`;
+  const update = text.match(/^Dota\s+2\s+Update\s+for\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/i);
+  if (update) return `Valve released a Dota 2 update on ${Number(update[2])} ${update[1]} ${update[3]}.`;
+  return text ? `${text}.` : '';
+}
+
+function stripCommentOnlySentences(summary) {
+  return String(summary || '').split(/(?<=[.!?])\s+/u)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence && !/\bcomments?\b.*\b(?:unrelated|off[ -]?topic|varied)\b/i.test(sentence))
+    .join(' ');
+}
+
 function writtenContentWords(story) {
   const sourceTeasers = [story.title, story.description, ...(Array.isArray(story.merged_descriptions) ? story.merged_descriptions : [])];
   return new Set(tokenize([story.headline, story.summary, ...sourceTeasers].filter(Boolean).join(' ')).map(word => (
@@ -410,7 +426,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
           validation.problems = ['page-description retry still described the page'];
         }
       }
-      if (validation.ok && (validation.value.is_news || overrideNotNews)
+      if (validation.ok && (validation.value.is_news || overrideNotNews || protectedGaming)
         && (validation.missingTextFields || []).length > 0) {
         if (!headlineOnly) {
           try {
@@ -426,8 +442,14 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
           }
         }
         if (missingTextFields(validation.value).length > 0) {
-          validation.value.is_news = false;
-          validation.problems = ['page-description retry still described unavailable source content'];
+          if (protectedGaming) {
+            validation.value.summary = gamingTitleFallback(item.title);
+            validation.value.is_news = true;
+            validation.problems = ['Summary replaced from the title after persistent meta writing'];
+          } else {
+            validation.value.is_news = false;
+            validation.problems = ['page-description retry still described unavailable source content'];
+          }
         } else {
           // The same retry path also handles an unrelated very-short summary;
           // unlike page-description prose, that can safely fall back to a real
@@ -467,6 +489,11 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
           validation.problems.push(`Headline retry failed: ${error.message}`);
         }
       }
+      validation.value.summary = stripCommentOnlySentences(validation.value.summary);
+      if (protectedGaming && !validation.value.summary) {
+        validation.value.summary = gamingTitleFallback(item.title);
+        validation.problems.push('Summary replaced from the title after comment-only writing');
+      }
       stats.facts_removed += validation.facts_removed || 0;
       stats.numbers_unsupported += validation.numbers_unsupported || 0;
       if (isCommunityHelpRequest(item) && validation.value.is_news) {
@@ -489,7 +516,7 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
           validation.problems.push(`not news: ${sportReason}`);
         }
       }
-      if (validation.value.is_news && isLowTextHeadlineEcho(item, validation.value)) {
+      if (validation.value.is_news && !protectedGaming && isLowTextHeadlineEcho(item, validation.value)) {
         validation.value.is_news = false;
         validation.problems.push('not news: nothing beyond the headline');
       }
