@@ -2503,6 +2503,13 @@ main {
     padding-left: 0;
   }
 
+  /* A 16:9 picture across three columns stands ~600px tall and leaves the
+     stories beside it short; a cropped band keeps the lead level with them. */
+  .reading-section--top .reading-story--lead .reading-story-picture {
+    aspect-ratio: auto;
+    height: clamp(260px, 34vh, 400px);
+  }
+
   .reading-section--top .reading-story--lead .reading-story-title {
     font-size: clamp(30px, 3.2vw, 46px);
     line-height: 1.08;
