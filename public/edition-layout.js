@@ -21,8 +21,9 @@
   function layoutForWidth(value) {
     var width = finiteWidth(value);
     var columns = width >= 1900 ? 5 : width >= 1360 ? 4 : width >= 1024 ? 3 : width >= 700 ? 2 : 1;
+    // From 1024 px the paper runs to the window edge; its margin is padding inside it.
     var sideMargin = width >= 1024
-      ? Math.min(56, Math.max(40, width * 0.03))
+      ? 0
       : width >= 700
         ? Math.max(0, (width - 820) / 2)
         : 0;
@@ -201,6 +202,15 @@
     };
   }
 
+  // Columns beside the front-page lead. Stories pair up down each column, so four
+  // stories take two columns, never three with one left empty; the lead takes the rest.
+  function topSplit(columns, restCount) {
+    var total = Math.max(1, Math.floor(Number(columns) || 1));
+    if (total < 3) return { leadSpan: total, restColumns: 1 };
+    var rest = Math.max(1, Math.min(total - 2, Math.ceil((Number(restCount) || 0) / 2)));
+    return { leadSpan: total - rest, restColumns: rest };
+  }
+
   return Object.freeze({
     balanceColumnHeights: balanceColumnHeights,
     frontPagePictureIndex: frontPagePictureIndex,
@@ -208,6 +218,7 @@
     planSectionBands: planSectionBands,
     prepareToldPanel: prepareToldPanel,
     readerImageUrls: readerImageUrls,
-    storyImageUrl: storyImageUrl
+    storyImageUrl: storyImageUrl,
+    topSplit: topSplit
   });
 });

@@ -940,7 +940,9 @@ function syncEditionLayout() {
   app.style.setProperty('--paper-side-margin', layout.sideMargin + 'px');
   app.style.setProperty('--reading-columns', String(layout.columns));
   app.style.setProperty('--reading-pair-columns', String(layout.pairedColumns));
-  app.style.setProperty('--reading-top-rest-columns', String(layout.topRemainderColumns));
+  var split = window.EditionLayout.topSplit(layout.columns, Number(app.dataset.topRest || 0));
+  app.style.setProperty('--reading-top-rest-columns', String(split.restColumns));
+  app.style.setProperty('--reading-lead-span', String(split.leadSpan));
 }
 
 async function loadBriefing(id) {
@@ -1058,6 +1060,9 @@ function renderReadingSection(group) {
       remainder.appendChild(renderReadingStory(item, false, false));
     });
     shownList.appendChild(remainder);
+    var appEl = $('#app');
+    if (appEl) appEl.dataset.topRest = String(group.shown.length - 1);
+    syncEditionLayout();
   } else {
     group.shown.forEach(function(item, index) {
       storyKey(item);

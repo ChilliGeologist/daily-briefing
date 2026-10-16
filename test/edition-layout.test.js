@@ -13,6 +13,7 @@ const {
   planSectionBands,
   prepareToldPanel,
   readerImageUrls,
+  topSplit,
 } = logic;
 
 function group(id, count) {
@@ -33,11 +34,11 @@ test('layoutForWidth implements phone, tablet and broadsheet column and margin r
     columns: 2, pairedColumns: 1, topRemainderColumns: 1,
   });
   assert.deepStrictEqual(layoutForWidth(1280), {
-    viewportWidth: 1280, paperWidth: 1200, sideMargin: 40,
+    viewportWidth: 1280, paperWidth: 1280, sideMargin: 0,
     columns: 3, pairedColumns: 2, topRemainderColumns: 1,
   });
   assert.deepStrictEqual(layoutForWidth(1920), {
-    viewportWidth: 1920, paperWidth: 1808, sideMargin: 56,
+    viewportWidth: 1920, paperWidth: 1920, sideMargin: 0,
     columns: 5, pairedColumns: 3, topRemainderColumns: 3,
   });
 });
@@ -48,13 +49,22 @@ test('layoutForWidth changes to four columns at 1360 and five at 1900', () => {
     columns: 2, pairedColumns: 1, topRemainderColumns: 1,
   });
   assert.deepStrictEqual(layoutForWidth(1024), {
-    viewportWidth: 1024, paperWidth: 944, sideMargin: 40,
+    viewportWidth: 1024, paperWidth: 1024, sideMargin: 0,
     columns: 3, pairedColumns: 2, topRemainderColumns: 1,
   });
   assert.strictEqual(layoutForWidth(1359).columns, 3);
   assert.strictEqual(layoutForWidth(1360).columns, 4);
   assert.strictEqual(layoutForWidth(1899).columns, 4);
   assert.strictEqual(layoutForWidth(1900).columns, 5);
+});
+
+test('topSplit never leaves a column beside the lead empty', () => {
+  assert.deepStrictEqual(topSplit(5, 4), { leadSpan: 3, restColumns: 2 });
+  assert.deepStrictEqual(topSplit(5, 6), { leadSpan: 2, restColumns: 3 });
+  assert.deepStrictEqual(topSplit(4, 4), { leadSpan: 2, restColumns: 2 });
+  assert.deepStrictEqual(topSplit(3, 4), { leadSpan: 2, restColumns: 1 });
+  assert.deepStrictEqual(topSplit(5, 1), { leadSpan: 4, restColumns: 1 });
+  assert.deepStrictEqual(topSplit(2, 4), { leadSpan: 2, restColumns: 1 });
 });
 
 test('planSectionBands pairs only consecutive ordinary sections with six or fewer stories', () => {
