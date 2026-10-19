@@ -1,6 +1,6 @@
 'use strict';
 
-const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain and quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain and quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
 
 const TOLD_SCHEMA = Object.freeze({
   type: 'object',
@@ -66,16 +66,77 @@ function quoteComparable(text) {
     .toLocaleLowerCase('en-AU');
 }
 
+const ATTRIBUTION = /\b(?:said|says|called|calls|told|according to|claimed|described\b.{0,30}\bas)\b/i;
+const TESTIMONY_ATTRIBUTION = /\b(?:court\s+(?:has\s+)?heard|the\s+court\s+was\s+told|told\s+the\s+court|jury\s+heard|the\s+jury\s+was\s+told|told\s+the\s+jury|gave\s+evidence|testified|alleges|alleged|allegedly|prosecutors?\s+(?:said|say|says)|according\s+to\s+the\s+prosecution)\b/i;
+const CLAIM_ATTRIBUTION = /\bclaims?\b/i;
+const CLAIM_NOUN = /\b(?:the|his|her|its|their|these|those|such)\s+claims?\b/i;
+const LEGAL_REPORT = /\b(?:accus(?:e[ds]?|ed|ation)|charg(?:e[ds]?|ed)|alleg(?:e[ds]?|ed|edly|ation)|pleads?|verdict|denies|denied|found guilty|sentenced)\b/i;
+const LOADED_WORD = /\b(?:shock(?:ing)?|slams?|rage|disgraced|hero(?:ic)?|brave|cruel|reprehensible|despicable|betrayal|chaos|outrage(?:ous)?|humiliat(?:e[ds]?|ing)|coward(?:ly)?|evil|brutal)\b/i;
+
+function wordCount(text) {
+  return (String(text).match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []).length;
+}
+
+function replaceStraightSingleQuotes(text) {
+  const source = String(text);
+  let output = '';
+  let cursor = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] !== "'" || (index > 0 && /[\p{L}\p{N}]/u.test(source[index - 1]))) continue;
+    for (let closing = index + 1; closing < source.length; closing += 1) {
+      if (source[closing] !== "'" || (closing + 1 < source.length && /[\p{L}\p{N}]/u.test(source[closing + 1]))) continue;
+      if (wordCount(source.slice(index + 1, closing)) < 3) break;
+      output += `${source.slice(cursor, index)}[quote]`;
+      cursor = closing + 1;
+      index = closing;
+      break;
+    }
+  }
+  return output + source.slice(cursor);
+}
+
+function stripQuotedPassages(text) {
+  const stripped = String(text || '')
+    .replace(/"[^"]*"/gu, '[quote]')
+    .replace(/“[^”]*”/gu, '[quote]')
+    .replace(/‘([^’]*)’/gu, (match, words) => (wordCount(words) >= 3 ? '[quote]' : match));
+  return replaceStraightSingleQuotes(stripped);
+}
+
+function sentences(text) {
+  return String(text || '')
+    .split(/(?<=[.!?])(?:\s+|(?=["“‘]*[A-Z]))|\n+/u)
+    .map(sentence => sentence.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function isAttributedSentence(sentence) {
+  return ATTRIBUTION.test(sentence)
+    || TESTIMONY_ATTRIBUTION.test(sentence)
+    || (CLAIM_ATTRIBUTION.test(sentence) && !CLAIM_NOUN.test(sentence));
+}
+
+function outletOwnWords(version) {
+  const headline = stripQuotedPassages(version && version.headline).replace(/\s+/g, ' ').trim();
+  const text = String(version && version.text || '').trim();
+  const source = text || String(version && version.description || '').trim();
+  const opening = sentences(stripQuotedPassages(source))
+    .filter(sentence => !isAttributedSentence(sentence))
+    .slice(0, 2)
+    .join(' ');
+  return { headline, opening };
+}
+
 function outletWords(version) {
-  return `${version.headline || ''}\n${version.description || ''}\n${version.text || ''}`;
+  const { headline, opening } = outletOwnWords(version);
+  return `${headline}\n${opening}`;
 }
 
 function quoteSentence(version, quote) {
   const comparable = quoteComparable(quote);
-  for (const field of ['headline', 'description', 'text']) {
-    const text = String(version[field] || '');
-    const sentences = text.split(/(?<=[.!?])(?:\s+|(?=["“‘]*[A-Z]))|\n+/u);
-    const found = sentences.find(sentence => quoteComparable(sentence).includes(comparable));
+  const ownWords = outletOwnWords(version);
+  for (const field of ['headline', 'opening']) {
+    const found = sentences(ownWords[field]).find(sentence => quoteComparable(sentence).includes(comparable));
     if (found) return found;
   }
   return '';
@@ -95,19 +156,10 @@ function quoteIsInsideQuotation(sentence, quote) {
   });
 }
 
-const ATTRIBUTION = /\b(?:said|says|called|calls|told|according to|claimed|described\b.{0,30}\bas)\b/i;
-const TESTIMONY_ATTRIBUTION = /\b(?:court\s+(?:has\s+)?heard|the\s+court\s+was\s+told|told\s+the\s+court|jury\s+heard|the\s+jury\s+was\s+told|told\s+the\s+jury|gave\s+evidence|testified|alleges|alleged|allegedly|prosecutors?\s+(?:said|say|says)|according\s+to\s+the\s+prosecution)\b/i;
-const CLAIM_ATTRIBUTION = /\bclaims?\b/i;
-const CLAIM_NOUN = /\b(?:the|his|her|its|their|these|those|such)\s+claims?\b/i;
-const LEGAL_REPORT = /\b(?:accus(?:e[ds]?|ed|ation)|charg(?:e[ds]?|ed)|alleg(?:e[ds]?|ed|edly|ation)|pleads?|verdict|denies|denied|found guilty|sentenced)\b/i;
-const LOADED_WORD = /\b(?:shock(?:ing)?|slams?|rage|disgraced|hero(?:ic)?|brave|cruel|reprehensible|despicable|betrayal|chaos|outrage(?:ous)?|humiliat(?:e[ds]?|ing)|coward(?:ly)?|evil|brutal)\b/i;
-
 function validatedStance(version, stance, quote) {
   const sentence = quoteSentence(version, quote);
   if (!sentence) return null;
-  if (quoteIsInsideQuotation(sentence, quote) || ATTRIBUTION.test(sentence)
-    || TESTIMONY_ATTRIBUTION.test(sentence)
-    || (CLAIM_ATTRIBUTION.test(sentence) && !CLAIM_NOUN.test(sentence))) return null;
+  if (quoteIsInsideQuotation(sentence, quote) || isAttributedSentence(sentence)) return null;
   if (stance !== 'plain' && LEGAL_REPORT.test(quote) && !LOADED_WORD.test(quote)) return 'plain';
   return stance;
 }
@@ -154,11 +206,10 @@ function buildTold(versions, raw) {
 function toldUserPrompt(story, versions) {
   const lines = [`STORY: ${story.headline || story.title || ''}`];
   versions.forEach((version, index) => {
-    const excerpt = version.text.split(/\s+/).filter(Boolean).slice(0, 250).join(' ');
+    const { headline, opening } = outletOwnWords(version);
     lines.push(`\nOUTLET ${index + 1}: ${version.name}`);
-    lines.push(`HEADLINE: ${version.headline}`);
-    lines.push(`DESCRIPTION: ${version.description}`);
-    lines.push(`TEXT: ${excerpt}`);
+    lines.push(`HEADLINE: ${headline}`);
+    lines.push(`OPENING: ${opening}`);
   });
   return lines.join('\n');
 }
@@ -190,6 +241,7 @@ module.exports = {
   TOLD_SYSTEM_PROMPT,
   TOLD_SCHEMA,
   distinctNonRedditVersions,
+  outletOwnWords,
   buildTold,
   toldUserPrompt,
   addToldToStories,
