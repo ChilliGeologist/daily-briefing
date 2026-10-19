@@ -146,6 +146,11 @@ function createSettings(db) {
       return db.getSetting('writer_ollama_model') || this.getOllamaModel();
     },
 
+    getWriterNumThread() {
+      const val = db.getSetting('writer_num_thread');
+      return val !== null ? Number(val) : 4;
+    },
+
     getToldOllamaModel() {
       return db.getSetting('told_ollama_model') || this.getWriterOllamaModel();
     },

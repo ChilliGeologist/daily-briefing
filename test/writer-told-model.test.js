@@ -18,6 +18,7 @@ function settings(overrides = {}) {
   return {
     getOllamaUrl: () => 'http://ollama:11434',
     getWriterOllamaModel: () => 'writer-model',
+    getWriterNumThread: () => 4,
     getToldOllamaModel: () => 'told-model',
     getToldNumThread: () => 4,
     getOllamaNumCtx: () => 8192,
@@ -58,6 +59,9 @@ it('falls back once to the writer model after a told-model failure', async () =>
     const body = JSON.parse(options.body);
     calls.push(body);
     if (body.model === 'told-model') return response(null, { ok: false, status: 404, text: 'model missing' });
+    if (/^Outlet:/m.test(body.messages[1].content)) {
+      return response({ message: { content: JSON.stringify({ a: 'yes', b: 'yes', c: 'against' }) } });
+    }
     return response({ message: { content: JSON.stringify({ subjects: [{
       name: 'Leader',
       kind: 'person',
@@ -80,7 +84,8 @@ it('falls back once to the writer model after a told-model failure', async () =>
 
   await addToldToStories([story], toldWriter, writer, log);
 
-  assert.deepStrictEqual(calls.map(call => call.model), ['told-model', 'writer-model']);
+  assert.deepStrictEqual(calls.map(call => call.model), ['told-model', 'writer-model', 'writer-model']);
+  assert.strictEqual(calls[2].options.num_predict, 80);
   assert.strictEqual(warnings.length, 1);
   assert.match(warnings[0][1], /retrying with writer model/i);
   assert.strictEqual(story.told.differs, true);

@@ -4,12 +4,20 @@ const { DEFAULT_INTERESTS, interestScore, matchInterests } = require('./interest
 const { guardFacts } = require('./facts');
 const { communityReplies, isCommunityItem } = require('./prompts');
 const {
+  AUSTRALIAN_PLACES,
+  SHARED_AUSTRALIAN_PLACES,
   hasAnyAustralianEvidence,
   hasAustralianOnlyPlace,
   hasOverseasOnlyEvidence,
   isBarePlaceName,
 } = require('./australian-places');
-const { isTasmanianSource, matchTasmanianPlaces } = require('./tasmanian-places');
+const {
+  TASMANIAN_COMPANIONS,
+  TASMANIAN_PLACES,
+  isTasmanianSource,
+  matchTasmanianPlaces,
+} = require('./tasmanian-places');
+const { FOREIGN_CITIES, FOREIGN_COUNTRIES } = require('./foreign-places');
 const {
   SECTIONS,
   SECTION_BY_INTEREST_KIND,
@@ -35,6 +43,34 @@ const NO_FACTUAL_NEWS = /\bno\s+factual\s+news\s+(?:details?|information)\s+(?:w
 const META_REFERENCE = /\b(?:this\s+(?:story|article|post|text|page)|the\s+(?:provided|supplied)\s+(?:text|content))\b/i;
 const META_KICKER = /^(?:headline mystery|no story|no details|subscription wall|paywall|login page|cookie notice)$/i;
 const HEADLINE_LABEL = /^\s*(?:(?:listen|watch|live|revealed|exclusive|video|photos):\s*)+/i;
+const COMPASS_REGION_NAMES = Object.freeze([
+  'Middle East', 'East Africa', 'West Africa', 'North Africa', 'South America',
+  'Latin America', 'Southeast Asia', 'East Asia', 'Asia-Pacific', 'Pacific',
+  'Gulf', 'Balkans', 'Caribbean', 'Scandinavia',
+]);
+const PROTECTED_KICKER_NAMES = Object.freeze([...new Set([
+  ...COMPASS_REGION_NAMES,
+  ...TASMANIAN_PLACES,
+  ...TASMANIAN_COMPANIONS,
+  ...AUSTRALIAN_PLACES,
+  ...SHARED_AUSTRALIAN_PLACES,
+  ...FOREIGN_COUNTRIES.flatMap(entry => entry.split('|')),
+  ...FOREIGN_CITIES,
+])].sort((left, right) => right.length - left.length));
+const PROTECTED_KICKER_CASE = new Map();
+for (const name of PROTECTED_KICKER_NAMES) {
+  const key = name.toLocaleLowerCase('en-AU');
+  const current = PROTECTED_KICKER_CASE.get(key);
+  if (!current || (/^[A-Z0-9.]+$/.test(name) && !/^[A-Z0-9.]+$/.test(current))) {
+    PROTECTED_KICKER_CASE.set(key, name);
+  }
+}
+const PROTECTED_KICKER_PATTERN = new RegExp(
+  `(?<![\\p{L}\\p{N}_])(?:${PROTECTED_KICKER_NAMES
+    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})(?![\\p{L}\\p{N}_])`,
+  'giu'
+);
 
 function parseObject(raw) {
   if (typeof raw === 'string') {
@@ -85,6 +121,7 @@ function isCommunityHelpRequest(item) {
   // Personal setup/buying help is not edition material, however popular the
   // thread becomes. General questions to the community ("Do you patch…?")
   // remain eligible.
+  if (/^(?:how to |how do you |how can i )/i.test(title)) return true;
   if (/\b(?:can you|how do i|how can i|how can|what(?:'|’)s next|what next|should i|any advice|need advice|help with|help me|is it worth)\b/i.test(title)) return true;
   if (/\bwhich\b.+\bshould\b/i.test(title) || /\brecommendations?\s*\?\s*$/i.test(title)) return true;
   if (/^(?:my\b|i\b).+\?\s*$/i.test(title)) return true;
@@ -417,8 +454,15 @@ function appearsLowerCase(word, evidence) {
   return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'gu').test(evidence);
 }
 
+function restorePlaceCasing(kicker) {
+  PROTECTED_KICKER_PATTERN.lastIndex = 0;
+  return kicker.replace(PROTECTED_KICKER_PATTERN, match => (
+    PROTECTED_KICKER_CASE.get(match.toLocaleLowerCase('en-AU')) || match
+  ));
+}
+
 function sentenceCaseKicker(kicker, evidence, primaryEvidence) {
-  return kicker.split(/(\s+)/).map((part, index, all) => {
+  const sentenceCased = kicker.split(/(\s+)/).map((part, index, all) => {
     if (/^\s+$/.test(part)) return part;
     const wordIndex = all.slice(0, index).filter(value => value && !/^\s+$/.test(value)).length;
     if (wordIndex === 0) return part;
@@ -436,6 +480,7 @@ function sentenceCaseKicker(kicker, evidence, primaryEvidence) {
     if (acronym) return `${prefix}${acronym}${suffix}`;
     return `${prefix}${word.toLocaleLowerCase('en-AU')}${suffix}`;
   }).join('');
+  return restorePlaceCasing(sentenceCased);
 }
 
 // An interest label, or no kicker at all: an outlet name ("ABC Tasmania" on a

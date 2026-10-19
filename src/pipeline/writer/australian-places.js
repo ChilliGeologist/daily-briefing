@@ -72,6 +72,8 @@ function isBarePlaceName(value) {
 }
 
 module.exports = {
+  AUSTRALIAN_PLACES,
+  SHARED_AUSTRALIAN_PLACES,
   hasAnyAustralianEvidence,
   hasAustralianOnlyPlace,
   hasOverseasOnlyEvidence,

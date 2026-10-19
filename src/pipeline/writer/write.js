@@ -108,6 +108,7 @@ function preWriteDropReason(item, { ignorePhoto = false } = {}) {
   const url = String(item.canonical_url || item.url || '');
   const sourceNames = [item.source_name, ...(item.sources || []).map(source => source && source.name)]
     .filter(Boolean).join('\n');
+  if (/^live:/i.test(title.trim())) return 'live blog';
   const isGuardian = /(?:^|\.)theguardian\.com$/i.test((() => {
     try { return new URL(url).hostname; } catch (_) { return ''; }
   })()) || /\bGuardian\b/i.test(sourceNames);

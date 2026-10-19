@@ -79,8 +79,8 @@ function createOllamaWriter({
       const bytes = Buffer.from(await image.arrayBuffer());
       return call(system, user, schema, 700, [bytes.toString('base64')]);
     },
-    tell(system, user, schema) {
-      return call(system, user, schema, 1200);
+    tell(system, user, schema, numPredict = 1200) {
+      return call(system, user, schema, numPredict);
     },
     edit(system, user, schema) {
       return call(system, user, schema, 1500);

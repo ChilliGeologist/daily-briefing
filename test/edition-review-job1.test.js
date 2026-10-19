@@ -376,20 +376,21 @@ describe('Job 1 task 7 — how it was told', () => {
     });
   });
 
-  it('makes one extra call for two non-Reddit outlets and preserves told in briefing data', async () => {
+  it('makes the told call and one stance verification, then preserves told in briefing data', async () => {
     const { addToldToStories } = toldModule();
     const calls = [];
     const story = { id: 's1', headline: 'Steele-John takes leave', title: 'Steele-John takes leave', summary: 'Complaints are under review.', kicker: 'Politics', section: 'australia', coverage: 2, outlet_versions: versions, sources: versions.map(({ name, url }) => ({ name, url })) };
     const output = await addToldToStories([story], {
       async tell(...args) {
         calls.push(args);
+        if (calls.length === 2) return { json: { a: 'yes', b: 'yes', c: 'against' } };
         return { json: { subjects: [{ name: 'Jordon Steele-John', kind: 'person', stances: [
           { outlet: 'The Guardian AU', stance: 'plain', quote: 'rejected the claims' },
           { outlet: 'News.com.au', stance: 'against', quote: 'Shock accusation' },
         ] }] } };
       },
     });
-    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls.length, 2);
     assert.deepStrictEqual(output[0].told, {
       outlets: versions.map(({ name, headline, url }) => ({ name, headline, url })),
       subjects: [{ name: 'Jordon Steele-John', kind: 'person', stances: [

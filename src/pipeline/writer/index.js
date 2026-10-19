@@ -32,9 +32,9 @@ function wrapWriter(writer) {
       if (typeof writer.vision !== 'function') return Promise.reject(new Error('Writer has no vision support'));
       return writer.vision(system, user, schema, imageUrl).then(record);
     },
-    tell(system, user, schema) {
+    tell(system, user, schema, numPredict) {
       const method = typeof writer.tell === 'function' ? writer.tell.bind(writer) : writer.write.bind(writer);
-      return method(system, user, schema).then(record);
+      return method(system, user, schema, numPredict).then(record);
     },
     edit(system, user, schema) {
       return writer.edit(system, user, schema).then(record);
@@ -53,6 +53,7 @@ function createWriter(settings, log, deps = {}) {
     url: settings.getOllamaUrl(),
     model: settings.getWriterOllamaModel(),
     numCtx: settings.getOllamaNumCtx(),
+    numThread: settings.getWriterNumThread(),
     fetchImpl: deps.fetchImpl,
     log,
   }));

@@ -1,6 +1,19 @@
 'use strict';
 
-const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain. For toward or against, quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default and its quote may be empty or omitted. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against. Subjects must be a person, political party, organisation, government or a cause people argue for or against, never an event, accident, disaster, animal, object or crowd. For every outlet classify its stance as toward, against or plain. For toward or against, quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default and its quote may be empty or omitted. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+
+const TOLD_VERIFY_SYSTEM_PROMPT = 'Verify one proposed outlet stance. Answer each field exactly as requested.';
+const TOLD_VERIFY_NUM_PREDICT = 80;
+const TOLD_VERIFY_SCHEMA = Object.freeze({
+  type: 'object',
+  additionalProperties: false,
+  required: ['a', 'b', 'c'],
+  properties: {
+    a: { type: 'string', enum: ['yes', 'no'] },
+    b: { type: 'string', enum: ['yes', 'no'] },
+    c: { type: 'string', enum: ['toward', 'against'] },
+  },
+});
 
 const TOLD_SCHEMA = Object.freeze({
   type: 'object',
@@ -222,6 +235,71 @@ function toldUserPrompt(story, versions) {
   return lines.join('\n');
 }
 
+function toldVerificationPrompt(version, subject, stance) {
+  const { headline, opening } = outletOwnWords(version);
+  const ownWords = `${headline}\n${opening}`.trim();
+  const separator = /[.!?]$/u.test(ownWords) ? ' ' : '. ';
+  return `Outlet: ${version.name}. Its own words: ${ownWords}${separator}Phrase: "${stance.quote}". Subject: ${subject.name}.\n`
+    + `a) Is ${subject.name} a person, political party, organisation, government, or a cause people argue for or against? Not an event, accident, disaster, animal, object or crowd. (yes/no)\n`
+    + `b) In this phrase is the outlet itself expressing a view about ${subject.name}, through its own word choice, rather than describing someone else's position or plainly reporting what happened? (yes/no)\n`
+    + 'c) If yes, which way: toward or against?';
+}
+
+function answerValue(value) {
+  return String(value || '').trim().toLocaleLowerCase('en-AU');
+}
+
+async function verifyTold(told, versions, writer, log, title) {
+  if (!told.subjects || told.subjects.length === 0) return told;
+  const cleanVersions = distinctNonRedditVersions({ outlet_versions: versions });
+  const byName = new Map(cleanVersions.map(version => [version.name.toLocaleLowerCase('en-AU'), version]));
+  const keptSubjects = [];
+
+  for (const subject of told.subjects) {
+    let dropSubject = false;
+    const checkedStances = [];
+    for (const stance of subject.stances) {
+      if (stance.stance === 'plain') {
+        checkedStances.push(stance);
+        continue;
+      }
+      const version = byName.get(stance.outlet.toLocaleLowerCase('en-AU'));
+      let answer = null;
+      try {
+        const response = await writer.tell(
+          TOLD_VERIFY_SYSTEM_PROMPT,
+          toldVerificationPrompt(version, subject, stance),
+          TOLD_VERIFY_SCHEMA,
+          TOLD_VERIFY_NUM_PREDICT
+        );
+        answer = response && response.json;
+      } catch (error) {
+        if (log && log.warn) {
+          log.warn('pipeline:writer', `How-it-was-told verification failed for "${title}" (${stance.outlet}, ${subject.name}), using plain: ${error.message}`);
+        }
+      }
+
+      const subjectAllowed = answerValue(answer && answer.a);
+      const outletView = answerValue(answer && answer.b);
+      const direction = answerValue(answer && answer.c);
+      if (subjectAllowed === 'no') dropSubject = true;
+      if (subjectAllowed === 'yes' && outletView === 'yes' && direction === stance.stance) {
+        checkedStances.push(stance);
+      } else {
+        checkedStances.push({ outlet: stance.outlet, stance: 'plain', quote: '' });
+      }
+    }
+    if (!dropSubject) keptSubjects.push({ ...subject, stances: checkedStances });
+  }
+
+  if (keptSubjects.length === 0) return { outlets: told.outlets };
+  return {
+    outlets: told.outlets,
+    subjects: keptSubjects,
+    differs: keptSubjects.some(subject => new Set(subject.stances.map(stance => stance.stance)).size > 1),
+  };
+}
+
 async function addToldToStories(stories, toldWriter, fallbackWriter, log) {
   // Preserve the former (stories, writer, log) call shape for callers that do
   // not supply a fallback writer.
@@ -238,11 +316,12 @@ async function addToldToStories(stories, toldWriter, fallbackWriter, log) {
       const entry = eligible[cursor++];
       if (!entry) return;
       const { story, versions } = entry;
+      const title = story.title || story.headline || 'untitled story';
       try {
         const response = await toldWriter.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
-        story.told = buildTold(versions, response && response.json);
+        const told = buildTold(versions, response && response.json);
+        story.told = await verifyTold(told, versions, toldWriter, log, title);
       } catch (error) {
-        const title = story.title || story.headline || 'untitled story';
         if (!fallbackWriter || typeof fallbackWriter.tell !== 'function') {
           story.told = buildTold(versions, null);
           if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${title}", using outlets only: ${error.message}`);
@@ -251,7 +330,8 @@ async function addToldToStories(stories, toldWriter, fallbackWriter, log) {
         if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${title}", retrying with writer model: ${error.message}`);
         try {
           const response = await fallbackWriter.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
-          story.told = buildTold(versions, response && response.json);
+          const told = buildTold(versions, response && response.json);
+          story.told = await verifyTold(told, versions, fallbackWriter, log, title);
         } catch (fallbackError) {
           story.told = buildTold(versions, null);
           if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told writer fallback failed for "${title}", using outlets only: ${fallbackError.message}`);
@@ -267,9 +347,14 @@ async function addToldToStories(stories, toldWriter, fallbackWriter, log) {
 module.exports = {
   TOLD_SYSTEM_PROMPT,
   TOLD_SCHEMA,
+  TOLD_VERIFY_SYSTEM_PROMPT,
+  TOLD_VERIFY_SCHEMA,
+  TOLD_VERIFY_NUM_PREDICT,
   distinctNonRedditVersions,
   outletOwnWords,
   buildTold,
   toldUserPrompt,
+  toldVerificationPrompt,
+  verifyTold,
   addToldToStories,
 };
