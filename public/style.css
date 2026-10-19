@@ -2216,8 +2216,14 @@ main {
 
 .told-scale {
   position: relative;
-  height: 58px;
+  height: 40px;
   margin: 6px 16px 0;
+}
+
+/* Room for the second row of outlet names only when names had to stagger,
+   so the Against / Plain / For labels sit just under a single row. */
+.told-scale:has(.told-scale-dot-label--staggered) {
+  height: 58px;
 }
 
 .told-scale-track {
