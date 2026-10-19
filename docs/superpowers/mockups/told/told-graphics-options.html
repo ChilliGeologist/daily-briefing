@@ -1,0 +1,288 @@
+<title>How It Was Told Graphics</title>
+<style>
+/* Layout: one reading column; each option is a sheet of the app's Paper page with the full panel and its front-page form. */
+:root {
+  --page: #f7f3ea; --sheet: #fbf8f1; --ink: #1d1a16; --soft: #57514a; --quiet: #8a8174;
+  --rule: #d6cfc0; --rust: #9a3412;
+  --against: #b4472a; --plain: #8a8174; --toward: #2f6f5e;
+  --tint: #efe8d9;
+  --serif: Georgia, "Times New Roman", Times, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #211e1a; --sheet: #28231e; --ink: #f4ede3; --soft: #d2c7b9; --quiet: #b3a697;
+    --rule: #5b5147; --rust: #ee936b; --against: #ee936b; --plain: #b3a697; --toward: #7fc4ad;
+    --tint: #332d26; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #211e1a; --sheet: #28231e; --ink: #f4ede3; --soft: #d2c7b9; --quiet: #b3a697;
+  --rule: #5b5147; --rust: #ee936b; --against: #ee936b; --plain: #b3a697; --toward: #7fc4ad;
+  --tint: #332d26; color-scheme: dark;
+}
+body { background: var(--page); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 80px; }
+.masthead { border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); text-align: center; padding-block: 12px 8px; margin-bottom: 22px; }
+.masthead h1 { margin: 0; font-size: clamp(28px, 5.5vw, 44px); line-height: 1.1; text-wrap: balance; }
+.dateline { font-family: var(--sans); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--quiet); margin-top: 4px; }
+p { max-width: 66ch; }
+.label { font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--rust); }
+h2 { font-size: 26px; margin: 4px 0 6px; line-height: 1.2; }
+.option { margin-top: 44px; }
+.note { font-family: var(--sans); font-size: 14px; color: var(--soft); max-width: 66ch; }
+.sheet { background: var(--sheet); border: 1px solid var(--rule); padding: 20px; margin: 14px 0 10px; }
+.kicker { font-family: var(--sans); font-size: 10.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--quiet); }
+.sheet h3 { font-size: 22px; line-height: 1.22; margin: 3px 0 6px; text-wrap: balance; }
+.sum { color: var(--soft); font-size: 15px; margin: 0 0 16px; }
+.panel { border-top: 1px solid var(--ink); padding-top: 12px; }
+.panel-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-family: var(--sans); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; color: var(--rust); margin-bottom: 12px; }
+.panel-head span { color: var(--quiet); font-weight: 400; letter-spacing: .3px; text-transform: none; font-size: 12px; }
+.subject { margin: 0 0 18px; }
+.subject-name { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+.quote-box { font-family: var(--serif); font-size: 15px; background: var(--tint); padding: 10px 12px; margin-top: 8px; min-height: 2.6em; }
+.quote-box b { font-family: var(--sans); font-size: 12px; letter-spacing: .3px; }
+.quote-box .q::before { content: "\201C"; } .quote-box .q::after { content: "\201D"; }
+.muted { color: var(--quiet); font-family: var(--sans); font-size: 13px; }
+.mini-wrap { display: grid; gap: 4px; padding: 14px 16px; background: var(--sheet); border: 1px dashed var(--rule); margin-top: 8px; }
+.mini-wrap .mini-label { font-family: var(--sans); font-size: 11px; color: var(--quiet); letter-spacing: 1px; text-transform: uppercase; }
+.mini-wrap h4 { margin: 0; font-size: 18px; line-height: 1.25; }
+
+/* A — scale */
+.scale { position: relative; height: 54px; margin: 6px 6px 2px; }
+.scale .track { position: absolute; left: 0; right: 0; top: 26px; height: 2px; background: var(--rule); }
+.scale .tick { position: absolute; top: 20px; width: 2px; height: 14px; background: var(--rule); }
+.dot { position: absolute; transform: translateX(-50%); border: 0; cursor: pointer; padding: 0; background: none; display: grid; justify-items: center; gap: 2px; }
+.dot i { display: block; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.dot span { font-family: var(--sans); font-size: 10px; color: var(--soft); white-space: nowrap; }
+.dot.a i { background: var(--against); } .dot.p i { background: var(--plain); } .dot.t i { background: var(--toward); }
+.dot:focus-visible i, .dot[aria-pressed="true"] i { box-shadow: 0 0 0 3px var(--ink); }
+.ends { display: flex; justify-content: space-between; font-family: var(--sans); font-size: 11px; color: var(--quiet); margin: 0 2px; }
+.ends .ag { color: var(--against); } .ends .tw { color: var(--toward); }
+
+/* B — split bar */
+.bar { display: flex; height: 30px; border-radius: 2px; overflow: hidden; }
+.bar button { border: 0; cursor: pointer; color: #fff; font-family: var(--sans); font-size: 12px; font-weight: 600; display: grid; place-items: center; min-width: 0; padding: 0 4px; }
+.bar .a { background: var(--against); } .bar .p { background: var(--plain); } .bar .t { background: var(--toward); }
+.bar button:focus-visible, .bar button[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: -3px; }
+.bar-names { display: flex; font-family: var(--sans); font-size: 11px; color: var(--soft); margin-top: 4px; }
+.bar-names div { min-width: 0; padding-right: 6px; overflow-wrap: anywhere; }
+
+/* C — grid */
+.grid-wrap { overflow-x: auto; }
+table.leans { border-collapse: collapse; width: 100%; font-family: var(--sans); font-size: 13px; min-width: 420px; }
+.leans th { text-align: left; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--quiet); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--ink); }
+.leans td { padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.leans td:first-child { font-weight: 600; white-space: nowrap; }
+.leans tr.sel td { background: var(--tint); }
+.leans tr { cursor: pointer; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.chip svg { width: 22px; height: 14px; flex: none; }
+.chip.a { color: var(--against); } .chip.p { color: var(--plain); } .chip.t { color: var(--toward); }
+.leans .hl { font-family: var(--serif); font-size: 14px; color: var(--soft); }
+
+/* front-page minis */
+.mini-scale { position: relative; height: 14px; width: 140px; }
+.mini-scale .track { position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--rule); }
+.mini-scale i { position: absolute; top: 2px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); border: 1.5px solid var(--sheet); }
+.mini-bar { display: flex; height: 6px; width: 140px; border-radius: 1px; overflow: hidden; }
+.mini-bar i { display: block; height: 100%; }
+.mini-row { display: flex; align-items: center; gap: 10px; font-family: var(--sans); font-size: 11px; color: var(--quiet); }
+.mini-glyphs { display: inline-flex; gap: 3px; }
+.mini-glyphs svg { width: 14px; height: 10px; }
+
+.choose { margin-top: 48px; border-top: 3px double var(--ink); padding-top: 16px; }
+.choose ol { padding-left: 20px; }
+.choose li { margin-bottom: 6px; max-width: 66ch; }
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .sheet { padding: 14px; }
+  .dot span { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <h1>Which way it leans</h1>
+    <div class="dateline">Three ways to draw it · on a real story from 16 October</div>
+  </header>
+
+  <p>Each option shows the same story with the same judgements. The full panel sits inside the article, under the summary; under it is the small version for the front page. <b>Tap any dot, bar or row</b> to see the words that put an outlet there.</p>
+  <p class="note">The judgements here are the real ones the current model made. Six of the eight outlets were judged; the BBC and AP had no quote for Trump that passed the checks, so they're left off. SMH and The Age share one story, so they sit together.</p>
+
+  <!-- ================= A ================= -->
+  <section class="option" id="a">
+    <div class="label">Option A</div>
+    <h2>The scale</h2>
+    <p class="note">One line per person or party, from "against" through "plain" to "for". Each outlet is a dot placed where its words put it. Outlets that agree bunch together, so a split shows at a glance.</p>
+
+    <div class="sheet">
+      <div class="kicker">Military execution</div>
+      <h3>Donald Trump cancels plan to livestream execution after international backlash</h3>
+      <p class="sum">Donald Trump cancelled plans to livestream the firing squad execution of Nidal Hasan following widespread international and domestic opposition.</p>
+      <div class="panel" data-group="a">
+        <div class="panel-head">How it was told <span>8 outlets</span></div>
+
+        <div class="subject">
+          <div class="subject-name">Donald Trump</div>
+          <div class="scale" role="group" aria-label="Where each outlet sits on Donald Trump">
+            <div class="track"></div>
+            <div class="tick" style="left:0"></div><div class="tick" style="left:calc(50% - 1px)"></div><div class="tick" style="right:0"></div>
+            <button class="dot a" style="left:10%;top:0" data-q="7NEWS|against|Trump backflips on planned livestream of Fort Hood gunman’s execution"><i></i><span>7NEWS</span></button>
+            <button class="dot a" style="left:24%;top:0" data-q="SMH, The Age|against|Donald Trump has dumped controversial plans to livestream the firing squad execution"><i></i><span>SMH · Age</span></button>
+            <button class="dot p" style="left:42%;top:0" data-q="SBS News|plain|Donald Trump has announced, cancelling a contentious plan by his defence secretary"><i></i><span>SBS</span></button>
+            <button class="dot p" style="left:52%;top:0" data-q="Ars Technica|plain|Trump cancels Pentagon plans to livestream firing squad execution"><i></i><span>Ars</span></button>
+            <button class="dot p" style="left:62%;top:0" data-q="Reuters|plain|Trump shuts down Hegseth plan to livestream military execution"><i></i><span>Reuters</span></button>
+          </div>
+          <div class="ends"><span class="ag">Against</span><span>Plain</span><span class="tw">For</span></div>
+        </div>
+
+        <div class="subject">
+          <div class="subject-name">Pete Hegseth</div>
+          <div class="scale" role="group" aria-label="Where each outlet sits on Pete Hegseth">
+            <div class="track"></div>
+            <div class="tick" style="left:0"></div><div class="tick" style="left:calc(50% - 1px)"></div><div class="tick" style="right:0"></div>
+            <button class="dot a" style="left:12%;top:0" data-q="SBS News|against|The cancellation is a blow to Hegseth, who is already under fire"><i></i><span>SBS</span></button>
+            <button class="dot p" style="left:50%;top:0" data-q="Reuters|plain|Trump shuts down Hegseth plan to livestream military execution"><i></i><span>Reuters</span></button>
+          </div>
+          <div class="ends"><span class="ag">Against</span><span>Plain</span><span class="tw">For</span></div>
+        </div>
+
+        <div class="quote-box" aria-live="polite"><span class="muted">Tap a dot to see that outlet's words.</span></div>
+      </div>
+    </div>
+    <div class="mini-wrap">
+      <div class="mini-label">On the front page</div>
+      <div class="kicker">Military execution</div>
+      <h4>Donald Trump cancels plan to livestream execution after international backlash</h4>
+      <div class="mini-row">
+        <span class="mini-scale" aria-hidden="true"><span class="track"></span>
+          <i style="left:10%;background:var(--against)"></i><i style="left:24%;background:var(--against)"></i>
+          <i style="left:42%;background:var(--plain)"></i><i style="left:52%;background:var(--plain)"></i><i style="left:62%;background:var(--plain)"></i>
+        </span>
+        <span>Told differently · 8 outlets</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= B ================= -->
+  <section class="option" id="b">
+    <div class="label">Option B</div>
+    <h2>The split bar</h2>
+    <p class="note">One bar per person or party, split by how many outlets fell each way. It's quicker to read than the scale, but it shows only counts, not how strongly each outlet leant.</p>
+
+    <div class="sheet">
+      <div class="kicker">Military execution</div>
+      <h3>Donald Trump cancels plan to livestream execution after international backlash</h3>
+      <p class="sum">Donald Trump cancelled plans to livestream the firing squad execution of Nidal Hasan following widespread international and domestic opposition.</p>
+      <div class="panel" data-group="b">
+        <div class="panel-head">How it was told <span>8 outlets</span></div>
+        <div class="subject">
+          <div class="subject-name">Donald Trump</div>
+          <div class="bar" role="group" aria-label="Donald Trump: 3 against, 3 plain">
+            <button class="a" style="flex:3" data-q="7NEWS · SMH · The Age|against|Trump backflips on planned livestream… / Donald Trump has dumped controversial plans…">3 against</button>
+            <button class="p" style="flex:3" data-q="SBS · Ars Technica · Reuters|plain|Donald Trump has announced… / Trump cancels Pentagon plans… / Trump shuts down Hegseth plan…">3 plain</button>
+          </div>
+          <div class="bar-names"><div style="flex:3">7NEWS, SMH, The Age</div><div style="flex:3">SBS, Ars, Reuters</div></div>
+        </div>
+        <div class="subject">
+          <div class="subject-name">Pete Hegseth</div>
+          <div class="bar" role="group" aria-label="Pete Hegseth: 1 against, 1 plain">
+            <button class="a" style="flex:1" data-q="SBS News|against|The cancellation is a blow to Hegseth, who is already under fire">1 against</button>
+            <button class="p" style="flex:1" data-q="Reuters|plain|Trump shuts down Hegseth plan to livestream military execution">1 plain</button>
+          </div>
+          <div class="bar-names"><div style="flex:1">SBS</div><div style="flex:1">Reuters</div></div>
+        </div>
+        <div class="quote-box" aria-live="polite"><span class="muted">Tap a part of a bar to see the words.</span></div>
+      </div>
+    </div>
+    <div class="mini-wrap">
+      <div class="mini-label">On the front page</div>
+      <div class="kicker">Military execution</div>
+      <h4>Donald Trump cancels plan to livestream execution after international backlash</h4>
+      <div class="mini-row">
+        <span class="mini-bar" aria-hidden="true"><i style="flex:3;background:var(--against)"></i><i style="flex:3;background:var(--plain)"></i></span>
+        <span>Told differently · 8 outlets</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= C ================= -->
+  <section class="option" id="c">
+    <div class="label">Option C</div>
+    <h2>The outlet table</h2>
+    <p class="note">One row per outlet with its own headline, and a small arrow for each person or party: pointing left for against, a dot for plain, pointing right for for. It shows the most at once and reads like a newspaper table, but it's the busiest.</p>
+
+    <div class="sheet">
+      <div class="kicker">Military execution</div>
+      <h3>Donald Trump cancels plan to livestream execution after international backlash</h3>
+      <p class="sum">Donald Trump cancelled plans to livestream the firing squad execution of Nidal Hasan following widespread international and domestic opposition.</p>
+      <div class="panel" data-group="c">
+        <div class="panel-head">How it was told <span>8 outlets</span></div>
+        <div class="grid-wrap">
+          <table class="leans">
+            <thead><tr><th>Outlet</th><th>Trump</th><th>Hegseth</th><th>Headline</th></tr></thead>
+            <tbody>
+              <tr tabindex="0" data-q="7NEWS|against Trump|Trump backflips on planned livestream of Fort Hood gunman’s execution"><td>7NEWS</td><td><span class="chip a" title="Against"><svg viewBox="0 0 22 14"><path d="M20 7H6M10 2 4 7l6 5" fill="none" stroke="currentColor" stroke-width="2.2"/></svg></span></td><td></td><td class="hl">Trump backflips on planned livestream of Fort Hood gunman’s execution</td></tr>
+              <tr tabindex="0" data-q="SMH, The Age|against Trump|Donald Trump has dumped controversial plans to livestream the firing squad execution"><td>SMH · Age</td><td><span class="chip a" title="Against"><svg viewBox="0 0 22 14"><path d="M20 7H6M10 2 4 7l6 5" fill="none" stroke="currentColor" stroke-width="2.2"/></svg></span></td><td></td><td class="hl">US President calls off execution livestream</td></tr>
+              <tr tabindex="0" data-q="SBS News|plain on Trump, against Hegseth|The cancellation is a blow to Hegseth, who is already under fire"><td>SBS</td><td><span class="chip p" title="Plain"><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg></span></td><td><span class="chip a" title="Against"><svg viewBox="0 0 22 14"><path d="M20 7H6M10 2 4 7l6 5" fill="none" stroke="currentColor" stroke-width="2.2"/></svg></span></td><td class="hl">Donald Trump cancels plan to livestream execution after international backlash</td></tr>
+              <tr tabindex="0" data-q="Ars Technica|plain|Trump cancels Pentagon plans to livestream firing squad execution"><td>Ars</td><td><span class="chip p" title="Plain"><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg></span></td><td></td><td class="hl">Trump cancels Pentagon plans to livestream firing squad execution</td></tr>
+              <tr tabindex="0" data-q="Reuters|plain|Trump shuts down Hegseth plan to livestream military execution"><td>Reuters</td><td><span class="chip p" title="Plain"><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg></span></td><td><span class="chip p" title="Plain"><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg></span></td><td class="hl">Trump shuts down Hegseth plan to livestream military execution</td></tr>
+              <tr tabindex="0" data-q="BBC|no judgement|Trump calls off livestream of Fort Hood attacker's execution by firing squad"><td>BBC</td><td class="muted">–</td><td></td><td class="hl">Trump calls off livestream of Fort Hood attacker's execution by firing squad</td></tr>
+              <tr tabindex="0" data-q="AP|no judgement|Trump, after bipartisan backlash, says Pentagon won't livestream execution of Fort Hood shooter"><td>AP</td><td class="muted">–</td><td></td><td class="hl">Trump, after bipartisan backlash, says Pentagon won't livestream execution…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="quote-box" aria-live="polite"><span class="muted">Tap a row to see the words behind it.</span></div>
+      </div>
+    </div>
+    <div class="mini-wrap">
+      <div class="mini-label">On the front page</div>
+      <div class="kicker">Military execution</div>
+      <h4>Donald Trump cancels plan to livestream execution after international backlash</h4>
+      <div class="mini-row">
+        <span class="mini-glyphs" aria-hidden="true">
+          <svg viewBox="0 0 22 14" style="color:var(--against)"><path d="M20 7H6M10 2 4 7l6 5" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
+          <svg viewBox="0 0 22 14" style="color:var(--against)"><path d="M20 7H6M10 2 4 7l6 5" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
+          <svg viewBox="0 0 22 14" style="color:var(--plain)"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg>
+          <svg viewBox="0 0 22 14" style="color:var(--plain)"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg>
+          <svg viewBox="0 0 22 14" style="color:var(--plain)"><circle cx="11" cy="7" r="4" fill="currentColor"/></svg>
+        </span>
+        <span>Told differently · 8 outlets</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="choose">
+    <div class="label">Your pick</div>
+    <h2>Which one?</h2>
+    <ol>
+      <li><b>A, the scale,</b> is my recommendation. It's the most "graphic" of the three, a disagreement jumps out as dots on opposite sides, and it stays readable on a phone.</li>
+      <li><b>B, the split bar,</b> is the simplest, but it hides which outlet is which until you tap.</li>
+      <li><b>C, the table,</b> shows everything, including each outlet's headline, but it's the least like a picture.</li>
+    </ol>
+    <p class="note">Mixing is fine too: the scale inside the article with the split bar on the front page, say. Colours, sizes and labels are easy to change after you pick.</p>
+  </section>
+</div>
+
+<script>
+document.querySelectorAll('.panel').forEach(panel => {
+  const box = panel.querySelector('.quote-box');
+  const items = panel.querySelectorAll('[data-q]');
+  const show = el => {
+    items.forEach(i => { i.setAttribute('aria-pressed', 'false'); i.classList && i.classList.remove('sel'); });
+    el.setAttribute('aria-pressed', 'true');
+    if (el.tagName === 'TR') el.classList.add('sel');
+    const [who, stance, words] = el.dataset.q.split('|');
+    box.innerHTML = '';
+    const b = document.createElement('b'); b.textContent = who + ' · ' + stance;
+    const q = document.createElement('div'); q.className = 'q'; q.textContent = words;
+    box.append(b, q);
+  };
+  items.forEach(el => {
+    el.addEventListener('click', () => show(el));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(el); } });
+  });
+});
+</script>

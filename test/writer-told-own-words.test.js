@@ -3,6 +3,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const {
+  TOLD_SCHEMA,
   TOLD_SYSTEM_PROMPT,
   buildTold,
   outletOwnWords,
@@ -100,5 +101,64 @@ OPENING: Settlers attacked the diplomats in the latest violent attempt to preven
     assert.match(TOLD_SYSTEM_PROMPT, /quotes removed/i);
     assert.match(TOLD_SYSTEM_PROMPT, /own word choice/i);
     assert.match(TOLD_SYSTEM_PROMPT, /chose to lead with/i);
+    assert.match(TOLD_SYSTEM_PROMPT, /plain.+(?:empty|omit)/i);
+    assert.deepStrictEqual(TOLD_SCHEMA.properties.subjects.items.properties.stances.items.required, [
+      'outlet', 'stance',
+    ]);
+  });
+
+  it('keeps the Trump subject when plain outlets have no quote', () => {
+    const versions = [
+      { name: 'SBS', headline: 'Trump escalates battle with Zelenskyy', text: 'Donald Trump escalated a battle with Zelenskyy over the failed talks.', url: 'https://sbs.test/trump' },
+      { name: 'AP', headline: 'Trump and Zelenskyy clash over talks', text: 'The two presidents disagreed over the next step.', url: 'https://ap.test/trump' },
+      { name: 'Reuters', headline: 'Trump, Zelenskyy differ over peace plan', text: 'Their disagreement followed a meeting.', url: 'https://reuters.test/trump' },
+      { name: 'The Australian', headline: 'Trump disputes Zelenskyy account', text: 'The leaders offered different accounts.', url: 'https://theaustralian.test/trump' },
+    ];
+    const raw = { subjects: [{
+      name: 'Donald Trump',
+      kind: 'person',
+      stances: [
+        { outlet: 'SBS', stance: 'against', quote: 'escalated a battle with Zelenskyy' },
+        { outlet: 'AP', stance: 'plain', quote: '' },
+        { outlet: 'Reuters', stance: 'plain' },
+        { outlet: 'The Australian', stance: 'plain', quote: '' },
+      ],
+    }] };
+
+    assert.deepStrictEqual(buildTold(versions, raw), {
+      outlets: versions.map(({ name, headline, url }) => ({ name, headline, url })),
+      subjects: [{
+        name: 'Donald Trump',
+        kind: 'person',
+        stances: [
+          { outlet: 'SBS', stance: 'against', quote: 'escalated a battle with Zelenskyy' },
+          { outlet: 'AP', stance: 'plain', quote: '' },
+          { outlet: 'Reuters', stance: 'plain', quote: '' },
+          { outlet: 'The Australian', stance: 'plain', quote: '' },
+        ],
+      }],
+      differs: true,
+    });
+  });
+
+  it('still rejects toward and against stances without a quote', () => {
+    const versions = [
+      { name: 'One', headline: 'Leader praised by outlet', text: 'The leader won broad praise.', url: 'https://one.test/story' },
+      { name: 'Two', headline: 'Leader criticised by outlet', text: 'The leader faced sharp criticism.', url: 'https://two.test/story' },
+      { name: 'Three', headline: 'Leader gives update', text: 'The leader spoke on Monday.', url: 'https://three.test/story' },
+    ];
+    const raw = { subjects: [{
+      name: 'The leader',
+      kind: 'person',
+      stances: [
+        { outlet: 'One', stance: 'toward', quote: '' },
+        { outlet: 'Two', stance: 'against' },
+        { outlet: 'Three', stance: 'plain', quote: '' },
+      ],
+    }] };
+
+    assert.deepStrictEqual(buildTold(versions, raw), {
+      outlets: versions.map(({ name, headline, url }) => ({ name, headline, url })),
+    });
   });
 });

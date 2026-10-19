@@ -1,6 +1,6 @@
 'use strict';
 
-const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain and quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against: a person, party, organisation, cause or government. For every outlet classify its stance as toward, against or plain. For toward or against, quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default and its quote may be empty or omitted. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
 
 const TOLD_SCHEMA = Object.freeze({
   type: 'object',
@@ -19,11 +19,11 @@ const TOLD_SCHEMA = Object.freeze({
             type: 'array',
             items: {
               type: 'object', additionalProperties: false,
-              required: ['outlet', 'stance', 'quote'],
+              required: ['outlet', 'stance'],
               properties: {
                 outlet: { type: 'string' },
                 stance: { type: 'string', enum: ['toward', 'against', 'plain'] },
-                quote: { type: 'string' },
+                quote: { type: 'string', description: 'Verbatim evidence for toward or against; empty or omitted for plain.' },
               },
             },
           },
@@ -179,11 +179,19 @@ function buildTold(versions, raw) {
     const valid = [];
     const usedOutlets = new Set();
     for (const stance of (Array.isArray(candidate.stances) ? candidate.stances : [])) {
-      if (!stance || !stances.has(stance.stance) || typeof stance.quote !== 'string') continue;
+      if (!stance || !stances.has(stance.stance)) continue;
       const version = byName.get(String(stance.outlet || '').trim().toLocaleLowerCase('en-AU'));
+      if (!version || usedOutlets.has(version.name)) continue;
+      const hasQuote = typeof stance.quote === 'string' && stance.quote.trim().length > 0;
+      if (stance.stance === 'plain' && !hasQuote) {
+        usedOutlets.add(version.name);
+        valid.push({ outlet: version.name, stance: 'plain', quote: '' });
+        continue;
+      }
+      if (!hasQuote) continue;
       const quote = stance.quote.trim();
       const quoteWords = quote.match(/\S+/g) || [];
-      if (!version || !quote || quoteWords.length > 12 || usedOutlets.has(version.name)) continue;
+      if (quoteWords.length > 12) continue;
       const comparableQuote = quoteComparable(quote);
       if (!comparableQuote || !quoteComparable(outletWords(version)).includes(comparableQuote)) continue;
       const cleanStance = validatedStance(version, stance.stance, quote);
@@ -214,7 +222,14 @@ function toldUserPrompt(story, versions) {
   return lines.join('\n');
 }
 
-async function addToldToStories(stories, writer, log) {
+async function addToldToStories(stories, toldWriter, fallbackWriter, log) {
+  // Preserve the former (stories, writer, log) call shape for callers that do
+  // not supply a fallback writer.
+  if (!log && fallbackWriter && typeof fallbackWriter.warn === 'function'
+      && typeof fallbackWriter.tell !== 'function') {
+    log = fallbackWriter;
+    fallbackWriter = null;
+  }
   const eligible = stories.map(story => ({ story, versions: distinctNonRedditVersions(story) }))
     .filter(entry => entry.versions.length >= 2);
   let cursor = 0;
@@ -224,15 +239,27 @@ async function addToldToStories(stories, writer, log) {
       if (!entry) return;
       const { story, versions } = entry;
       try {
-        const response = await writer.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
+        const response = await toldWriter.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
         story.told = buildTold(versions, response && response.json);
       } catch (error) {
-        story.told = buildTold(versions, null);
-        if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${story.title}": ${error.message}`);
+        const title = story.title || story.headline || 'untitled story';
+        if (!fallbackWriter || typeof fallbackWriter.tell !== 'function') {
+          story.told = buildTold(versions, null);
+          if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${title}", using outlets only: ${error.message}`);
+          continue;
+        }
+        if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told call failed for "${title}", retrying with writer model: ${error.message}`);
+        try {
+          const response = await fallbackWriter.tell(TOLD_SYSTEM_PROMPT, toldUserPrompt(story, versions), TOLD_SCHEMA);
+          story.told = buildTold(versions, response && response.json);
+        } catch (fallbackError) {
+          story.told = buildTold(versions, null);
+          if (log && log.warn) log.warn('pipeline:writer', `How-it-was-told writer fallback failed for "${title}", using outlets only: ${fallbackError.message}`);
+        }
       }
     }
   }
-  const concurrency = Math.min(4, Math.max(1, Number(writer.concurrency) || 1), Math.max(1, eligible.length));
+  const concurrency = Math.min(4, Math.max(1, Number(toldWriter.concurrency) || 1), Math.max(1, eligible.length));
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return stories;
 }

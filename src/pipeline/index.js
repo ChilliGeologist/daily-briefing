@@ -13,10 +13,10 @@ const { rankClusters } = require('./rank');
 const { extractClusters } = require('./extractor');
 const { toItem } = require('./toItem');
 const { assemble } = require('./assembler');
-const { createWriter } = require('./writer');
+const { createWriter, createToldWriter } = require('./writer');
 const { writeStories } = require('./writer/write');
 const { editStories } = require('./writer/edit');
-const { addToldToStories } = require('./writer/told');
+const { addToldToStories, buildTold, distinctNonRedditVersions } = require('./writer/told');
 
 let currentRun = null;
 let cancelRequested = false;
@@ -180,7 +180,28 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     const { stories, dropped, stats: writeStats } = await writeStories(
       extracted, writer, settings, runLog, emitProgress, checkCancelled
     );
-    await addToldToStories(stories, writer, runLog);
+    // Writing finishes before told starts, so the two models are never needed
+    // for inference at once. Keep this ordering for machines with limited RAM.
+    let toldWriter;
+    try {
+      toldWriter = options.toldWriter || createToldWriter(settings, runLog, options.toldWriterDeps);
+      await addToldToStories(stories, toldWriter, writer, runLog);
+    } catch (error) {
+      // Model failures are handled per story above. This outer guard keeps an
+      // unexpected told-step error from failing an otherwise valid briefing.
+      for (const story of stories) {
+        if (!story.told) story.told = buildTold(distinctNonRedditVersions(story), null);
+      }
+      runLog.warn('pipeline:writer', `How-it-was-told step failed, using outlets only: ${error.message}`);
+    } finally {
+      if (toldWriter && settings.getToldOllamaModel() !== settings.getWriterOllamaModel()) {
+        try {
+          await toldWriter.unload();
+        } catch (error) {
+          runLog.warn('pipeline:writer', `Could not unload how-it-was-told model: ${error.message}`);
+        }
+      }
+    }
     db.updateRun(runId, { items_curated: stories.length });
     emit({ type: 'stage', stage: 'write', status: 'complete', stats: writeStats });
     checkCancelled();

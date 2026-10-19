@@ -2,14 +2,7 @@
 
 const { createOllamaWriter } = require('./ollama');
 
-function createWriter(settings, log, deps = {}) {
-  const writer = deps.ollamaWriter || createOllamaWriter({
-    url: settings.getOllamaUrl(),
-    model: settings.getWriterOllamaModel(),
-    numCtx: settings.getOllamaNumCtx(),
-    fetchImpl: deps.fetchImpl,
-    log,
-  });
+function wrapWriter(writer) {
   const totals = {};
 
   function record(result) {
@@ -46,10 +39,35 @@ function createWriter(settings, log, deps = {}) {
     edit(system, user, schema) {
       return writer.edit(system, user, schema).then(record);
     },
+    unload() {
+      return typeof writer.unload === 'function' ? writer.unload() : Promise.resolve();
+    },
     usage() {
       return Object.fromEntries(Object.entries(totals).map(([model, usage]) => [model, { ...usage }]));
     },
   };
 }
 
-module.exports = { createWriter };
+function createWriter(settings, log, deps = {}) {
+  return wrapWriter(deps.ollamaWriter || createOllamaWriter({
+    url: settings.getOllamaUrl(),
+    model: settings.getWriterOllamaModel(),
+    numCtx: settings.getOllamaNumCtx(),
+    fetchImpl: deps.fetchImpl,
+    log,
+  }));
+}
+
+function createToldWriter(settings, log, deps = {}) {
+  return wrapWriter(deps.ollamaWriter || createOllamaWriter({
+    url: settings.getOllamaUrl(),
+    model: settings.getToldOllamaModel(),
+    numCtx: settings.getOllamaNumCtx(),
+    numThread: settings.getToldNumThread(),
+    keepAlive: '5m',
+    fetchImpl: deps.fetchImpl,
+    log,
+  }));
+}
+
+module.exports = { createWriter, createToldWriter };

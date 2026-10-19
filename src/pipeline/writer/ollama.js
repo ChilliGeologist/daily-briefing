@@ -2,8 +2,17 @@
 
 const TIMEOUT_MS = 300000;
 
-function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, log }) {
-  const endpoint = `${String(url).replace(/\/$/, '')}/api/chat`;
+function createOllamaWriter({
+  url,
+  model,
+  numCtx,
+  fetchImpl = globalThis.fetch,
+  log,
+  keepAlive = '30m',
+  numThread,
+}) {
+  const baseUrl = String(url).replace(/\/$/, '');
+  const endpoint = `${baseUrl}/api/chat`;
 
   async function call(system, user, schema, numPredict, images = []) {
     const controller = new AbortController();
@@ -22,8 +31,13 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
           format: schema,
           stream: false,
           think: false,
-          keep_alive: '30m',
-          options: { temperature: 0.3, num_ctx: numCtx, num_predict: numPredict },
+          keep_alive: keepAlive,
+          options: {
+            temperature: 0.3,
+            num_ctx: numCtx,
+            num_predict: numPredict,
+            ...(numThread === undefined ? {} : { num_thread: numThread }),
+          },
         }),
         signal: controller.signal,
       });
@@ -70,6 +84,24 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
     },
     edit(system, user, schema) {
       return call(system, user, schema, 1500);
+    },
+    async unload() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      try {
+        const response = await fetchImpl(`${baseUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, keep_alive: 0 }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`Ollama unload HTTP ${response.status}: ${body.slice(0, 200)}`);
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   };
 }

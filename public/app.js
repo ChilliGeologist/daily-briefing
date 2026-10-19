@@ -1090,10 +1090,92 @@ function renderFrontPagePicture(item, lead) {
   return frame;
 }
 
-function renderToldPanel(told, compact) {
+function renderToldMini(told, panel) {
+  var subjects = window.ToldScale.layoutSubjects(told && told.subjects);
+  var dots = subjects.length ? subjects[0].dots : [];
+  var scale = el('span', { className: 'told-mini-scale', 'aria-hidden': 'true' });
+  scale.appendChild(el('span', { className: 'told-mini-scale-track' }));
+  dots.forEach(function(dot) {
+    scale.appendChild(el('i', {
+      className: 'told-mini-scale-dot told-mini-scale-dot--' + dot.stance,
+      style: { insetInlineStart: dot.position + '%' }
+    }));
+  });
+  return el('span', { className: 'reading-story-told-mark' }, [
+    scale,
+    el('span', {
+      textContent: 'Told differently \u00b7 ' + panel.outletCount +
+        (panel.outletCount === 1 ? ' outlet' : ' outlets')
+    })
+  ]);
+}
+
+function setToldQuote(section, button, dot, quoteBox) {
+  section.querySelectorAll('.told-scale-dot').forEach(function(candidate) {
+    candidate.setAttribute('aria-pressed', candidate === button ? 'true' : 'false');
+  });
+  var outletNames = dot.outlets.join(' \u00b7 ');
+  var contents = [el('b', {
+    className: 'how-told-quote-label',
+    textContent: outletNames + ' \u00b7 ' + dot.displayStance
+  })];
+  if (dot.stance === 'plain' && !dot.quote) {
+    contents.push(el('span', { textContent: 'Reported it plainly.' }));
+  } else {
+    contents.push(el('span', { className: 'how-told-quote-text', textContent: dot.quote }));
+  }
+  quoteBox.replaceChildren.apply(quoteBox, contents);
+}
+
+function renderToldScaleSubject(subject, section, quoteBox) {
+  var subjectEl = el('div', { className: 'how-told-subject' });
+  subjectEl.appendChild(el('h4', { textContent: subject.name }));
+  var scale = el('div', {
+    className: 'told-scale',
+    role: 'group',
+    'aria-label': subject.name + ': where each outlet sits'
+  });
+  scale.appendChild(el('div', { className: 'told-scale-track', 'aria-hidden': 'true' }));
+  [0, 50, 100].forEach(function(position) {
+    scale.appendChild(el('i', {
+      className: 'told-scale-tick',
+      'aria-hidden': 'true',
+      style: { insetInlineStart: position + '%' }
+    }));
+  });
+  subject.dots.forEach(function(dot) {
+    var button = el('button', {
+      type: 'button',
+      className: 'told-scale-dot told-scale-dot--' + dot.stance,
+      'aria-label': dot.outlets.join(' \u00b7 ') + ': ' + dot.displayStance,
+      'aria-pressed': 'false',
+      style: { insetInlineStart: dot.position + '%' }
+    }, [
+      el('i', { className: 'told-scale-dot-mark', 'aria-hidden': 'true' }),
+      el('span', {
+        className: 'told-scale-dot-label' + (dot.labelRow ? ' told-scale-dot-label--staggered' : ''),
+        textContent: dot.label
+      })
+    ]);
+    button.addEventListener('click', function() {
+      setToldQuote(section, button, dot, quoteBox);
+    });
+    scale.appendChild(button);
+  });
+  subjectEl.appendChild(scale);
+  subjectEl.appendChild(el('div', { className: 'told-scale-ends', 'aria-hidden': 'true' }, [
+    el('span', { className: 'told-scale-against', textContent: 'Against' }),
+    el('span', { textContent: 'Plain' }),
+    el('span', { className: 'told-scale-for', textContent: 'For' })
+  ]));
+  return subjectEl;
+}
+
+function renderToldPanel(told) {
   var panel = window.EditionLayout.prepareToldPanel(told);
+  var subjects = window.ToldScale.layoutSubjects(told && told.subjects);
   var section = el('section', {
-    className: 'how-told' + (compact ? ' how-told--front' : ''),
+    className: 'how-told',
     'aria-label': 'How it was told'
   });
   section.appendChild(el('div', { className: 'how-told-heading' }, [
@@ -1108,22 +1190,13 @@ function renderToldPanel(told, compact) {
     section.appendChild(el('p', { className: 'how-told-same', textContent: 'Told much the same way.' }));
   }
 
-  panel.subjects.forEach(function(subject) {
-    var subjectEl = el('div', { className: 'how-told-subject' });
-    subjectEl.appendChild(el('h4', { textContent: subject.name }));
-    subject.groups.forEach(function(group) {
-      var groupEl = el('div', { className: 'how-told-group how-told-group--' + group.key });
-      groupEl.appendChild(el('h5', { textContent: group.label }));
-      var list = el('ul');
-      group.stances.forEach(function(stance) {
-        var text = stance.outlet + (stance.quote ? ': \u201c' + stance.quote + '\u201d' : '');
-        list.appendChild(el('li', { textContent: text }));
-      });
-      groupEl.appendChild(list);
-      subjectEl.appendChild(groupEl);
-    });
-    section.appendChild(subjectEl);
+  var quoteBox = el('div', { className: 'how-told-quote-box', 'aria-live': 'polite' }, [
+    el('span', { className: 'how-told-muted', textContent: 'Tap a dot to see that outlet\'s words.' })
+  ]);
+  subjects.forEach(function(subject) {
+    section.appendChild(renderToldScaleSubject(subject, section, quoteBox));
   });
+  if (subjects.length) section.appendChild(quoteBox);
 
   var headlines = el('div', { className: 'how-told-headlines' });
   headlines.appendChild(el('h4', { textContent: 'Headlines' }));
@@ -1149,22 +1222,17 @@ function renderReadingStory(item, lead, showPicture) {
   var key = storyKey(item);
   var picture = showPicture ? renderFrontPagePicture(item, lead) : null;
   var toldPanel = item.told ? window.EditionLayout.prepareToldPanel(item.told) : null;
-  var leadShowsTold = Boolean(lead && !picture && toldPanel);
   var story = el('article', {
     className: 'reading-story' + (lead ? ' reading-story--lead' : '') +
       (picture ? ' reading-story--pictured' : '') +
-      (leadShowsTold ? ' reading-story--lead-told' : '') +
-      (lead && !picture && !leadShowsTold ? ' reading-story--lead-type' : ''),
+      (lead && !picture ? ' reading-story--lead-type' : ''),
     'data-story-id': key
   });
   var summaryChildren = [];
   if (picture) summaryChildren.push(picture);
   if (item.kicker) summaryChildren.push(el('span', { className: 'reading-story-kicker', textContent: item.kicker }));
   if (toldPanel && toldPanel.differs) {
-    summaryChildren.push(el('span', {
-      className: 'reading-story-told-mark',
-      textContent: 'Told differently \u00b7 ' + toldPanel.outletCount + ' outlets'
-    }));
+    summaryChildren.push(renderToldMini(item.told, toldPanel));
   }
   summaryChildren.push(el('span', { className: 'reading-story-title', textContent: item.title || 'Untitled story' }));
   if (item.summary) summaryChildren.push(el('span', { className: 'reading-story-summary', textContent: item.summary }));
@@ -1176,7 +1244,6 @@ function renderReadingStory(item, lead, showPicture) {
   }, summaryChildren);
   if (!readingStoryOpeners.has(key)) readingStoryOpeners.set(key, opener);
   story.appendChild(opener);
-  if (leadShowsTold) story.appendChild(renderToldPanel(item.told, true));
   return story;
 }
 
@@ -1260,7 +1327,7 @@ function renderReader(item) {
   if (item.told && item.summary) {
     body.appendChild(el('p', { className: 'reader-summary', textContent: item.summary }));
   }
-  if (item.told) body.appendChild(renderToldPanel(item.told, false));
+  if (item.told) body.appendChild(renderToldPanel(item.told));
 
   var hasArticle = false;
   if (typeof item.article_html === 'string' && item.article_html.trim()) {

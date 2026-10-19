@@ -26,6 +26,8 @@ it('returns defaults when unset', () => {
   assert.strictEqual(settings.getMaxCandidates(), 120);
   assert.deepStrictEqual(settings.getInterests(), DEFAULT_INTERESTS);
   assert.strictEqual(settings.getWriterOllamaModel(), 'gemma4:26b');
+  assert.strictEqual(settings.getToldOllamaModel(), 'gemma4:26b');
+  assert.strictEqual(settings.getToldNumThread(), 4);
   assert.strictEqual(settings.getOllamaNumCtx(), 8192);
   assert.strictEqual(settings.getWriterArticleChars(), 6000);
   assert.strictEqual(settings.getSectionSize(), 5);
@@ -42,6 +44,8 @@ it('returns stored values when set', () => {
     max_candidates: 135,
     interests: [{ label: 'Mine' }],
     writer_ollama_model: 'writer-model',
+    told_ollama_model: 'told-model',
+    told_num_thread: 6,
     ollama_num_ctx: 16384,
     writer_article_chars: 9000,
     section_size: 4,
@@ -57,13 +61,25 @@ it('returns stored values when set', () => {
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),
+    settings.getToldOllamaModel(),
+    settings.getToldNumThread(),
     settings.getOllamaNumCtx(),
     settings.getWriterArticleChars(),
     settings.getSectionSize(),
     settings.getTopSize(),
   ], [
-    [{ label: 'Mine' }], 'writer-model', 16384, 9000, 4, { min: 6, max: 6 },
+    [{ label: 'Mine' }], 'writer-model', 'told-model', 6, 16384, 9000, 4, { min: 6, max: 6 },
   ]);
+});
+
+it('falls the told model back through the writer model to the general model', () => {
+  assert.strictEqual(createSettings(fakeDb({
+    ollama_model: 'general-model',
+    writer_ollama_model: 'writer-model',
+  })).getToldOllamaModel(), 'writer-model');
+  assert.strictEqual(createSettings(fakeDb({
+    ollama_model: 'general-model',
+  })).getToldOllamaModel(), 'general-model');
 });
 
 const newFillerPatterns = [

@@ -146,6 +146,15 @@ function createSettings(db) {
       return db.getSetting('writer_ollama_model') || this.getOllamaModel();
     },
 
+    getToldOllamaModel() {
+      return db.getSetting('told_ollama_model') || this.getWriterOllamaModel();
+    },
+
+    getToldNumThread() {
+      const val = db.getSetting('told_num_thread');
+      return val !== null ? Number(val) : 4;
+    },
+
     getOllamaNumCtx() {
       const val = db.getSetting('ollama_num_ctx');
       return val !== null ? Number(val) : 8192;
