@@ -1921,6 +1921,7 @@ var archiveBriefings = [];
 var archiveQuery = '';
 var archiveSearchTimer = null;
 var archiveSearchRequest = 0;
+var archiveSearchResult = null;
 var archiveScrollTop = 0;
 var archiveRestoreScroll = false;
 
@@ -1932,7 +1933,14 @@ async function loadArchive() {
     var res = await fetch('/api/briefings');
     var json = await res.json();
     archiveBriefings = json.briefings || [];
-    if (archiveQuery.trim()) await runArchiveSearch(true);
+    if (archiveQuery.trim()) {
+      if (archiveSearchResult && archiveSearchResult.query === archiveQuery.trim()) {
+        renderArchiveResults(archiveSearchResult);
+        restoreArchivePosition();
+      } else {
+        await runArchiveSearch(true, false);
+      }
+    }
     else {
       renderArchiveEditions();
       restoreArchivePosition();
@@ -2081,33 +2089,75 @@ function renderArchiveResults(result) {
       ]));
     });
   });
+
+  if (result.has_more && result.next_before) {
+    list.appendChild(el('button', {
+      type: 'button',
+      className: 'archive-more',
+      textContent: 'Show older results',
+      onclick: function(event) {
+        event.currentTarget.disabled = true;
+        event.currentTarget.textContent = 'Loading older results…';
+        runArchiveSearch(false, true);
+      }
+    }));
+  }
 }
 
-async function runArchiveSearch(restorePosition) {
+function mergeArchiveSearchResults(current, older) {
+  if (!current) return older;
+  var seen = new Set(current.editions.map(function(edition) { return String(edition.id); }));
+  var editions = current.editions.slice();
+  older.editions.forEach(function(edition) {
+    if (seen.has(String(edition.id))) return;
+    seen.add(String(edition.id));
+    editions.push(edition);
+  });
+  return {
+    query: older.query,
+    total: older.total,
+    has_more: older.has_more,
+    next_before: older.next_before,
+    editions: editions
+  };
+}
+
+async function runArchiveSearch(restorePosition, append) {
   var query = archiveQuery.trim();
   if (!query) {
+    archiveSearchResult = null;
     renderArchiveEditions();
     if (restorePosition) restoreArchivePosition();
     return;
   }
+  if (append && (!archiveSearchResult || !archiveSearchResult.next_before)) return;
   var request = ++archiveSearchRequest;
-  $('#archive-status').textContent = 'Searching…';
+  if (!append) $('#archive-status').textContent = 'Searching…';
   try {
-    var res = await fetch('/api/search?q=' + encodeURIComponent(query));
+    var searchUrl = '/api/search?q=' + encodeURIComponent(query);
+    if (append) searchUrl += '&before=' + encodeURIComponent(archiveSearchResult.next_before);
+    var res = await fetch(searchUrl);
     var result = await res.json();
     if (request !== archiveSearchRequest) return;
     if (!res.ok) throw new Error(result.error || 'Search failed');
-    renderArchiveResults(result);
+    archiveSearchResult = append ? mergeArchiveSearchResults(archiveSearchResult, result) : result;
+    renderArchiveResults(archiveSearchResult);
     if (restorePosition) restoreArchivePosition();
   } catch (err) {
     if (request !== archiveSearchRequest) return;
-    $('#archive-status').textContent = 'Search could not be completed.';
+    if (append && archiveSearchResult) {
+      renderArchiveResults(archiveSearchResult);
+      $('#archive-status').textContent += ' · Older results could not be loaded.';
+    } else {
+      $('#archive-status').textContent = 'Search could not be completed.';
+    }
     console.error('Failed to search archive:', err);
   }
 }
 
 $('#archive-search-input').addEventListener('input', function(event) {
   archiveQuery = event.target.value;
+  archiveSearchResult = null;
   archiveRestoreScroll = false;
   archiveScrollTop = 0;
   window.scrollTo(0, 0);
@@ -2129,7 +2179,8 @@ $('#archive-search-form').addEventListener('submit', function(event) {
   if (archiveSearchTimer !== null) clearTimeout(archiveSearchTimer);
   archiveSearchTimer = null;
   archiveQuery = $('#archive-search-input').value;
-  runArchiveSearch(false);
+  archiveSearchResult = null;
+  runArchiveSearch(false, false);
 });
 
 $('#app-title').addEventListener('click', function() {

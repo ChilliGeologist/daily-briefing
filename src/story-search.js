@@ -185,13 +185,93 @@ function safeSnippet(value) {
     .replace(/\uE001/g, '</mark>');
 }
 
-function searchStories(sqlite, query, requestedLimit) {
+function invalidCursor() {
+  const error = new Error('Invalid search cursor');
+  error.code = 'INVALID_SEARCH_CURSOR';
+  return error;
+}
+
+function encodeSearchCursor(createdAt, id) {
+  return Buffer.from(JSON.stringify([createdAt, id])).toString('base64url');
+}
+
+function decodeSearchCursor(cursor) {
+  if (cursor === undefined || cursor === null || cursor === '') return null;
+  if (typeof cursor !== 'string' || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw invalidCursor();
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (!Array.isArray(decoded) || decoded.length !== 2 || typeof decoded[0] !== 'string' ||
+        !Number.isSafeInteger(decoded[1]) || encodeSearchCursor(decoded[0], decoded[1]) !== cursor) {
+      throw invalidCursor();
+    }
+    return { createdAt: decoded[0], id: decoded[1] };
+  } catch (error) {
+    if (error && error.code === 'INVALID_SEARCH_CURSOR') throw error;
+    throw invalidCursor();
+  }
+}
+
+function searchStories(sqlite, query, requestedLimit, before) {
   const displayQuery = text(query);
   const ftsQuery = sanitiseSearchQuery(displayQuery);
-  if (!ftsQuery) return { query: displayQuery, total: 0, editions: [] };
+  if (!ftsQuery) {
+    return { query: displayQuery, total: 0, has_more: false, next_before: null, editions: [] };
+  }
   let limit = Number.parseInt(requestedLimit, 10);
   if (!Number.isFinite(limit) || limit < 1) limit = 100;
   limit = Math.min(limit, 100);
+  const cursor = decodeSearchCursor(before);
+
+  const total = sqlite.prepare(`
+    SELECT COUNT(*) AS count
+    FROM story_search
+    JOIN briefings b ON b.id = story_search.briefing_id
+    WHERE story_search MATCH ?
+  `).get(ftsQuery).count;
+
+  const cursorClause = cursor ? `
+    AND (
+      COALESCE(b.created_at, '') < ?
+      OR (COALESCE(b.created_at, '') = ? AND b.id < ?)
+    )
+  ` : '';
+  const editionParams = cursor
+    ? [ftsQuery, cursor.createdAt, cursor.createdAt, cursor.id]
+    : [ftsQuery];
+  const matchingEditions = sqlite.prepare(`
+    SELECT
+      b.id AS briefing_id,
+      b.date,
+      b.headline,
+      COALESCE(b.created_at, '') AS cursor_created_at,
+      COUNT(*) AS match_count
+    FROM story_search
+    JOIN briefings b ON b.id = story_search.briefing_id
+    WHERE story_search MATCH ?
+      ${cursorClause}
+    GROUP BY b.id, b.date, b.headline, b.created_at
+    ORDER BY COALESCE(b.created_at, '') DESC, b.id DESC
+  `).all(...editionParams);
+
+  const selectedEditions = [];
+  let selectedStories = 0;
+  for (const edition of matchingEditions) {
+    selectedEditions.push(edition);
+    selectedStories += edition.match_count;
+    if (selectedStories >= limit) break;
+  }
+  const hasMore = selectedEditions.length < matchingEditions.length;
+  const lastEdition = selectedEditions[selectedEditions.length - 1];
+  const nextBefore = hasMore
+    ? encodeSearchCursor(lastEdition.cursor_created_at, lastEdition.briefing_id)
+    : null;
+
+  if (!selectedEditions.length) {
+    return { query: displayQuery, total, has_more: false, next_before: null, editions: [] };
+  }
+
+  const editionPlaceholders = selectedEditions.map(() => '?').join(', ');
+  const editionIds = selectedEditions.map(edition => edition.briefing_id);
 
   const rows = sqlite.prepare(`
     SELECT
@@ -212,9 +292,9 @@ function searchStories(sqlite, query, requestedLimit) {
     FROM story_search
     JOIN briefings b ON b.id = story_search.briefing_id
     WHERE story_search MATCH ?
+      AND b.id IN (${editionPlaceholders})
     ORDER BY b.created_at DESC, b.id DESC, rank ASC, story_search.rowid ASC
-    LIMIT ?
-  `).all(ftsQuery, limit);
+  `).all(ftsQuery, ...editionIds);
 
   const editions = [];
   const byId = new Map();
@@ -249,7 +329,7 @@ function searchStories(sqlite, query, requestedLimit) {
       snippet: safeSnippet(bestSnippet),
     });
   }
-  return { query: displayQuery, total: rows.length, editions };
+  return { query: displayQuery, total, has_more: hasMore, next_before: nextBefore, editions };
 }
 
 module.exports = {

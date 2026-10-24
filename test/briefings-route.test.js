@@ -67,6 +67,8 @@ test('briefing archive and search routes return the complete stage 5 shapes', as
   assert.deepStrictEqual(await searchResponse.json(), {
     query: 'visa regional',
     total: 1,
+    has_more: false,
+    next_before: null,
     editions: [{
       id: newId,
       date: '2026-10-24',
@@ -77,6 +79,50 @@ test('briefing archive and search routes return the complete stage 5 shapes', as
         kicker: 'Visa reforms',
         section: 'Australia',
         snippet: 'Backpackers say <mark>visa</mark> changes make <mark>regional</mark> work less attractive',
+      }],
+    }],
+  });
+
+  const firstPageResponse = await fetch(base + '/api/search?q=australia&limit=1');
+  assert.strictEqual(firstPageResponse.status, 200);
+  const firstPage = await firstPageResponse.json();
+  assert.deepStrictEqual(firstPage, {
+    query: 'australia',
+    total: 2,
+    has_more: true,
+    next_before: Buffer.from(JSON.stringify(['2026-10-24 06:00:00', newId])).toString('base64url'),
+    editions: [{
+      id: newId,
+      date: '2026-10-24',
+      headline: "White House says Melania Trump brokered truce for Ukraine city 'on brink of disaster'",
+      stories: [{
+        key: 's100',
+        title: 'Backpackers say visa changes make regional work less attractive',
+        kicker: 'Visa reforms',
+        section: 'Australia',
+        snippet: ' … And not a single word or question in the article about paying <mark>Australians</mark> more to do the job … ',
+      }],
+    }],
+  });
+
+  const olderPageResponse = await fetch(base + '/api/search?q=australia&limit=1&before=' +
+    encodeURIComponent(firstPage.next_before));
+  assert.strictEqual(olderPageResponse.status, 200);
+  assert.deepStrictEqual(await olderPageResponse.json(), {
+    query: 'australia',
+    total: 2,
+    has_more: false,
+    next_before: null,
+    editions: [{
+      id: oldId,
+      date: '2026-03-25',
+      headline: "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
+      stories: [{
+        key: 'legacy-story-1',
+        title: "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
+        kicker: '',
+        section: 'Top Stories',
+        snippet: '<mark>Australia</mark>&#39;s fuel crisis deepens: waste collection under threat, diesel hits $4.25/L',
       }],
     }],
   });

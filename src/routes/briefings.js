@@ -46,13 +46,14 @@ module.exports = function (db) {
     try {
       const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
       if (!query) return res.status(400).json({ error: 'Search query is required' });
-      const result = db.searchStories(query, req.query.limit);
+      const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+      const result = db.searchStories(query, req.query.limit, before);
       if (!sanitiseSearchQuery(query)) {
         return res.status(400).json({ error: 'Search query is too short' });
       }
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.code === 'INVALID_SEARCH_CURSOR' ? 400 : 500).json({ error: err.message });
     }
   });
 

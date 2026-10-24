@@ -35,6 +35,25 @@ function memorySearchDb() {
   return sqlite;
 }
 
+function insertSearchEdition(sqlite, { id, date, createdAt, storyCount }) {
+  const data = {
+    headline: `Edition ${id}`,
+    sections: [{
+      id: 'local',
+      title: 'Local',
+      items: Array.from({ length: storyCount }, (_, index) => ({
+        id: `story-${id}-${index + 1}`,
+        title: `Council report ${id}-${index + 1}`,
+        summary: `Council summary ${id}-${index + 1}`,
+      })),
+    }],
+  };
+  sqlite.prepare('INSERT INTO briefings VALUES (?, ?, ?, ?, ?, ?)').run(
+    id, date, data.headline, JSON.stringify(data), storyCount, createdAt,
+  );
+  indexBriefingRow(sqlite, { id, date, data });
+}
+
 test('sanitises punctuation, FTS operators, unicode and empty queries into quoted prefixes', () => {
   assert.deepStrictEqual([
     sanitiseSearchQuery('plex'),
@@ -143,7 +162,7 @@ test('indexes whole old and new values, including Python-repr sources and commun
   assert.deepStrictEqual(logs, ['Skipped briefing 999: invalid JSON']);
 });
 
-test('search groups newest editions first, ranks title matches, caps total and escapes snippets', t => {
+test('search groups newest editions first, ranks title matches and escapes snippets', t => {
   const sqlite = memorySearchDb();
   t.after(() => sqlite.close());
   const rows = [oldEdition, newEdition];
@@ -163,6 +182,8 @@ test('search groups newest editions first, ranks title matches, caps total and e
   assert.deepStrictEqual(searchStories(sqlite, 'backpackers', 2), {
     query: 'backpackers',
     total: 2,
+    has_more: false,
+    next_before: null,
     editions: [{
       id: 219,
       date: '2026-10-24',
@@ -181,6 +202,85 @@ test('search groups newest editions first, ranks title matches, caps total and e
           kicker: '',
           section: 'Australia',
           snippet: 'Unsafe &lt;b&gt;<mark>backpackers</mark>&lt;/b&gt; summary',
+        },
+      ],
+    }],
+  });
+});
+
+test('search pages on edition boundaries with a stable cursor, has_more and an uncapped total', t => {
+  const sqlite = memorySearchDb();
+  t.after(() => sqlite.close());
+  insertSearchEdition(sqlite, {
+    id: 10, date: '2026-04-01', createdAt: '2026-04-01 06:00:00', storyCount: 2,
+  });
+  insertSearchEdition(sqlite, {
+    id: 20, date: '2026-05-01', createdAt: '2026-05-01 06:00:00', storyCount: 2,
+  });
+  insertSearchEdition(sqlite, {
+    id: 30, date: '2026-06-01', createdAt: '2026-06-01 06:00:00', storyCount: 2,
+  });
+
+  const firstPage = searchStories(sqlite, 'council', 3);
+  assert.deepStrictEqual(firstPage, {
+    query: 'council',
+    total: 6,
+    has_more: true,
+    next_before: Buffer.from(JSON.stringify(['2026-05-01 06:00:00', 20])).toString('base64url'),
+    editions: [
+      {
+        id: 30,
+        date: '2026-06-01',
+        headline: 'Edition 30',
+        stories: [
+          {
+            key: 'story-30-1', title: 'Council report 30-1', kicker: '', section: 'Local',
+            snippet: '<mark>Council</mark> report 30-1',
+          },
+          {
+            key: 'story-30-2', title: 'Council report 30-2', kicker: '', section: 'Local',
+            snippet: '<mark>Council</mark> report 30-2',
+          },
+        ],
+      },
+      {
+        id: 20,
+        date: '2026-05-01',
+        headline: 'Edition 20',
+        stories: [
+          {
+            key: 'story-20-1', title: 'Council report 20-1', kicker: '', section: 'Local',
+            snippet: '<mark>Council</mark> report 20-1',
+          },
+          {
+            key: 'story-20-2', title: 'Council report 20-2', kicker: '', section: 'Local',
+            snippet: '<mark>Council</mark> report 20-2',
+          },
+        ],
+      },
+    ],
+  });
+
+  insertSearchEdition(sqlite, {
+    id: 40, date: '2026-07-01', createdAt: '2026-07-01 06:00:00', storyCount: 1,
+  });
+  assert.deepStrictEqual(searchStories(sqlite, 'council', 3, firstPage.next_before), {
+    query: 'council',
+    total: 7,
+    has_more: false,
+    next_before: null,
+    editions: [{
+      id: 10,
+      date: '2026-04-01',
+      headline: 'Edition 10',
+      stories: [
+        {
+          key: 'story-10-1', title: 'Council report 10-1', kicker: '', section: 'Local',
+          snippet: '<mark>Council</mark> report 10-1',
+        },
+        {
+          key: 'story-10-2', title: 'Council report 10-2', kicker: '', section: 'Local',
+          snippet: '<mark>Council</mark> report 10-2',
         },
       ],
     }],

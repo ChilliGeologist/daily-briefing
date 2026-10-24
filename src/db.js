@@ -213,8 +213,8 @@ function initDB(dbPath) {
       return stmts.listBriefings.all().map(briefingListItem);
     },
 
-    searchStories(query, limit) {
-      return searchStories(sqlite, query, limit);
+    searchStories(query, limit, before) {
+      return searchStories(sqlite, query, limit, before);
     },
 
     backfillStorySearch() {
