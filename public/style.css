@@ -1670,6 +1670,18 @@ main {
   appearance: none;
 }
 
+/* The browser's own clear button is blue; draw it in the page's ink. */
+.archive-search input::-webkit-search-cancel-button {
+  width: 14px;
+  height: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--paper-summary);
+  cursor: pointer;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 2l10 10M12 2L2 12' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 2l10 10M12 2L2 12' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .archive-search input:focus-visible,
 .archive-edition:focus-visible,
 .archive-result:focus-visible,
@@ -1739,7 +1751,8 @@ main {
 .archive-edition-headline,
 .archive-result-title {
   color: var(--paper-ink);
-  font-size: 16px;
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.3;
 }

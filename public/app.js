@@ -47,7 +47,7 @@ function safeUrl(url) {
 function formatDate(dateStr) {
   if (!dateStr) return '';
   var d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString('en-AU', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 }
@@ -55,7 +55,7 @@ function formatDate(dateStr) {
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
   var d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString('en-AU', {
     weekday: 'short', month: 'short', day: 'numeric'
   });
 }
@@ -1944,13 +1944,13 @@ async function loadArchive() {
 }
 
 function archiveMonth(dateStr) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', {
     month: 'long', year: 'numeric'
   });
 }
 
 function archiveDay(dateStr) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', {
     weekday: 'long', day: 'numeric', month: 'long'
   });
 }
