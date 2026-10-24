@@ -93,7 +93,9 @@
           : 0;
         dot.position = positions[index];
         dot.labelRow = labelRow;
-        dot.label = dot.outlets.map(shortenOutletLabel).join(' \u00b7 ');
+        dot.label = dot.outlets.length > 1
+          ? dot.outlets.length + ' outlets'
+          : shortenOutletLabel(dot.outlets[0]);
         laidOut.push(dot);
       });
     });

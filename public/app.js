@@ -18,6 +18,7 @@ async function loadAppTitle() {
   var h1 = document.querySelector('header h1');
   if (h1) h1.textContent = appTitle;
   document.title = appTitle;
+  scheduleMastheadMeasure();
 }
 
 // ============================================================
@@ -232,6 +233,7 @@ var thumbIndexState = {
   here: 0,
   picking: null,
   frame: null,
+  hereFrame: null,
   glide: null,
   lastFrame: 0
 };
@@ -244,6 +246,148 @@ var readingState = {
   briefingScrollTop: 0,
   appHistoryEntry: false
 };
+
+var MASTHEAD_COLLAPSE_DISTANCE = 96;
+var MASTHEAD_REDUCED_THRESHOLD = 48;
+var mastheadState = {
+  metrics: null,
+  frame: null,
+  measureFrame: null,
+  progress: -1
+};
+
+function activeReadingPage() {
+  return readingState.readerOpen ? $('#reader-page') : $('#briefing-page');
+}
+
+function clearMastheadPresentation() {
+  var header = $('#app > header');
+  var title = $('#app-title');
+  var date = $('#briefing-date');
+  var actions = $('#app > header .header-right');
+  if (header) {
+    header.classList.remove('masthead-measuring-compact');
+    header.style.removeProperty('height');
+    header.style.removeProperty('--masthead-progress');
+  }
+  [title, date, actions].forEach(function(node) {
+    if (node) node.style.removeProperty('transform');
+  });
+  if (date) date.style.removeProperty('opacity');
+  mastheadState.progress = -1;
+}
+
+function mastheadTransform(node, from, to, progress, scale) {
+  if (!node || !from || !to) return;
+  var x = (to.left - from.left) * progress;
+  var y = (to.top - from.top) * progress;
+  var size = 1 + (scale - 1) * progress;
+  node.style.transform = 'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) +
+    'px,0) scale(' + size.toFixed(4) + ')';
+}
+
+function applyMastheadProgress(progress) {
+  var metrics = mastheadState.metrics;
+  var app = $('#app');
+  if (!metrics || !app || app.dataset.view !== 'reading') return;
+  progress = Math.max(0, Math.min(1, progress));
+  if (mastheadState.progress === progress) return;
+  mastheadState.progress = progress;
+
+  var height = metrics.fullHeight + (metrics.compactHeight - metrics.fullHeight) * progress;
+  metrics.header.style.height = height.toFixed(2) + 'px';
+  metrics.header.style.setProperty('--masthead-progress', progress.toFixed(4));
+  mastheadTransform(metrics.title, metrics.full.title, metrics.compact.title, progress, metrics.titleScale);
+  mastheadTransform(metrics.date, metrics.full.date, metrics.compact.date, progress, metrics.dateScale);
+  mastheadTransform(metrics.actions, metrics.full.actions, metrics.compact.actions, progress, 1);
+  metrics.date.style.opacity = (1 - progress).toFixed(3);
+
+  // The stage is the other flex child, so it grows by exactly the height the
+  // masthead gives back. Reuse that delta rather than forcing a layout read.
+  layoutThumbIndex(metrics.stageHeight + metrics.fullHeight - height);
+  if (curlState.progress > 0.0005 || curlState.gesture) renderCurl();
+}
+
+function currentMastheadProgress() {
+  var page = activeReadingPage();
+  var top = page ? page.scrollTop : 0;
+  if (prefersReducedMotion()) return top >= MASTHEAD_REDUCED_THRESHOLD ? 1 : 0;
+  return top / MASTHEAD_COLLAPSE_DISTANCE;
+}
+
+function syncMastheadNow() {
+  applyMastheadProgress(currentMastheadProgress());
+}
+
+function scheduleMastheadUpdate() {
+  if (mastheadState.frame !== null) return;
+  mastheadState.frame = requestAnimationFrame(function() {
+    mastheadState.frame = null;
+    syncMastheadNow();
+  });
+}
+
+function measureMasthead() {
+  mastheadState.measureFrame = null;
+  var app = $('#app');
+  var header = $('#app > header');
+  var title = $('#app-title');
+  var date = $('#briefing-date');
+  var actions = $('#app > header .header-right');
+  var stage = $('#reading-stage');
+  if (!app || app.dataset.view !== 'reading' || !header || !title || !date || !actions || !stage) {
+    clearMastheadPresentation();
+    mastheadState.metrics = null;
+    return;
+  }
+
+  clearMastheadPresentation();
+  var full = {
+    title: title.getBoundingClientRect(),
+    date: date.getBoundingClientRect(),
+    actions: actions.getBoundingClientRect()
+  };
+  var fullHeight = header.getBoundingClientRect().height;
+  var stageHeight = stage.getBoundingClientRect().height;
+  var fullTitleSize = parseFloat(getComputedStyle(title).fontSize) || 1;
+  var fullDateSize = parseFloat(getComputedStyle(date).fontSize) || 1;
+
+  header.classList.add('masthead-measuring-compact');
+  var compact = {
+    title: title.getBoundingClientRect(),
+    date: date.getBoundingClientRect(),
+    actions: actions.getBoundingClientRect()
+  };
+  var compactHeight = header.getBoundingClientRect().height;
+  var compactTitleSize = parseFloat(getComputedStyle(title).fontSize) || fullTitleSize;
+  var compactDateSize = parseFloat(getComputedStyle(date).fontSize) || fullDateSize;
+  header.classList.remove('masthead-measuring-compact');
+
+  mastheadState.metrics = {
+    header: header,
+    title: title,
+    date: date,
+    actions: actions,
+    full: full,
+    compact: compact,
+    fullHeight: fullHeight,
+    compactHeight: compactHeight,
+    stageHeight: stageHeight,
+    titleScale: compactTitleSize / fullTitleSize,
+    dateScale: compactDateSize / fullDateSize
+  };
+  mastheadState.progress = -1;
+  syncMastheadNow();
+}
+
+function scheduleMastheadMeasure() {
+  if (mastheadState.measureFrame !== null) return;
+  mastheadState.measureFrame = requestAnimationFrame(measureMasthead);
+}
+
+[$('#briefing-page'), $('#reader-page')].forEach(function(page) {
+  if (page) page.addEventListener('scroll', scheduleMastheadUpdate, { passive: true });
+});
 
 function setInert(element, inert) {
   if (!element) return;
@@ -520,6 +664,7 @@ function resetReadingStage() {
   readingState.storyId = null;
   readingState.openerId = null;
   readingState.appHistoryEntry = false;
+  scheduleMastheadUpdate();
 }
 
 function storyKey(item) {
@@ -650,6 +795,8 @@ function setThumbIndexPick(story) {
 function resetThumbIndexInteraction() {
   cancelThumbIndexFrame();
   cancelThumbIndexGlide();
+  if (thumbIndexState.hereFrame !== null) cancelAnimationFrame(thumbIndexState.hereFrame);
+  thumbIndexState.hereFrame = null;
   setThumbIndexPick(null);
   thumbIndexState.finger = null;
   thumbIndexState.current = -1;
@@ -691,9 +838,10 @@ function applyThumbLabelTransform(label) {
     (label.y - 9).toFixed(2) + 'px) scale(' + label.s.toFixed(3) + ')';
 }
 
-function layoutThumbIndex() {
+function layoutThumbIndex(stageHeight) {
   if (!thumbIndexState.labels.length) return;
-  var positions = window.ThumbIndexLogic.labelLayout($('#reading-stage').clientHeight, thumbIndexState.labels.length);
+  var height = Number.isFinite(stageHeight) ? stageHeight : $('#reading-stage').clientHeight;
+  var positions = window.ThumbIndexLogic.labelLayout(height, thumbIndexState.labels.length);
   thumbIndexState.labels.forEach(function(label, index) {
     label.y = positions[index];
     applyThumbLabelTransform(label);
@@ -822,6 +970,14 @@ function syncThumbIndexHere() {
   });
 }
 
+function scheduleThumbIndexHere() {
+  if (thumbIndexState.hereFrame !== null) return;
+  thumbIndexState.hereFrame = requestAnimationFrame(function() {
+    thumbIndexState.hereFrame = null;
+    syncThumbIndexHere();
+  });
+}
+
 function renderThumbIndex(sections) {
   resetThumbIndex();
   if (!sections.length) return;
@@ -926,7 +1082,7 @@ $('#section-thumb-index').addEventListener('pointermove', onThumbPointerMove, { 
 $('#section-thumb-index').addEventListener('pointerup', function(event) { releaseThumbIndex(event, false); });
 $('#section-thumb-index').addEventListener('pointercancel', function(event) { releaseThumbIndex(event, true); });
 $('#section-thumb-index').addEventListener('keydown', onThumbKeyDown);
-$('#briefing-page').addEventListener('scroll', syncThumbIndexHere, { passive: true });
+$('#briefing-page').addEventListener('scroll', scheduleThumbIndexHere, { passive: true });
 
 // ============================================================
 // 5. Paper briefing rendering
@@ -986,6 +1142,7 @@ async function loadBriefing(id) {
 
     $('#briefing-date').textContent = formatDate(json.date);
     $('#briefing-headline').textContent = '';
+    scheduleMastheadMeasure();
     document.title = formatDate(json.date) + ' \u2014 ' + appTitle;
 
     $$('.archive-item').forEach(function(archiveItem) {
@@ -1144,14 +1301,23 @@ function renderToldScaleSubject(subject, section, quoteBox) {
     }));
   });
   subject.dots.forEach(function(dot) {
+    var grouped = dot.outlets.length > 1;
+    var edgeClass = dot.position <= 10
+      ? ' told-scale-dot--edge-start'
+      : (dot.position >= 90 ? ' told-scale-dot--edge-end' : '');
     var button = el('button', {
       type: 'button',
-      className: 'told-scale-dot told-scale-dot--' + dot.stance,
+      className: 'told-scale-dot told-scale-dot--' + dot.stance +
+        (grouped ? ' told-scale-dot--grouped' : '') + edgeClass,
       'aria-label': dot.outlets.join(' \u00b7 ') + ': ' + dot.displayStance,
       'aria-pressed': 'false',
       style: { insetInlineStart: dot.position + '%' }
     }, [
-      el('i', { className: 'told-scale-dot-mark', 'aria-hidden': 'true' }),
+      el('i', {
+        className: 'told-scale-dot-mark',
+        'aria-hidden': 'true',
+        textContent: grouped ? String(dot.outlets.length) : ''
+      }),
       el('span', {
         className: 'told-scale-dot-label' + (dot.labelRow ? ' told-scale-dot-label--staggered' : ''),
         textContent: dot.label
@@ -1377,6 +1543,7 @@ function showReader(item, key, appHistoryEntry) {
   readingState.openerId = key;
   readingState.appHistoryEntry = Boolean(appHistoryEntry);
   $('#reader-page').scrollTop = 0;
+  syncMastheadNow();
   setInert($('#briefing-page'), true);
   setInert($('#reader-page'), false);
   setInert($('#section-thumb-layer'), true);
@@ -1419,13 +1586,14 @@ function closeReader() {
   $('#reading-stage').classList.remove('reader-active', 'curl-active');
   curlState.progress = 0;
   curlState.dragY = 0;
+  $('#briefing-page').scrollTop = readingState.briefingScrollTop;
+  syncMastheadNow();
   renderCurl();
   setInert($('#reader-page'), true);
   $('#reader-page').setAttribute('aria-hidden', 'true');
   setInert($('#briefing-page'), false);
   setInert($('#section-thumb-layer'), false);
   $('#section-thumb-layer').removeAttribute('aria-hidden');
-  $('#briefing-page').scrollTop = readingState.briefingScrollTop;
   requestAnimationFrame(function() {
     $('#briefing-page').scrollTop = readingState.briefingScrollTop;
     var opener = readingStoryOpeners.get(openerId);
@@ -1631,6 +1799,7 @@ function suppressMovedPointerClick(event) {
 
 function rerenderCurlAfterResize() {
   syncEditionLayout();
+  scheduleMastheadMeasure();
   if (curlState.gesture && curlState.gesture.story && !curlState.gesture.story.isConnected) {
     finishCurlGesture(true);
     return;
@@ -1642,6 +1811,7 @@ function rerenderCurlAfterResize() {
 
 window.addEventListener('resize', rerenderCurlAfterResize);
 window.addEventListener('orientationchange', rerenderCurlAfterResize);
+window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', scheduleMastheadUpdate);
 
 // ============================================================
 // 6. Archive
@@ -3584,6 +3754,12 @@ var router = (function() {
 
     var appRoot = document.getElementById('app');
     if (appRoot) appRoot.dataset.view = path === '/' ? 'reading' : path.slice(1);
+    if (path === '/') {
+      scheduleMastheadMeasure();
+    } else {
+      clearMastheadPresentation();
+      mastheadState.metrics = null;
+    }
     updateThemeColour();
 
     // Toggle view visibility
@@ -3676,3 +3852,10 @@ setInterval(updatePipelineStatus, 30000);
 // Initialize the router last so it can read the current URL and activate
 // the matching view after all bindings are in place.
 router.init();
+
+if (document.fonts) {
+  document.fonts.ready.then(scheduleMastheadMeasure);
+  if (document.fonts.addEventListener) {
+    document.fonts.addEventListener('loadingdone', scheduleMastheadMeasure);
+  }
+}

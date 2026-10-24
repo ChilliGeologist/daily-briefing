@@ -1606,15 +1606,39 @@ main {
 }
 
 #app[data-view="reading"] > header {
+  --masthead-progress: 0;
   position: relative;
   z-index: 10;
   width: 100%;
   max-width: var(--max-width);
   padding: calc(18px + env(safe-area-inset-top)) 18px 12px;
+  overflow: hidden;
   background: var(--paper-page);
   color: var(--paper-ink);
-  border-top: 4px double var(--paper-ink);
-  border-bottom: 4px double var(--paper-ink);
+  border-top: 1px solid var(--paper-ink);
+  border-bottom: 1px solid var(--paper-ink);
+  flex: 0 0 auto;
+}
+
+#app[data-view="reading"] > header::before,
+#app[data-view="reading"] > header::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 1px;
+  background: var(--paper-ink);
+  content: '';
+  opacity: calc(1 - var(--masthead-progress));
+  pointer-events: none;
+}
+
+#app[data-view="reading"] > header::before {
+  top: 2px;
+}
+
+#app[data-view="reading"] > header::after {
+  bottom: 2px;
 }
 
 #app[data-view="reading"] .header-content {
@@ -1627,6 +1651,10 @@ main {
 }
 
 #app[data-view="reading"] header h1 {
+  width: max-content;
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
   color: var(--paper-ink);
   font-family: Georgia, 'Times New Roman', Times, serif;
   font-size: clamp(32px, 9vw, 48px);
@@ -1636,6 +1664,10 @@ main {
 }
 
 #app[data-view="reading"] .date {
+  width: max-content;
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
   margin-top: 4px;
   color: var(--paper-summary);
   font-family: var(--font);
@@ -1648,6 +1680,13 @@ main {
 #app[data-view="reading"] .header-right {
   justify-content: center;
   margin-top: 9px;
+}
+
+#app[data-view="reading"] header h1,
+#app[data-view="reading"] .date,
+#app[data-view="reading"] .header-right {
+  transform-origin: left top;
+  will-change: transform;
 }
 
 #app[data-view="reading"] .btn-icon {
@@ -2244,9 +2283,9 @@ main {
 
 .told-scale-dot {
   position: absolute;
-  top: 3px;
+  top: 0;
   display: grid;
-  min-width: 32px;
+  width: 44px;
   min-height: 42px;
   padding: 0;
   border: 0;
@@ -2260,12 +2299,26 @@ main {
 }
 
 .told-scale-dot-mark {
-  display: block;
+  display: grid;
+  place-items: center;
   width: 18px;
   height: 18px;
+  margin-top: 3px;
   border: 2px solid var(--paper-reader);
   border-radius: 50%;
   box-shadow: 0 0 0 1px var(--paper-rule);
+  color: var(--paper-reader);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.told-scale-dot--grouped .told-scale-dot-mark {
+  width: 24px;
+  height: 24px;
+  margin-top: 0;
+  font-size: 11px;
 }
 
 .told-scale-dot--against .told-scale-dot-mark { background: var(--paper-against); }
@@ -2274,12 +2327,41 @@ main {
 
 .told-scale-dot-label {
   display: block;
+  max-width: 92px;
   margin-top: 2px;
+  overflow: hidden;
   color: var(--paper-summary);
   font-size: 10px;
   font-weight: 400;
   line-height: 1.2;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.told-scale-dot--edge-start {
+  transform: none;
+  justify-items: start;
+}
+
+.told-scale-dot--edge-end {
+  transform: translateX(-100%);
+  justify-items: end;
+}
+
+.told-scale-dot--edge-start .told-scale-dot-mark {
+  transform: translateX(-50%);
+}
+
+.told-scale-dot--edge-end .told-scale-dot-mark {
+  transform: translateX(50%);
+}
+
+.told-scale-dot--edge-start .told-scale-dot-label {
+  text-align: start;
+}
+
+.told-scale-dot--edge-end .told-scale-dot-label {
+  text-align: end;
 }
 
 .told-scale-dot-label--staggered {
@@ -2725,4 +2807,54 @@ main {
   .curl-flap {
     display: none !important;
   }
+}
+
+/* This class is applied only between synchronous layout reads. It supplies the
+   destination geometry for the scroll-driven masthead without ever becoming
+   the painted state; JS interpolates from the normal layout to these rects. */
+#app[data-view="reading"] > header.masthead-measuring-compact {
+  height: auto !important;
+  padding: env(safe-area-inset-top) 12px 0;
+}
+
+#app[data-view="reading"] > header.masthead-measuring-compact .header-content {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  text-align: start;
+}
+
+#app[data-view="reading"] > header.masthead-measuring-compact .header-left {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+#app[data-view="reading"] > header.masthead-measuring-compact h1 {
+  max-width: 100%;
+  margin-right: 0;
+  margin-left: 0;
+  overflow: hidden;
+  font-size: 21px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: none !important;
+}
+
+#app[data-view="reading"] > header.masthead-measuring-compact .date {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 22px);
+  left: 12px;
+  margin: 0;
+  font-size: 10px;
+  opacity: 0;
+  transform: none !important;
+}
+
+#app[data-view="reading"] > header.masthead-measuring-compact .header-right {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0 0 0 8px;
+  transform: none !important;
 }

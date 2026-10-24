@@ -42,7 +42,7 @@ test('layoutSubject merges matching Trump quotes, spreads stance bands, and stag
     labelRow: dot.labelRow,
   })), [
     { label: '7NEWS', outlets: ['7NEWS'], stance: 'against', position: 6, labelRow: 0 },
-    { label: 'SMH · Age', outlets: ['SMH', 'The Age'], stance: 'against', position: 34, labelRow: 0 },
+    { label: '2 outlets', outlets: ['SMH', 'The Age'], stance: 'against', position: 34, labelRow: 0 },
     { label: 'SBS', outlets: ['SBS News'], stance: 'plain', position: 38, labelRow: 0 },
     { label: 'Ars', outlets: ['Ars Technica'], stance: 'plain', position: 50, labelRow: 1 },
     { label: 'Reuters', outlets: ['Reuters'], stance: 'plain', position: 62, labelRow: 0 },
@@ -98,6 +98,30 @@ test('layoutSubject keeps empty plain quotes valid and merges them when identica
     quote: '',
     position: 50,
     labelRow: 0,
-    label: 'ABC \u00b7 Reuters',
+    label: '2 outlets',
   });
+});
+
+test('layoutSubject labels a shared quote by outlet count while keeping single outlet names', () => {
+  const scale = layoutSubject({
+    name: 'Melania Trump',
+    stances: [
+      { outlet: '7NEWS', stance: 'against', quote: 'Critical framing' },
+      { outlet: 'BBC', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'AP', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'Al Jazeera', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'Reuters', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'Daily Telegraph', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'news.com.au', stance: 'plain', quote: 'The same plain account' },
+      { outlet: 'Fox News', stance: 'toward', quote: 'Supportive framing' },
+    ],
+  });
+
+  assert.deepStrictEqual(scale.dots.map(dot => dot.label), [
+    '7NEWS',
+    '6 outlets',
+    'Fox News',
+  ]);
+  assert.strictEqual(scale.dots[1].outlets.join(' · '),
+    'BBC · AP · Al Jazeera · Reuters · Daily Telegraph · news.com.au');
 });
