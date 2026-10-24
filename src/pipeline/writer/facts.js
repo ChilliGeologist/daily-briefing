@@ -82,10 +82,6 @@ function unsupportedTerm(sentence, source) {
   );
 }
 
-function wordCount(text) {
-  return String(text || '').trim().match(/\S+/g)?.length || 0;
-}
-
 const NUMBER_PATTERN = /\$?\d[\d,]*(?:\.\d+)?(?:\s*(?:million|billion|thousand|[kmb])\b|%?)/giu;
 
 function numbers(text) {
@@ -101,32 +97,25 @@ function guardFacts(value, item) {
   const guarded = { ...value };
   const problems = [];
   let factsRemoved = 0;
-  let detailRemoved = 0;
 
-  for (const field of ['summary', 'detail']) {
-    const kept = [];
-    for (const sentence of sentences(guarded[field])) {
-      const unsupported = unsupportedTerm(sentence, source);
-      if (unsupported) {
-        factsRemoved++;
-        if (field === 'detail') detailRemoved++;
-        problems.push(`removed unsupported claim: "${unsupported.term}"`);
-      } else {
-        kept.push(sentence);
-      }
+  const kept = [];
+  for (const sentence of sentences(guarded.summary)) {
+    const unsupported = unsupportedTerm(sentence, source);
+    if (unsupported) {
+      factsRemoved++;
+      problems.push(`removed unsupported claim: "${unsupported.term}"`);
+    } else {
+      kept.push(sentence);
     }
-    guarded[field] = kept.join(' ');
   }
+  guarded.summary = kept.join(' ');
 
   const teaser = teasers(item)[0] || '';
   if (!guarded.summary) guarded.summary = firstSentence(teaser);
-  if (detailRemoved > 0 && wordCount(guarded.detail) < 25 && teaser) {
-    guarded.detail = [guarded.detail, teaser.trim()].filter(Boolean).join(' ');
-  }
 
   const sourceNumbers = new Set(numbers(source).map(normaliseNumber));
   let numbersUnsupported = 0;
-  for (const field of ['headline', 'summary', 'detail']) {
+  for (const field of ['headline', 'summary']) {
     for (const number of numbers(value[field])) {
       if (!sourceNumbers.has(normaliseNumber(number))) {
         numbersUnsupported++;

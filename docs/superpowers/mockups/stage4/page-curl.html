@@ -1,0 +1,214 @@
+<h2>Page curl — like a sheet of newspaper</h2>
+<p class="subtitle">Swipe left on any story. The page now folds along a crease that follows your thumb, bends as the corner lifts, and you can see faint print through the back. Swipe right on the full story to turn it back. Start your swipe low or high on the screen — the page lifts from the nearer corner.</p>
+
+<style>
+  .wrapph { display:flex; justify-content:center; }
+  .ph { position:relative; width:350px; max-width:100%; height:660px; border-radius:28px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.25);
+        background:#fbf8f1; font-family: Georgia, 'Times New Roman', serif; color:#1d1a16; user-select:none; -webkit-user-select:none; }
+  .reader, .front, .flap { position:absolute; left:0; top:0; width:100%; height:100%; }
+  .reader { background:#fbf8f1; overflow-y:auto; padding:18px 20px 40px; touch-action:pan-y; box-sizing:border-box; }
+  .front { background:#f7f3ea; overflow-y:auto; padding:20px 18px 40px; touch-action:pan-y; z-index:3; box-sizing:border-box; }
+  .flap { z-index:5; transform-origin:0 0; pointer-events:none; overflow:hidden; background:#f1ead9; display:none; }
+  .flap .ghost { position:absolute; inset:0; padding:20px 18px 40px; opacity:.09; overflow:hidden; box-sizing:border-box; }
+  .band { position:absolute; width:3000px; height:6000px; margin-top:-3000px; transform-origin:0 50%; pointer-events:none; }
+  .rshadow { z-index:2; } .fshadow { z-index:4; }
+  .layer { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+
+  .mast { text-align:center; border-bottom:3px double #1d1a16; padding-bottom:8px; }
+  .mast h1 { font-size:28px; margin:0; }
+  .mast p { font-size:11px; margin:4px 0 0; text-transform:uppercase; letter-spacing:2px; font-family:-apple-system,sans-serif; }
+  .lbl { font:700 11px -apple-system,sans-serif; letter-spacing:2px; text-transform:uppercase; color:#9a3412; margin:16px 0 4px; }
+  .kick { font:600 10px -apple-system,sans-serif; color:#8a8174; text-transform:uppercase; letter-spacing:1px; }
+  .st { border-top:1px solid #d6cfc0; padding:11px 0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .st h4 { font-size:17px; margin:2px 0 3px; line-height:1.25; transition:font-size .35s ease; }
+  .st > p { font-size:13.5px; margin:0; color:#57514a; line-height:1.4; }
+  .more { display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s cubic-bezier(.2,.8,.2,1); }
+  .more > div { overflow:hidden; }
+  .more .inner { opacity:0; transform:translateY(-6px); transition:opacity .35s ease .1s, transform .35s ease .1s; padding-top:8px; font-size:14.5px; line-height:1.5; }
+  .st.open .more { grid-template-rows:1fr; }
+  .st.open .more .inner { opacity:1; transform:none; }
+  .st.open h4 { font-size:19px; }
+  .btn { display:inline-block; margin-top:10px; font:600 13px -apple-system,sans-serif; color:#9a3412; border:1px solid #9a3412; border-radius:999px; padding:6px 14px; }
+  .src { font:12px -apple-system,sans-serif; color:#8a8174; margin-top:8px; }
+  .reader .back-link { font:600 13px -apple-system,sans-serif; color:#9a3412; cursor:pointer; display:inline-block; margin-bottom:12px; }
+  .reader h2 { font-size:25px; line-height:1.2; margin:4px 0 8px; }
+  .reader .by { font:12px -apple-system,sans-serif; color:#8a8174; margin-bottom:14px; }
+  .reader .img { height:150px; border-radius:6px; background:linear-gradient(135deg,#c9bfae,#a89c86); margin-bottom:14px; }
+  .reader p { font-size:16px; line-height:1.6; margin:0 0 12px; }
+  .reader .orig { font:600 13px -apple-system,sans-serif; color:#9a3412; margin-top:16px; }
+</style>
+
+<div class="wrapph">
+  <div class="ph" id="ph">
+    <div class="reader"></div>
+    <div class="layer rshadow"><div class="band" id="rband"></div></div>
+    <div class="front"></div>
+    <div class="layer fshadow"><div class="band" id="fband"></div></div>
+    <div class="flap"><div class="ghost"></div><div class="band" id="cband"></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const S = [
+    {lbl:'You should know'},
+    {k:'World', h:"Supermarket giant's systems shut down after cyberattack", s:'Ahold Delhaize took systems offline; fridges in French stores failed and stock was lost.',
+     d:'The owner of several European supermarket chains shut down parts of its network after attackers got in over the weekend. In France, store refrigeration controlled from the same systems stopped, and some stores threw out chilled food.', src:'ABC News · Guardian · Bleeping Computer'},
+    {k:'Plex', h:'Plex warns of a serious flaw in its media server', s:'An update is out; older versions can be taken over remotely.',
+     d:'Plex says a flaw in older versions of its server lets someone on the internet run their own code on the machine. The fix is in the latest release.', src:'Bleeping Computer'},
+    {k:'State politics', h:'Labor attacks Premier over "dodgy" deals', s:'The row is set to dominate parliament this week.',
+     d:'The Opposition says two recent government contracts were handed out without proper process. The Premier says both followed the rules.', src:'The Examiner · The Mercury'},
+    {lbl:'Tasmania'},
+    {k:'Basketball', h:'JackJumpers fan favourite retires without warning', s:'The club confirmed the news on Monday night.',
+     d:'The guard, who joined in the club\'s first season, told teammates before training.', src:'ABC Tasmania'},
+    {k:'Launceston', h:'Tamar bridge works to close a lane for three weeks', s:'Expect delays on the West Tamar Highway from Monday.',
+     d:'Resurfacing starts Monday and runs for about three weeks. At peak times traffic will be controlled by lights.', src:'The Examiner'},
+    {k:'What\'s on', h:'Festivale tickets go on sale Friday', s:'City Park, three days in February.',
+     d:'Early-bird tickets are limited. The line-up is out next week.', src:'The Examiner'},
+  ];
+  const ph = document.getElementById('ph');
+  const front = ph.querySelector('.front'), reader = ph.querySelector('.reader');
+  const flap = ph.querySelector('.flap'), ghost = flap.querySelector('.ghost');
+  const cband = document.getElementById('cband'), fband = document.getElementById('fband'), rband = document.getElementById('rband');
+
+  let html = '<div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>';
+  S.forEach((x,i)=>{
+    if (x.lbl) { html += '<div class="lbl">'+x.lbl+'</div>'; return; }
+    html += '<div class="st" data-i="'+i+'"><div class="kick">'+x.k+'</div><h4>'+x.h+'</h4><p>'+x.s+'</p>'+
+      '<div class="more"><div><div class="inner">'+x.d+'<div class="src">'+x.src+'</div><span class="btn">Read in full</span></div></div></div></div>';
+  });
+  front.innerHTML = html;
+
+  function fill(x){
+    const site = x.src.split(' · ')[0];
+    reader.innerHTML = '<span class="back-link">‹ Back</span><div class="kick">'+x.k+'</div><h2>'+x.h+'</h2><div class="by">'+site+' · 4 min read</div><div class="img"></div>'+
+      '<p>'+x.d+'</p><p>The rest of the article sits here in the publisher\'s own words, with ads, pop-ups and sign-up boxes stripped out, set in the same type as the briefing.</p><p>Long articles scroll. Paywalled ones show what the site gives away, then a link.</p><p>Swipe right anywhere on this page to turn back.</p><div class="orig">Open on '+site+' ›</div>';
+    reader.scrollTop = 0;
+    reader.querySelector('.back-link').addEventListener('click', ()=>{ setCorner(ph.clientHeight*0.8); animateTo(0); });
+  }
+
+  // ---- geometry ----
+  // State: p in [0,1] (0 = flat briefing, 1 = fully turned), corner (top or bottom right), dy (finger drift).
+  let p = 0, cornerY = 0, sgn = 1, dy = 0, anim = null;
+  function setCorner(y){ const H = ph.clientHeight; if (y > H/2) { cornerY = H; sgn = 1; } else { cornerY = 0; sgn = -1; } }
+
+  function clipHalf(W, H, M, n, keepPositive){
+    const pts = [[0,0],[W,0],[W,H],[0,H]], out = [];
+    const f = q => ((q[0]-M[0])*n[0] + (q[1]-M[1])*n[1]) * (keepPositive ? 1 : -1);
+    for (let i=0;i<4;i++){
+      const a = pts[i], b = pts[(i+1)%4], fa = f(a), fb = f(b);
+      if (fa >= 0) out.push(a);
+      if ((fa >= 0) !== (fb >= 0)) { const t = fa/(fa-fb); out.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]); }
+    }
+    return out;
+  }
+  const poly = pts => pts.length ? 'polygon(' + pts.map(q=>q[0].toFixed(1)+'px '+q[1].toFixed(1)+'px').join(',') + ')' : 'polygon(0 0,0 0,0 0)';
+
+  function render(){
+    const W = ph.clientWidth, H = ph.clientHeight;
+    if (p <= 0.0005) {
+      front.style.clipPath = ''; front.style.visibility = ''; flap.style.display = 'none';
+      fband.style.opacity = 0; rband.style.opacity = 0; return;
+    }
+    if (p >= 0.9995) {
+      front.style.visibility = 'hidden'; flap.style.display = 'none'; fband.style.opacity = 0; rband.style.opacity = 0; return;
+    }
+    front.style.visibility = '';
+    const lift = 90 * Math.sin(Math.PI * p);
+    const A = [W, cornerY];
+    const P = [W - 2*W*p, cornerY + dy - sgn*lift];
+    const M = [(A[0]+P[0])/2, (A[1]+P[1])/2];
+    let n = [A[0]-P[0], A[1]-P[1]]; const len = Math.hypot(n[0], n[1]) || 1; n = [n[0]/len, n[1]/len];
+    const u = [-n[1], n[0]];                     // direction along the crease
+    const ang = Math.atan2(n[1], n[0]) * 180/Math.PI;
+
+    front.style.clipPath = poly(clipHalf(W, H, M, n, false));
+
+    // flap = the cut-off part of the page, mirrored across the crease
+    const R00 = 2*u[0]*u[0]-1, R01 = 2*u[0]*u[1], R11 = 2*u[1]*u[1]-1;
+    const tx = M[0] - (R00*M[0] + R01*M[1]), ty = M[1] - (R01*M[0] + R11*M[1]);
+    flap.style.display = 'block';
+    flap.style.transform = 'matrix('+R00+','+R01+','+R01+','+R11+','+tx+','+ty+')';
+    flap.style.clipPath = poly(clipHalf(W, H, M, n, true));
+    ghost.scrollTop = front.scrollTop;
+
+    // curl lighting on the flap: dark in the crease, a bright roll, then falling off to the edge
+    const fw = Math.max(20, len/2);
+    const b = v => Math.max(1, v).toFixed(1)+'px';
+    [cband, fband, rband].forEach(el => { el.style.left = M[0]+'px'; el.style.top = M[1]+'px'; el.style.transform = 'rotate('+ang+'deg)'; });
+    cband.style.background = 'linear-gradient(to right, rgba(60,40,20,.28) 0px, rgba(255,255,255,.55) '+b(fw*0.18)+', rgba(255,255,255,.12) '+b(fw*0.45)+', rgba(60,40,20,.10) '+b(fw)+', rgba(60,40,20,.18) '+b(fw*1.6)+')';
+    // shadow on the briefing just under the crease (the -n side)
+    fband.style.opacity = 1;
+    fband.style.transform = 'rotate('+(ang+180)+'deg)';
+    fband.style.background = 'linear-gradient(to right, rgba(40,25,10,'+(0.22*Math.min(1,p*4)).toFixed(3)+') 0px, rgba(40,25,10,0) '+b(Math.min(36, fw*0.5))+')';
+    // shadow the lifted page casts on the article beneath (the +n side)
+    rband.style.opacity = 1;
+    rband.style.background = 'linear-gradient(to right, rgba(30,20,10,'+(0.45*(1-p)).toFixed(3)+') 0px, rgba(30,20,10,0) '+b(30 + 50*(1-p))+')';
+  }
+
+  function animateTo(target){
+    cancelAnimationFrame(anim);
+    const from = p, fromDy = dy, dist = Math.abs(target-from);
+    const dur = Math.max(200, 700*dist), t0 = performance.now();
+    const ease = t => 1 - Math.pow(1-t, 3);
+    (function step(now){
+      const t = Math.min(1, (now - t0)/dur), e = ease(t);
+      p = from + (target-from)*e; dy = fromDy*(1-e); render();
+      if (t < 1) anim = requestAnimationFrame(step); else { p = target; dy = 0; render(); }
+    })(t0);
+  }
+
+  // ---- taps ----
+  let moved = false;
+  front.addEventListener('click', e=>{
+    if (moved) return;
+    const st = e.target.closest('.st'); if (!st) return;
+    if (e.target.classList.contains('btn')) { fill(S[+st.dataset.i]); ghost.innerHTML = front.innerHTML; setCorner(ph.clientHeight*0.8); animateTo(1); return; }
+    const was = st.classList.contains('open');
+    front.querySelectorAll('.st.open').forEach(o=>o.classList.remove('open'));
+    if (!was) st.classList.add('open');
+  });
+
+  // ---- finger tracking ----
+  let down = null, mode = null, startP = 0, lastX = 0, lastT = 0, vx = 0;
+  function local(e){ const r = ph.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  function onDown(e){
+    cancelAnimationFrame(anim);
+    const [x,y] = local(e);
+    down = {x, y, st: e.target.closest && e.target.closest('.st')};
+    mode = null; moved = false; startP = p > 0.5 ? 1 : 0; lastX = x; lastT = performance.now(); vx = 0;
+  }
+  function onMove(e){
+    if (!down) return;
+    const [x,y] = local(e), dx = x - down.x, ddy = y - down.y;
+    if (!mode) {
+      if (Math.abs(dx) < 8 && Math.abs(ddy) < 8) return;
+      if (Math.abs(ddy) > Math.abs(dx)) { down = null; return; }
+      if (startP === 0 && dx < 0) { if (!down.st) { down = null; return; } fill(S[+down.st.dataset.i]); ghost.innerHTML = front.innerHTML; mode = 'fwd'; }
+      else if (startP === 1 && dx > 0) { mode = 'back'; }
+      else { down = null; return; }
+      setCorner(down.y); moved = true;
+      try { e.target.setPointerCapture(e.pointerId); } catch(_){}
+    }
+    const W = ph.clientWidth, now = performance.now();
+    vx = (x - lastX) / Math.max(1, now - lastT); lastX = x; lastT = now;
+    p = mode === 'fwd' ? Math.min(1, Math.max(0, -dx / W)) : Math.min(1, Math.max(0, 1 - dx / W));
+    dy = ddy * 0.6;
+    render();
+    e.preventDefault();
+  }
+  function onUp(){
+    if (down && mode === 'fwd') animateTo((p > 0.33 || vx < -0.5) ? 1 : 0);
+    if (down && mode === 'back') animateTo((p < 0.67 || vx > 0.5) ? 0 : 1);
+    down = null; mode = null;
+    setTimeout(()=>{ moved = false; }, 0);
+  }
+  [front, reader].forEach(el=>{
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove, {passive:false});
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+  });
+  render();
+})();
+</script>

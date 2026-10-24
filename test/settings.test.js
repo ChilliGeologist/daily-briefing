@@ -26,6 +26,9 @@ it('returns defaults when unset', () => {
   assert.strictEqual(settings.getMaxCandidates(), 120);
   assert.deepStrictEqual(settings.getInterests(), DEFAULT_INTERESTS);
   assert.strictEqual(settings.getWriterOllamaModel(), 'gemma4:26b');
+  assert.strictEqual(settings.getWriterNumThread(), 4);
+  assert.strictEqual(settings.getToldOllamaModel(), 'gemma4:26b');
+  assert.strictEqual(settings.getToldNumThread(), 4);
   assert.strictEqual(settings.getOllamaNumCtx(), 8192);
   assert.strictEqual(settings.getWriterArticleChars(), 6000);
   assert.strictEqual(settings.getSectionSize(), 5);
@@ -42,6 +45,9 @@ it('returns stored values when set', () => {
     max_candidates: 135,
     interests: [{ label: 'Mine' }],
     writer_ollama_model: 'writer-model',
+    writer_num_thread: 5,
+    told_ollama_model: 'told-model',
+    told_num_thread: 6,
     ollama_num_ctx: 16384,
     writer_article_chars: 9000,
     section_size: 4,
@@ -53,17 +59,30 @@ it('returns stored values when set', () => {
     settings.getPaywalledHosts(),
     settings.getMaxSameStoryChecks(),
     settings.getMaxCandidates(),
-  ], [24, ['x', ...newFillerPatterns.slice(-4)], [], 5, 135]);
+  ], [24, ['x', ...newFillerPatterns.slice(-11)], [], 5, 135]);
   assert.deepStrictEqual([
     settings.getInterests(),
     settings.getWriterOllamaModel(),
+    settings.getWriterNumThread(),
+    settings.getToldOllamaModel(),
+    settings.getToldNumThread(),
     settings.getOllamaNumCtx(),
     settings.getWriterArticleChars(),
     settings.getSectionSize(),
     settings.getTopSize(),
   ], [
-    [{ label: 'Mine' }], 'writer-model', 16384, 9000, 4, { min: 6, max: 6 },
+    [{ label: 'Mine' }], 'writer-model', 5, 'told-model', 6, 16384, 9000, 4, { min: 6, max: 6 },
   ]);
+});
+
+it('falls the told model back through the writer model to the general model', () => {
+  assert.strictEqual(createSettings(fakeDb({
+    ollama_model: 'general-model',
+    writer_ollama_model: 'writer-model',
+  })).getToldOllamaModel(), 'writer-model');
+  assert.strictEqual(createSettings(fakeDb({
+    ollama_model: 'general-model',
+  })).getToldOllamaModel(), 'general-model');
 });
 
 const newFillerPatterns = [
@@ -74,6 +93,13 @@ const newFillerPatterns = [
   '/\\bis hiring\\b/i',
   '/^\\s*revealed:\\s*liquidator appointments for businesses in the .+ council area\\b/i',
   '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
+  '/\\bdiscussion\\s+threads?\\b/i',
+  "/^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i",
+  "/^\\s*redditors?(?:['’]s)?\\b/i",
+  '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i',
+  '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i',
+  '/\\b(?:actor|actress|singer|rapper|musician|comedian|star|celebrity|entertainer)s?\\b.{0,100}\\b(?:gives? birth|welcomes? (?:a |their )?baby|pregnan(?:t|cy)|baby announcement|engaged|engagement|wedding|marries|married|divorce[ds]?)\\b|\\b(?:gives? birth|welcomes? (?:a |their )?baby|pregnan(?:t|cy)|baby announcement|engaged|engagement|wedding|marries|married|divorce[ds]?)\\b.{0,100}\\b(?:actor|actress|singer|rapper|musician|comedian|star|celebrity|entertainer)s?\\b/i',
+  '/\\bannounces? next [‘\'“"]?project[’\'”"]?\\b.{0,80}\\b(?:family|baby|pregnan)/i',
 ];
 
 it('upgrades stored filler patterns once without restoring deleted defaults or losing custom patterns', () => {
@@ -82,10 +108,10 @@ it('upgrades stored filler patterns once without restoring deleted defaults or l
   const settings = createSettings(db);
   const expected = ['my custom pattern', 'ask away', 'superquiz', ...newFillerPatterns.slice(1)];
   assert.deepStrictEqual(settings.getFillerPatterns(), expected);
-  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 3 });
+  assert.deepStrictEqual(settings.getAll(), { filler_patterns: expected, filler_patterns_revision: 8 });
   settings.set('filler_patterns', ['my custom pattern']);
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), ['my custom pattern']);
-  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 3 });
+  assert.deepStrictEqual(vals, { filler_patterns: ['my custom pattern'], filler_patterns_revision: 8 });
 });
 
 it('seeds fresh filler defaults once and respects an empty list after editing', () => {
@@ -97,11 +123,39 @@ it('seeds fresh filler defaults once and respects an empty list after editing', 
   assert.deepStrictEqual(createSettings(db).getFillerPatterns(), []);
 });
 
-it('upgrades a revision 2 install with only the newest patterns, keeping its deletions', () => {
+it('upgrades a revision 2 install with only the later patterns, keeping its deletions', () => {
   const vals = { filler_patterns: ['my custom pattern', 'megathread'], filler_patterns_revision: 2 };
   const settings = createSettings(fakeDb(vals));
   assert.deepStrictEqual(settings.getFillerPatterns(), [
-    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
+    'my custom pattern', 'megathread', '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-6),
   ]);
-  assert.strictEqual(vals.filler_patterns_revision, 3);
+  assert.strictEqual(vals.filler_patterns_revision, 8);
+});
+
+it('upgrades a revision 3 install with only later filler revisions', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 3 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', '/\\bdiscussion\\s+threads?\\b/i', ...newFillerPatterns.slice(-6)]);
+  assert.strictEqual(vals.filler_patterns_revision, 8);
+});
+
+it('upgrades a revision 4 install with only the later social-user fillers', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 4 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-6)]);
+  assert.strictEqual(vals.filler_patterns_revision, 8);
+});
+
+it('upgrades a revision 5 install with only the general Redditor filler', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 5 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-5)]);
+  assert.strictEqual(vals.filler_patterns_revision, 8);
+});
+
+it('upgrades a revision 6 install with only the property fillers', () => {
+  const vals = { filler_patterns: ['my custom pattern'], filler_patterns_revision: 6 };
+  const settings = createSettings(fakeDb(vals));
+  assert.deepStrictEqual(settings.getFillerPatterns(), ['my custom pattern', ...newFillerPatterns.slice(-4)]);
+  assert.strictEqual(vals.filler_patterns_revision, 8);
 });

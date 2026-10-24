@@ -106,3 +106,55 @@ it('filters video, podcast and audio pages by their title suffix', () => {
   assert.deepStrictEqual(result.dropped.map(drop => drop.item.title), titles);
   assert.deepStrictEqual(result.kept.map(value => value.title), keep);
 });
+
+it('filters social-user says and shares filler plus possessive Redditor features', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = [
+    'TikToker Says You Must Prepare to Be Ghosted in Modern Dating',
+    'TikTok User Shares 8 Red Flags Her Exes Showed While Dating',
+    'TikTokers Claim the New Trend Is Over',
+    'Redditors Reveal Their Worst Travel Mistakes',
+    "Redditor's First Day in Paris Goes From Fridge Trouble to Scammers",
+    'Redditor’s First Day in Paris Goes From Fridge Trouble to Scammers',
+    'Redditor Finally Draws the Line After Neighbor Repeatedly Uses His Private Driveway',
+    'Redditors Find 60 Cars Parked on Their Property for a Local Festival',
+  ];
+  const keep = [
+    "TikToker Are Assigning Their Favorites In The 'Holy Trinity' Meme Trend",
+  ];
+  const candidates = [...titles, ...keep].map(title => item(title, 1));
+  const reason = "filler: /^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i";
+  assert.deepStrictEqual(filterItems(candidates, opts({ fillerPatterns: settings.getFillerPatterns() })), {
+    kept: candidates.slice(8),
+    dropped: [
+      ...candidates.slice(0, 6).map(value => ({ item: value, reason })),
+      ...candidates.slice(6, 8).map(value => ({ item: value, reason: "filler: /^\\s*redditors?(?:['’]s)?\\b/i" })),
+    ],
+    stats: { total: 9, kept: 1, stale: 0, filler: 8 },
+  });
+});
+
+it('filters residential sale and embrace-this-life advertorials without dropping business sale news', () => {
+  const settings = createSettings({ getSetting: () => null, setSetting() {} });
+  const titles = [
+    'Embrace this modern rural life in Longford, just minutes from Launceston',
+    'Trotting track home and $2.5m farmhouse for sale on same stretch of road',
+    'Historic Gingerbread House in Evandale listed for sale',
+  ];
+  const keep = [
+    'Hobart brewery Captain Blighs hits market',
+    'Number of homes for sale falls to a record low',
+  ];
+  const candidates = [...titles, ...keep].map(title => item(title, 1, 'The Examiner'));
+  const propertyPattern = '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i';
+  const lifestylePattern = '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i';
+  assert.deepStrictEqual(filterItems(candidates, opts({ fillerPatterns: settings.getFillerPatterns() })), {
+    kept: candidates.slice(3),
+    dropped: [
+      { item: candidates[0], reason: `filler: ${lifestylePattern}` },
+      { item: candidates[1], reason: `filler: ${propertyPattern}` },
+      { item: candidates[2], reason: `filler: ${propertyPattern}` },
+    ],
+    stats: { total: 5, kept: 2, stale: 0, filler: 3 },
+  });
+});

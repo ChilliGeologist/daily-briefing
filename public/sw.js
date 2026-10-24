@@ -1,5 +1,16 @@
-const CACHE_NAME = 'daily-briefing-v2';
-const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json'];
+const CACHE_NAME = 'daily-briefing-v9';
+const PRECACHE = [
+  '/',
+  '/style.css',
+  '/reading-logic.js',
+  '/edition-layout.js',
+  '/told-scale.js',
+  '/curl-geometry.js',
+  '/thumb-index-logic.js',
+  '/sun-times.js',
+  '/app.js',
+  '/manifest.json'
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(PRECACHE)));
@@ -17,21 +28,19 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // Network-only for API calls
   if (url.pathname.startsWith('/api/')) return;
-  // SPA fallback: any navigation request returns the cached root index.html
-  // so /settings, /archive, /pipeline all boot the shell even offline.
-  if (e.request.mode === 'navigate') {
-    e.respondWith(
-      caches.match('/').then(r => r || fetch('/'))
-    );
-    return;
-  }
-  // Cache-first for static assets
+  // Network first, so a new deploy is never mixed with files cached from an
+  // older one (a cache-first app.js could call into a stale helper module).
+  // The cache is only the offline fallback; navigations fall back to the
+  // cached shell so /settings, /archive and /pipeline still boot offline.
+  const fallback = e.request.mode === 'navigate' ? '/' : e.request;
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
-      const clone = resp.clone();
-      caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+    fetch(e.request).then(resp => {
+      if (resp.ok && e.request.method === 'GET') {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(e.request.mode === 'navigate' ? '/' : e.request, clone));
+      }
       return resp;
-    }))
+    }).catch(() => caches.match(fallback))
   );
 });
 

@@ -1,0 +1,390 @@
+<title>Daily Gump thumb index</title>
+<style>
+/* Layout: one large working copy of the paper, centred, with short notes beside it on wide screens and above it on phones. */
+:root {
+  --ground: #ece8df;
+  --text: #26221d;
+  --soft: #6b6359;
+  --paper: #f7f3ea;
+  --ink: #1d1a16;
+  --summary: #57514a;
+  --quiet: #8a8174;
+  --rule: #d6cfc0;
+  --rust: #9a3412;
+  --rust-wash: rgba(154, 52, 18, 0.10);
+  --frame: #2b2622;
+  --shadow: rgba(40, 30, 20, 0.22);
+  --serif: Georgia, "Times New Roman", Times, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #141210; --text: #e9e3d8; --soft: #a39a8c;
+    --paper: #1f1b17; --ink: #ece6da; --summary: #b9b0a2; --quiet: #91887a;
+    --rule: #3b352e; --rust: #e0703a; --rust-wash: rgba(224, 112, 58, 0.14);
+    --frame: #050403; --shadow: rgba(0, 0, 0, 0.55); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #141210; --text: #e9e3d8; --soft: #a39a8c;
+  --paper: #1f1b17; --ink: #ece6da; --summary: #b9b0a2; --quiet: #91887a;
+  --rule: #3b352e; --rust: #e0703a; --rust-wash: rgba(224, 112, 58, 0.14);
+  --frame: #050403; --shadow: rgba(0, 0, 0, 0.55); color-scheme: dark;
+}
+html, body { background: var(--ground); color: var(--text); }
+body { font-family: var(--sans); font-size: 15px; line-height: 1.55; padding-inline: 16px; padding-block: 24px 64px; }
+.layout { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 40px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.notes { display: grid; gap: 14px; min-width: 0; max-width: 60ch; }
+.notes h1 { font-family: var(--serif); font-size: clamp(26px, 5vw, 36px); line-height: 1.1; margin: 0; text-wrap: balance; }
+.notes p { margin: 0; }
+.notes .soft { color: var(--soft); }
+.notes ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.notes .tryit { background: var(--rust-wash); border-left: 3px solid var(--rust); padding: 10px 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.controls button { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid var(--rule); background: var(--paper); color: var(--text); border-radius: 999px; cursor: pointer; }
+.controls button[aria-pressed="true"] { border-color: var(--rust); color: var(--rust); }
+.controls button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+
+.phone { position: relative; width: 100%; max-width: 380px; height: 700px; margin: 0 auto; border-radius: 30px; background: var(--frame); padding: 10px; box-shadow: 0 18px 40px var(--shadow); }
+@media (max-width: 860px) { .phone { height: min(700px, 82vh); min-height: 520px; } }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; background: var(--paper); touch-action: pan-y; }
+.paper { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--paper); color: var(--ink); font-family: var(--serif); padding: 0 38px 200px 18px; scrollbar-width: none; }
+.paper::-webkit-scrollbar { display: none; }
+.mast { text-align: center; padding: 20px 0 10px; margin-right: -20px; }
+.mast .rules { border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); height: 3px; }
+.mast .title { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; line-height: 1; padding: 10px 0 8px; }
+.mast .dateline { font-variant: small-caps; letter-spacing: 0.14em; font-size: 12px; color: var(--quiet); padding-top: 6px; }
+.sec { padding-top: 22px; }
+.sec h3 { position: relative; display: flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--rust); margin: 0 0 2px; padding: 4px 0 6px; transform-origin: left center; }
+.sec h3::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--ink); transform-origin: left center; }
+.sec h3 .ico { width: 15px; height: 15px; flex: none; }
+.sec h3 .wash { position: absolute; inset: -2px -8px 0 -8px; background: var(--rust-wash); border-radius: 3px; opacity: 0; pointer-events: none; }
+.story { padding: 11px 0; border-bottom: 1px solid var(--rule); border-radius: 2px; transition: background-color 140ms, transform 160ms; }
+.story .k { font-family: var(--sans); font-size: 11px; color: var(--quiet); margin-bottom: 2px; }
+.story .h { font-size: 16.5px; line-height: 1.28; font-weight: 600; }
+.story .s { font-size: 14px; line-height: 1.45; color: var(--summary); margin-top: 4px; }
+.story .more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 260ms ease; }
+.story .more > div { overflow: hidden; }
+.story.open .more { grid-template-rows: 1fr; }
+.story .more p { margin: 8px 0 2px; font-family: var(--sans); font-size: 12px; color: var(--rust); }
+.sec.lead .story:first-of-type .h { font-size: 22px; }
+.story.target { background: var(--rust-wash); transform: translateX(-4px); }
+
+/* The strip: quiet labels on the right edge, spread over the thumb's reach. */
+.strip { position: absolute; top: 0; bottom: 0; right: 0; width: 36px; z-index: 3; touch-action: none; cursor: ns-resize; }
+.strip .lab { position: absolute; right: 9px; width: 18px; height: 18px; transform-origin: right center; color: var(--quiet); will-change: transform; user-select: none; pointer-events: none; }
+.strip .lab svg { display: block; width: 100%; height: 100%; }
+.bubble { position: absolute; z-index: 4; right: 0; transform: translate(-150px, -50%); font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper); background: var(--rust); padding: 5px 10px; border-radius: 999px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 120ms; }
+.bubble.on { opacity: 1; }
+.strip .lab.cur { color: var(--rust); }
+.strip .lab.here { color: var(--ink); }
+.strip:focus-visible { outline: 2px solid var(--rust); outline-offset: -4px; }
+.hint { position: absolute; left: 16px; right: 56px; bottom: 14px; z-index: 2; font-family: var(--sans); font-size: 12px; color: var(--soft); text-align: right; pointer-events: none; transition: opacity 300ms; }
+.pickline { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--rust); opacity: 0; z-index: 2; pointer-events: none; transition: opacity 120ms; }
+.pickline.on { opacity: .5; }
+@media (prefers-reduced-motion: reduce) {
+  .story, .story .more, .hint, .pickline, .bubble { transition: none; }
+}
+</style>
+
+<div class="layout">
+  <div class="notes">
+    <h1>The thumb index</h1>
+    <p>Built the way Niagara's alphabet works, with sections instead of letters.</p>
+    <ol>
+      <li>A small icon for each section sits quietly down the right edge, low enough to reach with your thumb: front page, Tasmania, Australia, globe, shield, server rack, controller, speech bubble.</li>
+      <li>Put your thumb on them and slide. The icons under your thumb swell and bow out into a curve, the one you're on turns rust with its name beside it, and the paper jumps to that section as you go, with a small buzz at each one. </li>
+      <li>Let go and the icons spring back into the edge.</li>
+      <li>Or, while you're still holding, slide sideways off the edge onto a headline and let go on it to open that story.</li>
+    </ol>
+    <p class="tryit">Try it: hold your thumb on the right edge and slide slowly down to Gaming, then slide left onto a story and let go.</p>
+    <p class="soft">The strip only takes the thin right margin, and the page curl starts from a story, so the two don't clash.</p>
+    <div class="controls" role="group" aria-label="Demo options">
+      <button type="button" id="slow" aria-pressed="false">Slow motion</button>
+      <button type="button" id="side" aria-pressed="false">Left-handed</button>
+    </div>
+  </div>
+  <div class="phone"><div class="screen" id="screen"></div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var EDITION = [{"t":"You should know","id":"top","s":[["Sydney attack","Patient allegedly set on fire in hospital","A man has been charged with attempted murder after allegedly dousing and setting three patients on fire at a Sydney hospital."],["Tech security","OpenAI engineer arrested for allegedly planting spy device in office","A Saudi OpenAI engineer was arrested after security personnel found a hidden recording device planted in a San Francisco executive conference room."],["Security patch","Cisco patches new Secure Email Gateway zero-day exploited in attacks","Cisco patched a zero-day flaw in its Secure Email Gateway allowing remote attackers to execute root commands via malicious attachments."],["Rebate cut","Government fails to secure support for beleaguered private health bill","A private health insurance rebate cut for over-65s was blocked in the Senate, leading the government to vow to reintroduce the legislation."],["Diplomacy","Zelenskyy says Trump's decision to take Russia's side is 'painful'","Volodymyr Zelenskyy called it 'painful' that Donald Trump is choosing sides in the war, following Trump's comments suggesting Zelenskyy should be replaced."]]},{"t":"Tasmania","id":"tasmania","s":[["Assault charges","Charges laid over alleged assault at Devonport","Four people have been charged with assault and stealing following an alleged assault on a male youth near Devonport Bluff early Monday morning."],["Infrastructure concerns","Firmus' IPO may have flopped but one state leader still sees 'opportunity'","Despite Firmus' failed IPO, the Tasmanian Premier sees opportunity, while community concerns and local government planning issues remain."],["Retail changes","Former tattoo parlour gets retail overhaul, cheesemaker moves to Legana","A new convenience store opened in a former tattoo parlour site, while a cheesemaker relocated to the Fermentation Hub in Legana."],["Local doctor","All the way from Scotland, Tassie town's new GP is ready for the challenge","Strahan welcomes a permanent GP from Scotland, addressing years of reliance on visiting doctors in the small town."],["Rural living","Embrace this modern rural life in Longford, just minutes from Launceston","A Longford property offers a blend of rural scale and city convenience, featuring modern renovations and grazing land near Launceston."],["Crime charges","Man charged with multiple burglary and stealing offences","A Mowbray man was charged with numerous offences, including burglary and computer fraud, following an arrest on October 9th."]]},{"t":"Australia","id":"australia","s":[["Navy incident","Investigation underway after recording device found in cabin of HMAS Leeuwin navy ship","Authorities are investigating a recording device found in a female-only cabin aboard the HMAS Leeuwin while it was docked in Cairns."],["Intelligence","Alleged Chinese spies used LinkedIn to target former premier","Suspected Chinese spies used LinkedIn to approach over 100 Australians, including a former state premier, offering consultancy work."],["Safety breach","CCTV shows crane hitting powerline at modular home site","A Geelong crane company was fined $2,700 after a crane chain struck a powerline, injuring four workers."],["Staff pay","Flinders University admits to $965k underpayment of casual staff","Flinders University apologised for underpaying 1,405 casual staff by $965,827 between 2020 and 2025."],["Donation appeal","Blood supplies plunge 60% as Lifeblood calls for 16,000 donors","Lifeblood warns blood supplies are at a decade low, needing 16,000 donations this week due to a 60% drop since June."],["Cricket win","Schutt stars as Aussies sweep Bangladesh in ODI series","Australia secured a clean sweep of the ODI series against Bangladesh with an eight-wicket win in the final match."]]},{"t":"World","id":"world","s":[["Health update","Pope Leo XIV undergoes surgery for lung cancer","Pope Leo XIV's recovery from removing a lower lobe of his right lung due to lung adenocarcinoma is progressing as expected."],["Trial details","Russell Brand a 'ruthless, calculated sexual predator', court hears","A prosecutor described Russell Brand as a 'ruthless, calculated and manipulative sexual predator' during his trial for multiple sex offences."],["Regional tensions","As the Houthis escalate attacks, Saudi Arabia faces a 'huge problem'","Houthi attacks on Saudi airports escalate tensions, highlighting defensive gaps and complicating any potential resolution to the Yemen conflict."],["Yemen conflict","Saudi Arabia strikes oil depots in Yemen and says missiles launched toward location of Saudi Aramco HQ","Saudi Arabia struck an oil depot in Sana'a and intercepted missiles aimed at the Saudi Aramco headquarters in Dharan."],["Diplomatic visit","Burnham says he wants to 'repair bridges' between Ukraine and US","Andy Burnham aims to repair ties between Ukraine and the US ahead of a meeting with President Zelensky at Downing Street."],["Book ban","Sally Rooney pulls books from UK over her support for Palestine Action","Sally Rooney's books will no longer be sold in the UK due to her support for Palestine Action, an organisation banned in the country."]]},{"t":"Tech & Security","id":"tech","s":[["Software update","Dusk for Plex 1.6: SharePlay, better Apple TV playback, and more","Plex 1.6 introduces SharePlay for watching together over FaceTime, improved Apple TV playback, and subtitle enhancements."],["Wallet sales halt","Ledger asks sellers across Asia to halt sales after supply-chain attack","Ledger has ordered a sales halt across Southeast Asia and Hong Kong after finding devices modified to steal crypto seed phrases."],["Bot migration","Yandex outage: data shows that instead of going dark, malicious bots moved","Analysis of the Yandex outage suggests malicious bot activity did not cease but instead migrated to other hosting providers."],["Connection reuse","Better HTTP/1 connection reuse in Go 1.27","Go 1.27 significantly improves HTTP/1 connection reuse performance, making repeated requests much faster than previous versions."],["Pair programming","Show HN: Petal, open-source CoScreen/ScreenHero finally free","A new open-source pair programming tool called Petal is available, offering low latency screensharing and remote control capabilities."],["Source control","Anthropic's Scion is heavily inspired by Mononoke","A developer claims Anthropic's Scion version control system heavily resembles concepts previously detailed in the open-source Mononoke system."]]},{"t":"Homelab & Self-hosting","id":"homelab","s":[["Network gear","Is Omada still a good choice in October 2026?","Community discussion suggests Omada remains viable for business setups despite FCC concerns, recommending on-site management for simplicity."],["Media setup","Started my first ever NAS today","A new NAS owner is seeking app recommendations, with suggestions pointing towards Jellyfin as an alternative to Plex."],["Data migration","Migrate files from nextcloud to opencloud","Using rclone via a WebDAV remote is recommended for migrating files from Nextcloud to OpenCloud to avoid permission and database issues."],["Homelab build","Finally finished my 3D printed KWS V2 rack featuring 120 heat nut inserts","A user shared details of a custom 3D printed KWS V2 rack designed to house networking and computing equipment."],["Data caution","How much AI is too much?","Discussion threads caution users about the risks of feeding sensitive network data to cloud AI tools for homelab and self-hosting projects."],["Server upgrade","Microserver upgraded to two Gen9 servers and a Gen9 chassis","A homelab setup was upgraded from a 16GB Gen8 microserver to two Gen9 servers and an unused Gen9 chassis."]]},{"t":"Gaming","id":"gaming","s":[["Patch longevity","Patch 7.41 became the third-longest-lasting patch in Dota 2 history","Dota 2's patch 7.41 has been out for 203 days, ranking third in the game's history, with a new record possible soon."],["Game chat","Dota is really chill and fun now???","Some Dota 2 players report that unranked matches are significantly less toxic than ranked play, with community members finding the atmosphere more relaxed."],["Gaming incident","23savage’s bootcamp got raided by Malaysia police","A professional gamer reported that Malaysian police raided his team's bootcamp, confiscating items and detaining him and teammates for questioning."],["Rewards poll","Quest Month Rewards Poll Update","Darts rewards are being removed from consideration, but polls will still run for Bone Storage, a new amulet, and new Hunter creatures."]]},{"t":"Around the internet","id":"internet","s":[["Supermarket revenue","How much are Coles and Woolworths making from 30c paper bags?","Discussion on Reddit questions the revenue generated by major supermarkets from selling 30-cent paper bags."],["Movie lore","What's going on with the new Narnia movie?","Online discussion points to criticisms regarding the prequel nature, time discrepancies, and casting choices for the new Narnia film."],["Online pranks","There’s Nothing Mysterious or Unusual About the Viral German Sexual Harassment Robot","A viral incident in Cologne involving a robot harassing a woman is not mysterious, stemming from typical online pranks."],["Game development","Not solitaire","Puzzmo created a massively passively multiplayer solitaire game, which coincided with a similar project from Nolen Royalty."]]}];
+  // Static, trusted SVG strings (no user data); maps drawn from real coastline points.
+  var S = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  var ICONS = {
+    top: S + '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7.5 7.5h9M7.5 11h4M7.5 14.5h4M7.5 17.5h9"/><rect x="13.5" y="10.5" width="3" height="4.5" fill="currentColor" stroke="none"/></svg>',
+    tasmania: S + '<path fill="currentColor" fill-opacity=".18" d="M2.3 1.5 L5.5 1.9 L11.1 4.9 L13.5 4.0 L16.6 3.6 L19.8 1.9 L21.7 3.6 L21.4 5.9 L21.4 9.9 L21.4 12.6 L20.4 15.4 L19.6 19.4 L16.1 17.9 L14.5 21.5 L13.5 22.5 L9.2 22.1 L8.7 20.1 L5.0 12.2 L5.5 11.9 L3.4 8.3 L2.3 6.5 Z"/></svg>',
+    australia: S + '<path fill="currentColor" fill-opacity=".18" d="M1.5 11.4 L1.9 8.9 L4.3 8.0 L6.2 6.7 L7.6 4.6 L8.6 4.2 L9.7 4.9 L10.6 3.4 L11.8 2.7 L13.8 3.3 L13.2 4.9 L15.4 6.4 L16.3 3.5 L16.7 2.4 L18.2 5.2 L18.4 6.1 L19.0 7.4 L20.2 8.5 L21.0 9.8 L22.3 12.2 L22.5 12.8 L21.6 15.4 L21.3 15.9 L20.6 17.8 L20.6 18.0 L18.8 19.0 L18.0 18.4 L16.3 18.6 L15.3 17.9 L14.1 16.9 L14.3 15.1 L13.1 16.5 L12.2 14.9 L10.2 14.6 L9.7 14.6 L6.0 15.9 L3.9 16.6 L2.5 16.2 L2.8 14.8 L2.2 13.0 Z"/><path fill="currentColor" stroke="none" d="M17.9 19.9 L18.8 20.1 L19.8 20.1 L19.7 20.8 L19.2 21.5 L18.5 21.6 L18.0 20.5 Z"/></svg>',
+    world: S + '<circle cx="12" cy="12" r="9"/><g fill="currentColor" fill-opacity=".55" stroke="none">'
+      + '<path d="M5.2 8.4C6.6 5.9 9.4 4.4 12.4 4.3c2.6 0 4.9 1 6.3 2.8l-1.4 1.6-1.9-.5-1.3 1.7-1.6-.6-1.5 1.5-1.4-1-1.6 1.1-1.4-1.2-1.6.4z"/>'
+      + '<path d="M10.5 11.1l1.7-.1-.8 2.4z"/>'
+      + '<ellipse cx="14.4" cy="12.7" rx=".9" ry=".45"/><ellipse cx="16.2" cy="13.3" rx="1" ry=".45"/>'
+      + '<path d="M13.9 15.3c1-.8 2.8-.8 3.8 0 .8.8.6 2.3-.6 2.9-1.2.6-2.6.2-3.2-.8-.4-.7-.4-1.5 0-2.1z"/>'
+      + '<path d="M3.6 12.3c1.1-.6 2.6-.2 3.2 1.2.4 1.5-.3 3.3-1.5 4.1-.9-1.5-1.5-3.2-1.7-5.3z"/>'
+      + '</g></svg>',
+    tech: S + '<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8-7.5 9.5-4.3-1.5-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.6"/></svg>',
+    homelab: S + '<rect x="4" y="3.5" width="16" height="5" rx="1"/><rect x="4" y="9.5" width="16" height="5" rx="1"/><rect x="4" y="15.5" width="16" height="5" rx="1"/><path d="M7 6h.01M7 12h.01M7 18h.01M11 6h6M11 12h6M11 18h6"/></svg>',
+    gaming: S + '<path d="M7 8h10a4 4 0 0 1 3.9 4.9l-1 4.3a2.2 2.2 0 0 1-3.8.9L14 16h-4l-2.1 2.1a2.2 2.2 0 0 1-3.8-.9l-1-4.3A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3M15.5 12h.01M17.5 13.5h.01"/></svg>',
+    internet: S + '<path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z"/><path d="M7 10h10M7 13h6"/></svg>'
+  };
+  function icon(id, cls) {
+    var span = document.createElement('span');
+    span.className = cls;
+    span.innerHTML = ICONS[id] || ICONS.top;
+    return span;
+  }
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var screen = document.getElementById('screen');
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  // ---- the paper ----
+  var paper = el('div', 'paper');
+  var mast = el('div', 'mast');
+  mast.appendChild(el('div', 'rules'));
+  mast.appendChild(el('div', 'title', 'The Daily Gump'));
+  mast.appendChild(el('div', 'rules'));
+  mast.appendChild(el('div', 'dateline', 'Thursday 15 October 2026'));
+  paper.appendChild(mast);
+  var sections = EDITION.map(function (sec, i) {
+    var s = el('section', 'sec' + (i === 0 ? ' lead' : ''));
+    var h = el('h3');
+    h.appendChild(el('span', 'wash'));
+    h.appendChild(icon(sec.id, 'ico'));
+    h.appendChild(document.createTextNode(sec.t));
+    s.appendChild(h);
+    sec.s.forEach(function (st) {
+      var story = el('article', 'story');
+      if (st[0]) story.appendChild(el('div', 'k', st[0]));
+      story.appendChild(el('div', 'h', st[1]));
+      var more = el('div', 'more');
+      var inner = el('div');
+      if (st[2]) inner.appendChild(el('div', 's', st[2]));
+      inner.appendChild(el('p', null, 'Read in full ›'));
+      more.appendChild(inner);
+      story.appendChild(more);
+      story.addEventListener('click', function () { toggle(story); });
+      s.appendChild(story);
+    });
+    paper.appendChild(s);
+    return { el: s, head: h, id: sec.id };
+  });
+  screen.appendChild(paper);
+  function toggle(story, forceOpen) {
+    var open = forceOpen || !story.classList.contains('open');
+    paper.querySelectorAll('.story.open').forEach(function (o) { if (o !== story) o.classList.remove('open'); });
+    story.classList.toggle('open', open);
+  }
+
+  // ---- the strip ----
+  var strip = el('div', 'strip');
+  strip.tabIndex = 0;
+  strip.setAttribute('role', 'slider');
+  strip.setAttribute('aria-label', 'Jump to section');
+  strip.setAttribute('aria-valuemin', '0');
+  strip.setAttribute('aria-valuemax', String(EDITION.length - 1));
+  var labels = EDITION.map(function (sec) {
+    var l = icon(sec.id, 'lab');
+    strip.appendChild(l);
+    return { el: l, y: 0, x: 0, vx: 0, s: 1, vs: 0 };
+  });
+  screen.appendChild(strip);
+  var hint = el('div', 'hint', 'Slide along the right edge');
+  screen.appendChild(hint);
+  var pickline = el('div', 'pickline');
+  screen.appendChild(pickline);
+  var bubble = el('div', 'bubble');
+  screen.appendChild(bubble);
+
+  // Labels spread over the lower two thirds: the part a thumb reaches.
+  function layout() {
+    var h = screen.clientHeight;
+    var top = h * 0.30, bottom = h * 0.92;
+    var step = (bottom - top) / (labels.length - 1);
+    labels.forEach(function (l, i) { l.y = top + i * step; });
+  }
+  layout();
+  window.addEventListener('resize', layout);
+
+  // ---- motion: every label springs toward a target set by the finger ----
+  var finger = null;          // { y } while held
+  var current = -1;           // section index under the finger
+  var picking = null;         // story under the finger when slid off the edge
+  var slow = 1;
+  var AMP = 46, SIGMA = 44, GROW = 1.15, GAP = 10;   // how far names bow out, how wide the bulge is, how much they swell
+
+  function targets(l) {
+    if (!finger || reduced) return { x: 0, s: 1 };
+    var d = (l.y - finger.y) / SIGMA;
+    var g = Math.exp(-d * d);
+    return { x: -AMP * g * (picking ? 0.35 : 1), s: 1 + GROW * g };
+  }
+
+  var last = 0, running = false;
+  function frame(ts) {
+    var dt = last ? Math.min(48, ts - last) / 16.67 / slow : 1;
+    last = ts;
+    var moving = false;
+    labels.forEach(function (l, i) {
+      var t = targets(l);
+      // Critically-damped-ish spring with a little overshoot on release.
+      var k = finger ? 0.32 : 0.16, c = finger ? 0.62 : 0.30;
+      l.vx += ((t.x - l.x) * k - l.vx * c) * dt;
+      l.vs += ((t.s - l.s) * k - l.vs * c) * dt;
+      l.x += l.vx * dt;
+      l.s += l.vs * dt;
+      if (Math.abs(l.vx) > 0.01 || Math.abs(t.x - l.x) > 0.05 || Math.abs(t.s - l.s) > 0.002) moving = true;
+      l.el.style.transform = 'translate(' + l.x.toFixed(2) + 'px,' + (l.y - 9).toFixed(2) + 'px) scale(' + l.s.toFixed(3) + ')';
+      l.el.classList.toggle('cur', finger !== null && i === current);
+      if (finger !== null && i === current) {
+        bubble.style.top = l.y + 'px';
+        // The icon is 18px wide, 9px in from the edge, scaled from its outer side.
+        var reach = 9 + 18 * l.s + GAP;
+        bubble.style.transform = side === 'right'
+          ? 'translate(' + (l.x - reach).toFixed(2) + 'px,-50%)'
+          : 'translate(' + (l.x + reach).toFixed(2) + 'px,-50%)';
+      }
+    });
+    bubble.classList.toggle('on', finger !== null && !picking && current >= 0);
+    if (moving || finger) requestAnimationFrame(frame); else { running = false; last = 0; }
+  }
+  function kick() { if (!running) { running = true; last = 0; requestAnimationFrame(frame); } }
+  kick();
+
+  function tick() { try { if (navigator.vibrate) navigator.vibrate(5); } catch (e) {} }
+  function nearest(y) {
+    var best = 0, bd = Infinity;
+    labels.forEach(function (l, i) { var d = Math.abs(l.y - y); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  function sectionTop(i) { return i === 0 ? 0 : sections[i].el.offsetTop - 2; }
+
+  // The paper jumps as you slide, like Niagara's list: a very short glide so
+  // the eye can follow, never a long scroll.
+  var glide = null;
+  function jumpTo(i) {
+    var target = sectionTop(i);
+    if (reduced) { paper.scrollTop = target; return; }
+    var start = paper.scrollTop, t0 = null, dur = 150 * slow;
+    if (glide) cancelAnimationFrame(glide);
+    function step(ts) {
+      if (t0 === null) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur);
+      paper.scrollTop = start + (target - start) * (1 - Math.pow(1 - p, 3));
+      if (p < 1) glide = requestAnimationFrame(step); else glide = null;
+    }
+    glide = requestAnimationFrame(step);
+  }
+  function select(i) {
+    if (i === current) return;
+    current = i;
+    strip.setAttribute('aria-valuenow', String(i));
+    strip.setAttribute('aria-valuetext', EDITION[i].t);
+    bubble.textContent = EDITION[i].t;
+    tick();
+    jumpTo(i);
+  }
+
+  function storyAt(x, y) {
+    var r = screen.getBoundingClientRect();
+    var stories = paper.querySelectorAll('.story');
+    for (var n = 0; n < stories.length; n++) {
+      var b = stories[n].getBoundingClientRect();
+      if (y >= b.top && y <= b.bottom && x >= r.left && x <= b.right + 40) return stories[n];
+    }
+    return null;
+  }
+  function setPick(story) {
+    if (picking === story) return;
+    if (picking) picking.classList.remove('target');
+    picking = story;
+    if (picking) { picking.classList.add('target'); tick(); }
+  }
+
+  strip.addEventListener('pointerdown', function (e) {
+    strip.setPointerCapture(e.pointerId);
+    var r = screen.getBoundingClientRect();
+    finger = { y: e.clientY - r.top, x0: e.clientX };
+    current = -1;
+    hint.style.opacity = '0';
+    select(nearest(finger.y));
+    kick();
+    e.preventDefault();
+  });
+  strip.addEventListener('pointermove', function (e) {
+    if (!finger) return;
+    var r = screen.getBoundingClientRect();
+    finger.y = Math.max(0, Math.min(r.height, e.clientY - r.top));
+    var off = e.clientX - finger.x0;
+    var away = side === 'right' ? -off : off;
+    if (away > 36) {
+      // Slid off the edge: choose a story instead of a section.
+      setPick(storyAt(e.clientX, e.clientY));
+      pickline.style.top = finger.y + 'px';
+      pickline.classList.add('on');
+    } else {
+      setPick(null);
+      pickline.classList.remove('on');
+      select(nearest(finger.y));
+    }
+  });
+  function release() {
+    if (!finger) return;
+    finger = null;
+    pickline.classList.remove('on');
+    if (picking) { var s = picking; setPick(null); toggle(s, true); }
+    kick();
+  }
+  strip.addEventListener('pointerup', release);
+  strip.addEventListener('pointercancel', function () { setPick(null); release(); });
+
+  // Keyboard: arrow keys move section by section.
+  strip.addEventListener('keydown', function (e) {
+    var i = current < 0 ? 0 : current;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') i = Math.min(labels.length - 1, i + 1);
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') i = Math.max(0, i - 1);
+    else return;
+    e.preventDefault();
+    current = -1; select(i);
+  });
+
+  // Follow normal scrolling so the edge always shows where you are.
+  paper.addEventListener('scroll', function () {
+    if (finger) return;
+    var y = paper.scrollTop + 8, here = 0;
+    sections.forEach(function (s, i) { if (s.el.offsetTop <= y) here = i; });
+    labels.forEach(function (l, i) { l.el.classList.toggle('here', i === here); });
+  });
+
+  // ---- demo options ----
+  var side = 'right';
+  document.getElementById('slow').addEventListener('click', function () {
+    slow = slow === 1 ? 4 : 1;
+    this.setAttribute('aria-pressed', String(slow !== 1));
+  });
+  document.getElementById('side').addEventListener('click', function () {
+    side = side === 'right' ? 'left' : 'right';
+    this.setAttribute('aria-pressed', String(side === 'left'));
+    strip.style.left = side === 'left' ? '0' : '';
+    strip.style.right = side === 'left' ? 'auto' : '0';
+    labels.forEach(function (l) {
+      l.el.style.right = side === 'left' ? 'auto' : '9px';
+      l.el.style.left = side === 'left' ? '9px' : 'auto';
+      l.el.style.transformOrigin = side === 'left' ? 'left center' : 'right center';
+    });
+    AMP = side === 'left' ? -Math.abs(AMP) : Math.abs(AMP);
+    paper.style.padding = side === 'left' ? '0 18px 200px 38px' : '';
+    bubble.style.right = side === 'left' ? 'auto' : '0';
+    bubble.style.left = side === 'left' ? '0' : 'auto';
+    hint.style.textAlign = side === 'left' ? 'left' : 'right';
+  });
+})();
+</script>

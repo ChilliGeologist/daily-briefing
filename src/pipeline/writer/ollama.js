@@ -2,10 +2,19 @@
 
 const TIMEOUT_MS = 300000;
 
-function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, log }) {
-  const endpoint = `${String(url).replace(/\/$/, '')}/api/chat`;
+function createOllamaWriter({
+  url,
+  model,
+  numCtx,
+  fetchImpl = globalThis.fetch,
+  log,
+  keepAlive = '30m',
+  numThread,
+}) {
+  const baseUrl = String(url).replace(/\/$/, '');
+  const endpoint = `${baseUrl}/api/chat`;
 
-  async function call(system, user, schema, numPredict) {
+  async function call(system, user, schema, numPredict, images = []) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const started = Date.now();
@@ -17,13 +26,18 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
           model,
           messages: [
             { role: 'system', content: system },
-            { role: 'user', content: user },
+            { role: 'user', content: user, ...(images.length > 0 ? { images } : {}) },
           ],
           format: schema,
           stream: false,
           think: false,
-          keep_alive: '30m',
-          options: { temperature: 0.3, num_ctx: numCtx, num_predict: numPredict },
+          keep_alive: keepAlive,
+          options: {
+            temperature: 0.3,
+            num_ctx: numCtx,
+            num_predict: numPredict,
+            ...(numThread === undefined ? {} : { num_thread: numThread }),
+          },
         }),
         signal: controller.signal,
       });
@@ -59,8 +73,35 @@ function createOllamaWriter({ url, model, numCtx, fetchImpl = globalThis.fetch, 
     write(system, user, schema) {
       return call(system, user, schema, 700);
     },
+    async vision(system, user, schema, imageUrl) {
+      const image = await fetchImpl(imageUrl);
+      if (!image.ok) throw new Error(`Image HTTP ${image.status || 'error'}`);
+      const bytes = Buffer.from(await image.arrayBuffer());
+      return call(system, user, schema, 700, [bytes.toString('base64')]);
+    },
+    tell(system, user, schema, numPredict = 1200) {
+      return call(system, user, schema, numPredict);
+    },
     edit(system, user, schema) {
       return call(system, user, schema, 1500);
+    },
+    async unload() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      try {
+        const response = await fetchImpl(`${baseUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, keep_alive: 0 }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`Ollama unload HTTP ${response.status}: ${body.slice(0, 200)}`);
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   };
 }

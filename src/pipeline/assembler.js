@@ -1,6 +1,11 @@
 'use strict';
 
 const { SECTIONS, TOP_SECTION } = require('./writer/sections');
+const { communityReplies, isCommunityItem } = require('./writer/prompts');
+
+const COMMUNITY_POST_CHARS = 6000;
+const COMMUNITY_REPLY_COUNT = 5;
+const COMMUNITY_REPLY_CHARS = 1000;
 
 function valuesOf(storiesById) {
   return storiesById instanceof Map ? [...storiesById.values()] : Object.values(storiesById || {});
@@ -10,20 +15,22 @@ function getStory(storiesById, id) {
   return storiesById instanceof Map ? storiesById.get(id) : storiesById && storiesById[id];
 }
 
-function readingTime(detail) {
-  const words = String(detail || '').trim().match(/\S+/g) || [];
+function readingTime(summary) {
+  const words = String(summary || '').trim().match(/\S+/g) || [];
   return Math.max(1, Math.ceil(words.length / 200));
 }
 
 function readerStory(story, significance) {
-  return {
+  const output = {
     id: story.id,
     title: story.headline,
     kicker: story.kicker,
     summary: story.summary,
-    detail: story.detail,
     significance,
     image: story.image || null,
+    ...(Array.isArray(story.images) && story.images.length > 0 ? { images: story.images } : {}),
+    ...(story.image_described ? { image_described: true } : {}),
+    ...(story.told ? { told: story.told } : {}),
     sources: story.sources || [],
     canonical_url: story.canonical_url || null,
     article_url: story.article_url || null,
@@ -31,8 +38,13 @@ function readerStory(story, significance) {
     coverage: Number(story.coverage) || 1,
     interest_labels: (story.interest_matches || []).map(match => match.label).filter(Boolean),
     written_by: story.written_by,
-    reading_time: readingTime(story.detail),
+    reading_time: readingTime(story.summary),
   };
+  if (isCommunityItem(story)) {
+    output.description = String(story.description || '').trim().slice(0, COMMUNITY_POST_CHARS);
+    output.top_comments = communityReplies(story, COMMUNITY_REPLY_COUNT, COMMUNITY_REPLY_CHARS);
+  }
+  return output;
 }
 
 function storiesForIds(ids, storiesById, significance, excluded = new Set()) {

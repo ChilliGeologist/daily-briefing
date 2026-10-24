@@ -125,6 +125,9 @@ async function fetchAPI(source, log) {
         source_name: source.name,
         source_type: 'api',
         default_category: source.default_category,
+        ...(config.kind ? { source_kind: config.kind } : {}),
+        ...(config.no_solo_top ? { no_solo_top: true } : {}),
+        ...(config.short_ok ? { short_ok: true } : {}),
       };
 
       log.debug('api', `Parsed item: ${title}`);

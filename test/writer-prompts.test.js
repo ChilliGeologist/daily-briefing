@@ -4,6 +4,8 @@ const { it } = require('node:test');
 const assert = require('node:assert');
 const {
   WRITE_SCHEMA,
+  COMMUNITY_BOILERPLATE_REPLY_PATTERNS,
+  communityReplies,
   editSchema,
   writeSystemPrompt,
   writeUserPrompt,
@@ -15,15 +17,26 @@ it('defines the exact closed write schema', () => {
   assert.deepStrictEqual(WRITE_SCHEMA, {
     type: 'object',
     additionalProperties: false,
-    required: ['is_news', 'headline', 'summary', 'detail', 'kicker', 'section'],
+    required: ['is_news', 'headline', 'summary', 'kicker', 'section'],
     properties: {
       is_news: { type: 'boolean' },
       headline: { type: 'string' },
       summary: { type: 'string' },
-      detail: { type: 'string' },
       kicker: { type: 'string' },
-      section: { type: 'string', enum: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'] },
+      section: { type: 'string', enum: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'] },
     },
+  });
+});
+
+it('writes only the longer summary shape and no detail field', () => {
+  assert.deepStrictEqual({
+    required: WRITE_SCHEMA.required,
+    fields: Object.keys(WRITE_SCHEMA.properties),
+    summaryRule: writeSystemPrompt().split(' Set is_news')[0].split('\n\n').at(-1),
+  }, {
+    required: ['is_news', 'headline', 'summary', 'kicker', 'section'],
+    fields: ['is_news', 'headline', 'summary', 'kicker', 'section'],
+    summaryRule: 'The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements.',
   });
 });
 
@@ -37,9 +50,10 @@ Choose exactly one section:
 - tech — General technology, privacy and security news.
 - homelab — Homelab, self-hosting, servers, networking and related products.
 - gaming — Video games and gaming communities.
-- internet — Reddit and Hacker News culture, online communities and oddities.
+- sport — only major sport: final stages of major events or stories carried by many outlets.
+- internet — internet culture: viral trends, memes, platform drama, online communities and oddities.
 
-The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. Overseas sport, entertainment and celebrity stories are world unless an Australian team, player or event is central.
+The section is where the story happens, not who reports it: a story set overseas is world even from an Australian outlet; federal politics and stories set in other states are australia; tasmania is only for stories set in Tasmania; a security or privacy story about a tech company is tech. All sport goes in sport, never Tasmania or Australia.
 
 Keep the publisher's headline unless it is vague, clickbait or misleading, and never make it vaguer; no padding, no "In a significant development", no rhetorical questions. The kicker is one or two words, in sentence case (capital first letter only, except proper names), and more specific than the section. Never use the section's own name or a bare place name as the kicker, and never make it a sentence or a reason the story was picked.
 
@@ -49,10 +63,10 @@ If the article text is missing, short or is clearly not the story (a cookie noti
 
 Never mention the reader, where they live, or what the text does not say about them.
 
-The summary is one sentence of no more than 30 words. The detail is 60–120 words, synthesising all sources and noting where they disagree. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
+The summary is one or two sentences of no more than about 40 words, synthesising all supplied sources and noting relevant disagreements. Set is_news to false for quizzes, puzzles, ads, sponsored content, listicles, live-blog shells and pages with no story. Programming tutorials and personal essays are not news. Property listings, real-estate promotions and sponsored lifestyle features are not news. For Reddit and Hacker News posts, set is_news to true for a showcase, a guide, an announcement or a discussion with useful substance; set it to false for a request for help, a buying question, a suggestion, a feature request or a beginner question. A personal homepage, CV, portfolio or profile page is not news.`);
 });
 
-it('builds a complete per-story prompt with capped article and five community comments', () => {
+it('builds a complete per-story prompt with capped article and five real community comments', () => {
   const prompt = writeUserPrompt({
     title: 'Original headline',
     source_type: 'reddit',
@@ -61,7 +75,10 @@ it('builds a complete per-story prompt with capped article and five community co
     interest_matches: [{ label: 'West Tamar' }, { label: 'Emergencies' }],
     merged_descriptions: ['Teaser one.', 'Teaser two.'],
     article_content: '123456789',
-    top_comments: ['One', 'Two', 'Three', 'Four', 'Five', 'Six'],
+    top_comments: [
+      'Expand the replies to this comment to learn how AI was used in this post/project.',
+      'One', 'Two', 'Three', 'Four', 'Five', 'Six',
+    ],
   }, { articleChars: 5 });
 
   assert.strictEqual(prompt, `ORIGINAL HEADLINE: Original headline
@@ -81,6 +98,28 @@ COMMUNITY COMMENTS:
 5. Five`);
 });
 
+it('keeps boilerplate reply patterns in one list and removes only matching replies', () => {
+  const replies = [
+    'Expand the replies to this comment to learn how AI was used in this post/project.',
+    'Friendly reminder that all top level comments must: start with "Answer: ". I am a bot.',
+    'This post has been marked as non-political. Please respect this by keeping the discussion on topic.',
+    'Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker and Tracker for Linux and Mac.',
+    'A real answer from another person.',
+  ];
+  assert.deepStrictEqual({
+    patterns: COMMUNITY_BOILERPLATE_REPLY_PATTERNS.map(pattern => pattern.source),
+    replies: communityReplies({ top_comments: replies }),
+  }, {
+    patterns: [
+      '^Expand the replies to this comment to learn how AI was used in this post\\/project\\.?$',
+      '^Friendly reminder that all top level comments must:',
+      '^This post has been marked as non-political\\.',
+      '^Thanks for reporting this bug! Check out the General Dota 2 Bug Tracker',
+    ],
+    replies: ['A real answer from another person.'],
+  });
+});
+
 it('defines an edit schema constrained to the supplied story ids and fixed editor prompt', () => {
   const sectionArray = { type: 'array', items: { type: 'string', enum: ['s1', 's2'] } };
   assert.deepStrictEqual(editSchema(['s1', 's2']), {
@@ -92,7 +131,7 @@ it('defines an edit schema constrained to the supplied story ids and fixed edito
       sections: {
         type: 'object',
         additionalProperties: false,
-        required: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'internet'],
+        required: ['tasmania', 'australia', 'world', 'tech', 'homelab', 'gaming', 'sport', 'internet'],
         properties: {
           tasmania: sectionArray,
           australia: sectionArray,
@@ -100,6 +139,7 @@ it('defines an edit schema constrained to the supplied story ids and fixed edito
           tech: sectionArray,
           homelab: sectionArray,
           gaming: sectionArray,
+          sport: sectionArray,
           internet: sectionArray,
         },
       },

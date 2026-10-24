@@ -57,14 +57,19 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests 
   const coverageScore = 25 * Math.log2(Math.max(1, cluster.coverage));
   const recency = recencyScore(newestItem(cluster), now);
   const position = positionScore(cluster.items);
+  const noSoloTop = cluster.coverage <= 1 && cluster.items.some(item => item.no_solo_top);
   const keywords = keywordBonus(cluster.lead, {
-    boost_keywords: boostKeywords || [],
+    boost_keywords: noSoloTop ? [] : (boostKeywords || []),
     penalty_keywords: penaltyKeywords || [],
   });
   const interestText = cluster.items
     .map(item => `${item.title || ''} ${item.description || ''}`)
     .join('\n');
   const interest_matches = matchInterests(interestText, interests || []);
+  if (cluster.items.some(item => item.source_kind === 'warning')
+    && !interest_matches.some(match => match.label === 'Emergencies')) {
+    interest_matches.push({ label: 'Emergencies', kind: 'topic', weight: 3, urgent: true, term: 'warning' });
+  }
   const interestPoints = interestScore(interest_matches) * INTEREST_POINTS;
   const priority = Math.max(...cluster.items.map(item => item.source_priority ?? 1));
   const rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);
@@ -78,6 +83,7 @@ function rankClusters(clusters, {
   interests = [],
   limit,
   perSourceFloor = 2,
+  perCategoryFloor = 12,
 } = {}) {
   const scored = clusters
     .map(cluster => scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }))
@@ -94,6 +100,20 @@ function rankClusters(clusters, {
       .filter(cluster => cluster.items.some(item => item.source_name === source))
       .slice(0, perSourceFloor);
     for (const cluster of sourceClusters) floorSelection.set(cluster.id, cluster);
+  }
+
+  // Each source category (gaming, trending, homelab...) keeps its best stories
+  // too. One global ranking let national news and Hacker News fill every
+  // place: on 2026-10-15 the internet-culture feeds reached the writer only
+  // at ranks 106-120 and Around the internet ended with two stories.
+  const categories = [...new Set(scored.flatMap(cluster =>
+    cluster.items.map(item => item.default_category).filter(Boolean)
+  ))];
+  for (const category of categories) {
+    const categoryClusters = scored
+      .filter(cluster => cluster.items.some(item => item.default_category === category))
+      .slice(0, perCategoryFloor);
+    for (const cluster of categoryClusters) floorSelection.set(cluster.id, cluster);
   }
 
   let selected = [...floorSelection.values()]

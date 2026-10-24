@@ -1,0 +1,98 @@
+<h2>Which look feels right over breakfast?</h2>
+<p class="subtitle">Three directions, same stories. Ignore the exact words — judge the feel. Tap the one you like most (or tell me what to steal from each).</p>
+
+<style>
+  .phones { display:flex; gap:24px; flex-wrap:wrap; justify-content:center; }
+  .phone { width:340px; border-radius:28px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.25); cursor:pointer; border:3px solid transparent; transition:transform .2s, border-color .2s; }
+  .phone:hover { transform:translateY(-3px); }
+  .phone.selected { border-color:#3b82f6; }
+  .pick { text-align:center; font-weight:600; margin:10px 0 0; }
+  .pick small { display:block; font-weight:400; opacity:.7; }
+
+  /* A — Paper */
+  .pa { background:#f7f3ea; color:#1d1a16; font-family: Georgia, 'Times New Roman', serif; padding:20px 18px 26px; }
+  .pa .mast { text-align:center; border-bottom:3px double #1d1a16; padding-bottom:8px; }
+  .pa .mast h1 { font-size:28px; margin:0; letter-spacing:.5px; }
+  .pa .mast p { font-size:11px; margin:4px 0 0; text-transform:uppercase; letter-spacing:2px; font-family: -apple-system, sans-serif; }
+  .pa .lbl { font: 700 11px -apple-system, sans-serif; letter-spacing:2px; text-transform:uppercase; color:#9a3412; margin:16px 0 6px; }
+  .pa .lead h3 { font-size:22px; line-height:1.2; margin:0 0 6px; }
+  .pa .lead p { font-size:15px; line-height:1.45; margin:0; }
+  .pa .row { border-top:1px solid #d6cfc0; padding:10px 0; }
+  .pa .row h4 { font-size:16px; margin:0 0 3px; line-height:1.25; }
+  .pa .row p { font-size:13px; margin:0; color:#57514a; line-height:1.4; }
+  .pa .why { font: 600 10px -apple-system, sans-serif; color:#9a3412; text-transform:uppercase; letter-spacing:1px; }
+
+  /* B — Calm cards */
+  .pb { background:#eef1f5; color:#14181f; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; padding:18px 14px 24px; }
+  .pb .top { display:flex; justify-content:space-between; align-items:baseline; padding:0 4px; }
+  .pb .top h1 { font-size:22px; margin:0; }
+  .pb .top span { font-size:12px; color:#6b7280; }
+  .pb .lbl { font-size:12px; font-weight:700; color:#6b7280; margin:16px 4px 8px; text-transform:uppercase; letter-spacing:1px; }
+  .pb .card { background:#fff; border-radius:16px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .pb .card h4 { margin:0 0 4px; font-size:16px; line-height:1.3; }
+  .pb .card p { margin:0; font-size:13.5px; color:#4b5563; line-height:1.45; }
+  .pb .chip { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; margin-bottom:6px; }
+  .pb .c-tas { background:#dcfce7; color:#166534; } .pb .c-you { background:#fee2e2; color:#991b1b; } .pb .c-au { background:#dbeafe; color:#1e40af; } .pb .c-tech { background:#ede9fe; color:#5b21b6; }
+
+  /* C — Night magazine */
+  .pc { background:#0f1115; color:#e8e6e1; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; padding:22px 18px 26px; }
+  .pc h1 { font-size:13px; letter-spacing:3px; text-transform:uppercase; color:#f5b84a; margin:0; }
+  .pc .date { font-size:26px; font-weight:800; margin:2px 0 14px; line-height:1.1; }
+  .pc .hero { border-left:4px solid #f5b84a; padding-left:12px; margin-bottom:16px; }
+  .pc .hero h3 { font-size:21px; line-height:1.2; margin:0 0 6px; font-weight:800; }
+  .pc .hero p { font-size:14px; color:#b5b2ab; margin:0; line-height:1.45; }
+  .pc .item { display:flex; gap:12px; padding:11px 0; border-top:1px solid #23262d; }
+  .pc .n { font-size:22px; font-weight:800; color:#3a3e47; min-width:22px; }
+  .pc .item h4 { margin:0 0 3px; font-size:15px; line-height:1.3; }
+  .pc .item p { margin:0; font-size:12.5px; color:#9a978f; line-height:1.4; }
+  .pc .tag { font-size:10px; font-weight:700; color:#f5b84a; text-transform:uppercase; letter-spacing:1px; }
+</style>
+
+<div class="phones">
+  <div>
+    <div class="phone" data-choice="paper" onclick="toggleSelect(this)">
+      <div class="pa">
+        <div class="mast"><h1>The Daily Gump</h1><p>Tuesday 13 October · Launceston</p></div>
+        <div class="lbl">You should know</div>
+        <div class="lead">
+          <h3>Supermarket giant's systems shut down after cyberattack</h3>
+          <p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed and stock was lost.</p>
+        </div>
+        <div class="row"><div class="why">Touches you · you run GitLab-style tools</div><h4>GitLab warns of critical flaw that lets attackers run code</h4><p>Patch now if you self-host it.</p></div>
+        <div class="row"><div class="why">Tasmania · politics</div><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div>
+        <div class="lbl">Tasmania</div>
+        <div class="row"><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div>
+      </div>
+    </div>
+    <p class="pick">A · Paper<small>Serif type, cream page, like a good newspaper</small></p>
+  </div>
+
+  <div>
+    <div class="phone" data-choice="cards" onclick="toggleSelect(this)">
+      <div class="pb">
+        <div class="top"><h1>Good morning</h1><span>Tue 13 Oct · 4 min read</span></div>
+        <div class="lbl">You should know</div>
+        <div class="card"><span class="chip c-au">World</span><h4>Supermarket giant's systems shut down after cyberattack</h4><p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed.</p></div>
+        <div class="card"><span class="chip c-you">Your server</span><h4>GitLab warns of critical flaw that lets attackers run code</h4><p>Patch now if you self-host it.</p></div>
+        <div class="card"><span class="chip c-tas">Tasmania · politics</span><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div>
+        <div class="lbl">Tasmania</div>
+        <div class="card"><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div>
+      </div>
+    </div>
+    <p class="pick">B · Calm cards<small>Clean phone-app feel, a coloured tag on each story</small></p>
+  </div>
+
+  <div>
+    <div class="phone" data-choice="night" onclick="toggleSelect(this)">
+      <div class="pc">
+        <h1>The Daily Gump</h1>
+        <div class="date">Tuesday,<br>13 October</div>
+        <div class="hero"><span class="tag">You should know</span><h3>Supermarket giant's systems shut down after cyberattack</h3><p>Ahold Delhaize took systems offline across Europe; fridges in French stores failed.</p></div>
+        <div class="item"><div class="n">2</div><div><span class="tag">Your server</span><h4>GitLab warns of critical flaw that lets attackers run code</h4><p>Patch now if you self-host it.</p></div></div>
+        <div class="item"><div class="n">3</div><div><span class="tag">Tasmania · politics</span><h4>Labor attacks Premier over "dodgy" deals</h4><p>The row is set to dominate parliament this week.</p></div></div>
+        <div class="item"><div class="n">4</div><div><span class="tag">Tasmania</span><h4>JackJumpers fan favourite retires without warning</h4><p>The club confirmed the news on Monday night.</p></div></div>
+      </div>
+    </div>
+    <p class="pick">C · Night magazine<small>Dark, bold, numbered — easy on the eyes early</small></p>
+  </div>
+</div>

@@ -71,4 +71,11 @@ function isBarePlaceName(value) {
   return barePlaces.has(String(value || '').trim().toLocaleLowerCase('en-AU'));
 }
 
-module.exports = { hasAustralianOnlyPlace, hasOverseasOnlyEvidence, isBarePlaceName };
+module.exports = {
+  AUSTRALIAN_PLACES,
+  SHARED_AUSTRALIAN_PLACES,
+  hasAnyAustralianEvidence,
+  hasAustralianOnlyPlace,
+  hasOverseasOnlyEvidence,
+  isBarePlaceName,
+};

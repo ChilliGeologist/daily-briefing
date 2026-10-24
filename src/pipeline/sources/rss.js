@@ -1,6 +1,7 @@
 'use strict';
 
 const RSSParser = require('rss-parser');
+const WARNING_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
 function stripHTML(html) {
   if (!html) return '';
@@ -57,6 +58,81 @@ function ensureISO(dateStr) {
   }
 }
 
+function sourceFields(source, defaults = {}) {
+  return {
+    source_name: source.name,
+    source_type: 'rss',
+    // Special source kinds have a contractual section regardless of a stale
+    // category left on an existing database row.
+    default_category: defaults.default_category || source.default_category,
+    ...(source.config && source.config.kind ? { source_kind: source.config.kind } : {}),
+    ...(source.config && source.config.no_solo_top ? { no_solo_top: true } : {}),
+    ...(source.config && source.config.short_ok ? { short_ok: true } : {}),
+  };
+}
+
+function normaliseFeedItem(item, source, defaults = {}) {
+  const title = decodeEntities(item.title || '');
+  const description = stripHTML(item.contentSnippet || item.content || '').substring(0, 500);
+  return {
+    title,
+    url: item.link || '',
+    external_url: null,
+    description,
+    image: extractImage(item),
+    published: ensureISO(item.isoDate || item.pubDate || null),
+    score: null,
+    comment_count: null,
+    ...sourceFields(source, defaults),
+  };
+}
+
+const NORTHERN_WARNING_AREA = /\b(?:North East|North West Coast|Central North|Launceston|Tamar|Tasmania|Tasmanian)\b/i;
+const LAND_WARNING = /\b(?:severe weather|flood|fire weather|frost|sheep graziers?)\b/i;
+
+async function parseWarningFeed(body, source) {
+  const parser = new RSSParser();
+  const feed = await parser.parseString(body);
+  return (feed.items || []).filter(item => {
+    const text = `${item.title || ''} ${stripHTML(item.contentSnippet || item.content || '')}`;
+    if (/\b(?:marine|coastal waters?|cancellation|cancelled|canceled)\b/i.test(text)) return false;
+    if (!LAND_WARNING.test(text) || !NORTHERN_WARNING_AREA.test(text)) return false;
+    if (/\bsheep graziers?\b/i.test(text) && !/\bsevere\b/i.test(text)) return false;
+    return true;
+  }).map(item => normaliseFeedItem(item, source, { default_category: 'local' }));
+}
+
+const PRERELEASE = /(?:^|[\s._-])(?:alpha\d*|beta\d*|rc\d*|nightly|develop(?:ment)?|preview|test)(?:$|[\s._-])/i;
+const ATTACHED_PRERELEASE = /\d(?:a|b|rc)\d*(?:$|[\s._-])/i;
+const RELEASE_IMPORTANCE = /\b(?:security|vulnerabilit(?:y|ies)|CVE-\d{4}-\d+|breaking)\b/i;
+
+function versionOf(text) {
+  const match = String(text || '').match(/(?:^|[^\d])v?(\d+)\.(\d+)(?:\.(\d+))?/i);
+  return match ? { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3] || 0) } : null;
+}
+
+async function parseReleaseFeed(body, source) {
+  const parser = new RSSParser();
+  const feed = await parser.parseString(body);
+  const stable = (feed.items || []).filter(item => {
+    const label = `${item.title || ''} ${item.link || ''}`;
+    return !PRERELEASE.test(label) && !ATTACHED_PRERELEASE.test(label);
+  });
+  const github = /(^|\.)github\.com$/i.test((() => {
+    try { return new URL(source.url).hostname; } catch (_) { return ''; }
+  })());
+  const versions = stable.map(item => versionOf(`${item.title || ''} ${item.link || ''}`));
+  return stable.filter((item, index) => {
+    if (!github) return true;
+    const text = `${item.title || ''} ${stripHTML(item.contentSnippet || item.content || '')}`;
+    if (RELEASE_IMPORTANCE.test(text)) return true;
+    const current = versions[index];
+    if (!current) return false;
+    const previous = versions.slice(index + 1).find(Boolean);
+    return Boolean(previous && (current.major !== previous.major || current.minor !== previous.minor));
+  }).map(item => normaliseFeedItem(item, source, { default_category: 'homelab' }));
+}
+
 async function fetchRSS(source, log) {
   const start = Date.now();
   const parser = new RSSParser();
@@ -67,7 +143,11 @@ async function fetchRSS(source, log) {
     let response;
     try {
       response = await fetch(source.url, {
-        headers: { 'User-Agent': 'DailyBriefing/2.0' },
+        headers: {
+          'User-Agent': source.config && source.config.kind === 'warning'
+            ? WARNING_USER_AGENT
+            : 'DailyBriefing/2.0',
+        },
         signal: controller.signal,
       });
     } finally {
@@ -85,30 +165,26 @@ async function fetchRSS(source, log) {
       throw new Error('This address returns a web page, not a news feed');
     }
 
+    if (source.config && source.config.kind === 'warning') {
+      const items = await parseWarningFeed(body, source);
+      items.forEach(item => log.debug('rss', `Parsed item: ${item.title}`, { url: item.url }));
+      log.info('rss', `Fetched ${items.length} items from ${source.name}`, { duration_ms: Date.now() - start });
+      return { items, error: null };
+    }
+    if (source.config && source.config.kind === 'release') {
+      const items = await parseReleaseFeed(body, source);
+      items.forEach(item => log.debug('rss', `Parsed item: ${item.title}`, { url: item.url }));
+      log.info('rss', `Fetched ${items.length} items from ${source.name}`, { duration_ms: Date.now() - start });
+      return { items, error: null };
+    }
+
     const feed = await parser.parseString(body);
     const items = [];
 
     for (const item of (feed.items || [])) {
-      const title = decodeEntities(item.title || '');
-      const description = stripHTML(item.contentSnippet || item.content || '').substring(0, 500);
-      const image = extractImage(item);
-      const published = ensureISO(item.isoDate || item.pubDate || null);
+      const normalised = normaliseFeedItem(item, source);
 
-      const normalised = {
-        title,
-        url: item.link || '',
-        external_url: null,
-        description,
-        image,
-        published,
-        score: null,
-        comment_count: null,
-        source_name: source.name,
-        source_type: 'rss',
-        default_category: source.default_category,
-      };
-
-      log.debug('rss', `Parsed item: ${title}`, { url: item.link });
+      log.debug('rss', `Parsed item: ${normalised.title}`, { url: item.link });
       items.push(normalised);
     }
 
@@ -123,4 +199,14 @@ async function fetchRSS(source, log) {
   }
 }
 
-module.exports = { fetchRSS, stripHTML, decodeEntities, extractImage, ensureISO };
+module.exports = {
+  fetchRSS,
+  stripHTML,
+  decodeEntities,
+  extractImage,
+  ensureISO,
+  parseWarningFeed,
+  parseReleaseFeed,
+  versionOf,
+  WARNING_USER_AGENT,
+};

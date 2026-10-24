@@ -94,3 +94,15 @@ it('keeps keyword boosts and penalties alongside interest scoring', () => {
   });
   assert.strictEqual(result.selected[0].rank_score, 40 + (2 * 13));
 });
+
+it('keeps each source category\'s best stories even when bigger categories outrank them', () => {
+  const withCategory = (id, category, options) => {
+    const value = cluster(id, options);
+    value.items[0].default_category = category;
+    return value;
+  };
+  const news = Array.from({ length: 6 }, (_, index) => withCategory(`news${index}`, 'top-stories', { coverage: 4, source: `N${index}` }));
+  const culture = Array.from({ length: 3 }, (_, index) => withCategory(`culture${index}`, 'trending', { hoursAgo: 20 + index, source: 'C' }));
+  const result = rankClusters([...news, ...culture], { now, limit: 5, perSourceFloor: 0, perCategoryFloor: 2 });
+  assert.deepStrictEqual(result.selected.map(value => value.id), ['news0', 'news1', 'news2', 'culture0', 'culture1']);
+});

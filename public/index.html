@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Briefing</title>
+  <title>The Daily Gump</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0f1117">
@@ -16,7 +16,7 @@
     <header>
       <div class="header-content">
         <div class="header-left">
-          <h1 id="app-title">Daily Briefing</h1>
+          <h1 id="app-title">The Daily Gump</h1>
           <p class="date" id="briefing-date"></p>
         </div>
         <div class="header-right">
@@ -70,6 +70,10 @@
         <div class="settings-row">
           <span class="settings-theme-label">Theme</span>
           <div class="theme-switcher" id="theme-switcher">
+            <button class="theme-option" data-theme="auto" title="Auto">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/><path d="M20.6 15.4A6 6 0 1 1 12.6 7.4 5 5 0 0 0 20.6 15.4z"/></svg>
+              <span>Auto</span>
+            </button>
             <button class="theme-option" data-theme="system" title="System">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <span>System</span>
@@ -107,14 +111,39 @@
       <div id="pipeline-content"></div>
     </div>
 
-    <main id="sections-container" class="view view--active">
-      <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <p>Loading briefing...</p>
+    <main id="reading-stage" class="reading-stage view view--active">
+      <article id="reader-page" class="reader-page" inert aria-hidden="true">
+        <button type="button" id="reader-back" class="reader-back">Back</button>
+        <header id="reader-header" class="reader-header"></header>
+        <div id="reader-body" class="reader-body"></div>
+      </article>
+      <div class="curl-layer reader-shadow" aria-hidden="true">
+        <div id="reader-shadow-band" class="curl-band"></div>
       </div>
-      <div class="empty-state hidden" id="empty-state">
-        <p>No briefing available yet.</p>
-        <p class="muted">Run the pipeline or wait for the next scheduled run.</p>
+      <div id="briefing-page" class="briefing-page">
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Loading briefing...</p>
+        </div>
+        <div class="empty-state hidden" id="empty-state">
+          <p>No briefing available yet.</p>
+          <p class="muted">Run the pipeline or wait for the next scheduled run.</p>
+        </div>
+        <div id="sections-container" class="reading-sections"></div>
+      </div>
+      <div class="curl-layer front-crease-shadow" aria-hidden="true">
+        <div id="front-shadow-band" class="curl-band"></div>
+      </div>
+      <div id="curl-flap" class="curl-flap" aria-hidden="true">
+        <div id="curl-ghost" class="curl-ghost" inert aria-hidden="true"></div>
+        <div id="curl-light-band" class="curl-band"></div>
+      </div>
+      <div id="section-thumb-layer" class="section-thumb-layer" hidden>
+        <div id="section-thumb-index" class="section-thumb-index" tabindex="0" role="slider"
+             aria-label="Jump to section" aria-valuemin="0" aria-valuemax="0"
+             aria-valuenow="0"></div>
+        <div id="section-thumb-pill" class="section-thumb-pill" aria-hidden="true"></div>
+        <div id="section-thumb-pickline" class="section-thumb-pickline" aria-hidden="true"></div>
       </div>
     </main>
     <footer id="app-footer" class="app-footer">
@@ -126,6 +155,12 @@
       </div>
     </footer>
   </div>
+  <script src="/reading-logic.js"></script>
+  <script src="/edition-layout.js"></script>
+  <script src="/told-scale.js"></script>
+  <script src="/curl-geometry.js"></script>
+  <script src="/thumb-index-logic.js"></script>
+  <script src="/sun-times.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

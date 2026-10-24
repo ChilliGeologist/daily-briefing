@@ -85,6 +85,7 @@ async function parseRedditComments(xml) {
   });
   const feed = await parser.parseString(xml);
   const comments = [];
+  let realReplyCount = 0;
 
   for (const entry of (feed.items || [])) {
     if ((entry.id || '').startsWith('t3_')) continue;
@@ -92,10 +93,10 @@ async function parseRedditComments(xml) {
       .replace(/\s+/g, ' ')
       .trim();
     if (!body || body === '[deleted]' || body === '[removed]') continue;
-    comments.push(body);
-    if (comments.length === TOP_COMMENTS) break;
+    realReplyCount++;
+    if (comments.length < TOP_COMMENTS) comments.push(body);
   }
-
+  Object.defineProperty(comments, 'realReplyCount', { value: realReplyCount, enumerable: false });
   return comments;
 }
 
@@ -135,6 +136,7 @@ async function processItem(item, log) {
       const top_comments = await extractRedditComments(item, log);
       if (top_comments && top_comments.length > 0) {
         item.top_comments = top_comments;
+        item.real_reply_count = top_comments.realReplyCount;
         result.commentsExtracted = true;
       }
     } catch (err) {
@@ -311,7 +313,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
           .slice(index + 1)
           .some(candidate => !isPaywalledUrl(candidate.canonical_url || candidate.url, paywalledHosts));
         if (isPaywalledUrl(url, paywalledHosts) && hasUntriedUnpaywalledCandidate) {
-          deferredPaywalledGoogleNews.push(url);
+          deferredPaywalledGoogleNews.push({ item, url });
           continue;
         }
       }
@@ -324,6 +326,9 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         cluster.article_text = article.article_content;
         cluster.article_html = article.article_html;
         cluster.article_url = article.canonical_url;
+        item.article_content = article.article_content;
+        item.article_html = article.article_html;
+        item.article_url = article.canonical_url;
         stats.articles++;
         break;
       } catch (error) {
@@ -332,7 +337,8 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     }
 
     if (!cluster.article_text) {
-      for (const url of deferredPaywalledGoogleNews) {
+      for (const deferred of deferredPaywalledGoogleNews) {
+        const { item, url } = deferred;
         try {
           const article = await extractArticle(url, log, fetchImpl);
           if (article.article_content.length < 400) {
@@ -341,6 +347,9 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
           cluster.article_text = article.article_content;
           cluster.article_html = article.article_html;
           cluster.article_url = article.canonical_url;
+          item.article_content = article.article_content;
+          item.article_html = article.article_html;
+          item.article_url = article.canonical_url;
           stats.articles++;
           break;
         } catch (error) {
@@ -355,6 +364,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         const comments = await extractRedditComments(lead, log);
         if (comments.length > 0) {
           cluster.top_comments = comments;
+          cluster.real_reply_count = comments.realReplyCount;
           stats.comments++;
         }
       } catch (error) {
@@ -407,6 +417,11 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
       cluster.article_text = null;
       cluster.article_html = null;
       cluster.article_url = null;
+      for (const item of cluster.items) {
+        delete item.article_content;
+        delete item.article_html;
+        delete item.article_url;
+      }
     }
     stats.articles -= matches.length;
     stats.failures += matches.length;

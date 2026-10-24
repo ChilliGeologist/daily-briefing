@@ -17,6 +17,23 @@ const FILLER_PATTERNS_ADDED_V2 = [
 const FILLER_PATTERNS_ADDED_V3 = [
   '/\\s[–—-]\\s(?:video|podcast|audio)\\s*$/i',
 ];
+const FILLER_PATTERNS_ADDED_V4 = [
+  '/\\bdiscussion\\s+threads?\\b/i',
+];
+const FILLER_PATTERNS_ADDED_V5 = [
+  "/^\\s*(?:(?:tiktokers?|tiktok users?|redditors?)\\s+(?:says?|shares?|claims?|reveals?|explains?)\\b|redditor['’]s\\b)/i",
+];
+const FILLER_PATTERNS_ADDED_V6 = [
+  "/^\\s*redditors?(?:['’]s)?\\b/i",
+];
+const FILLER_PATTERNS_ADDED_V7 = [
+  '/^(?!\\s*(?:number|count|supply|stock|shortage|volume|share|prices?|sales?)\\s+of\\b)\\s*.{0,80}\\b(?:home|house|farmhouse|residence|property|apartment|unit)s?\\b.{0,80}\\b(?:for sale|listed for sale|on the market)\\b/i',
+  '/^\\s*embrace\\s+this\\s+.+\\s+life\\b/i',
+];
+const FILLER_PATTERNS_ADDED_V8 = [
+  '/\\b(?:actor|actress|singer|rapper|musician|comedian|star|celebrity|entertainer)s?\\b.{0,100}\\b(?:gives? birth|welcomes? (?:a |their )?baby|pregnan(?:t|cy)|baby announcement|engaged|engagement|wedding|marries|married|divorce[ds]?)\\b|\\b(?:gives? birth|welcomes? (?:a |their )?baby|pregnan(?:t|cy)|baby announcement|engaged|engagement|wedding|marries|married|divorce[ds]?)\\b.{0,100}\\b(?:actor|actress|singer|rapper|musician|comedian|star|celebrity|entertainer)s?\\b/i',
+  '/\\bannounces? next [‘\'“"]?project[’\'”"]?\\b.{0,80}\\b(?:family|baby|pregnan)/i',
+];
 const DEFAULT_FILLER_PATTERNS = [
   'weather report for', 'magistrates court list', 'superquiz', 'best of cartoons',
   'crossword', 'horoscope', 'as it happened', 'quick quiz', 'word puzzle',
@@ -24,6 +41,11 @@ const DEFAULT_FILLER_PATTERNS = [
   ...FILLER_PATTERNS_ADDED_V1,
   ...FILLER_PATTERNS_ADDED_V2,
   ...FILLER_PATTERNS_ADDED_V3,
+  ...FILLER_PATTERNS_ADDED_V4,
+  ...FILLER_PATTERNS_ADDED_V5,
+  ...FILLER_PATTERNS_ADDED_V6,
+  ...FILLER_PATTERNS_ADDED_V7,
+  ...FILLER_PATTERNS_ADDED_V8,
 ];
 const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
@@ -33,17 +55,22 @@ function createSettings(db) {
   // Run once at app startup so the settings UI and pipeline see the same list.
   // Write the revision last: if startup is interrupted, appending is idempotent.
   const fillerRevision = Number(db.getSetting('filler_patterns_revision'));
-  if (fillerRevision < 3) {
+  if (fillerRevision < 8) {
     const stored = db.getSetting('filler_patterns');
     const patterns = stored === null ? [...DEFAULT_FILLER_PATTERNS]
       : [
         ...stored,
         ...(fillerRevision < 1 ? FILLER_PATTERNS_ADDED_V1 : []),
         ...(fillerRevision < 2 ? FILLER_PATTERNS_ADDED_V2 : []),
-        ...FILLER_PATTERNS_ADDED_V3,
+        ...(fillerRevision < 3 ? FILLER_PATTERNS_ADDED_V3 : []),
+        ...(fillerRevision < 4 ? FILLER_PATTERNS_ADDED_V4 : []),
+        ...(fillerRevision < 5 ? FILLER_PATTERNS_ADDED_V5 : []),
+        ...(fillerRevision < 6 ? FILLER_PATTERNS_ADDED_V6 : []),
+        ...(fillerRevision < 7 ? FILLER_PATTERNS_ADDED_V7 : []),
+        ...FILLER_PATTERNS_ADDED_V8,
       ].filter((pattern, index, all) => all.indexOf(pattern) === index);
     db.setSetting('filler_patterns', patterns);
-    db.setSetting('filler_patterns_revision', 3);
+    db.setSetting('filler_patterns_revision', 8);
   }
   return {
     getAppTitle() {
@@ -117,6 +144,20 @@ function createSettings(db) {
 
     getWriterOllamaModel() {
       return db.getSetting('writer_ollama_model') || this.getOllamaModel();
+    },
+
+    getWriterNumThread() {
+      const val = db.getSetting('writer_num_thread');
+      return val !== null ? Number(val) : 4;
+    },
+
+    getToldOllamaModel() {
+      return db.getSetting('told_ollama_model') || this.getWriterOllamaModel();
+    },
+
+    getToldNumThread() {
+      const val = db.getSetting('told_num_thread');
+      return val !== null ? Number(val) : 4;
     },
 
     getOllamaNumCtx() {
