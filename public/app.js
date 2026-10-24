@@ -273,6 +273,7 @@ function clearMastheadPresentation() {
   [title, date, actions].forEach(function(node) {
     if (node) node.style.removeProperty('transform');
   });
+  if (title) title.style.removeProperty('font-size');
   if (date) date.style.removeProperty('opacity');
   mastheadState.progress = -1;
 }
@@ -300,7 +301,7 @@ function applyMastheadProgress(progress) {
   mastheadTransform(metrics.title, metrics.full.title, metrics.compact.title, progress, metrics.titleScale);
   mastheadTransform(metrics.date, metrics.full.date, metrics.compact.date, progress, metrics.dateScale);
   mastheadTransform(metrics.actions, metrics.full.actions, metrics.compact.actions, progress, 1);
-  metrics.date.style.opacity = (1 - progress).toFixed(3);
+  metrics.date.style.opacity = Math.max(0, 1 - progress * 2.5).toFixed(3);
 
   // The stage is the other flex child, so it grows by exactly the height the
   // masthead gives back. Reuse that delta rather than forcing a layout read.
@@ -342,6 +343,15 @@ function measureMasthead() {
   }
 
   clearMastheadPresentation();
+  // The title never wraps: on a narrow phone (or with a longer name, such as
+  // the dev copy's) shrink the full-size title until it fits on one line.
+  // Wrapping would double its height, and the scaled copy in the thin bar
+  // would then be cut off by the header's overflow.
+  title.style.removeProperty('font-size');
+  var titleRoom = title.parentElement.clientWidth;
+  if (title.scrollWidth > titleRoom) {
+    title.style.fontSize = (parseFloat(getComputedStyle(title).fontSize) * titleRoom / title.scrollWidth).toFixed(2) + 'px';
+  }
   var full = {
     title: title.getBoundingClientRect(),
     date: date.getBoundingClientRect(),
@@ -352,6 +362,8 @@ function measureMasthead() {
   var fullTitleSize = parseFloat(getComputedStyle(title).fontSize) || 1;
   var fullDateSize = parseFloat(getComputedStyle(date).fontSize) || 1;
 
+  var fittedTitleSize = title.style.fontSize;
+  title.style.removeProperty('font-size');
   header.classList.add('masthead-measuring-compact');
   var compact = {
     title: title.getBoundingClientRect(),
@@ -360,8 +372,20 @@ function measureMasthead() {
   };
   var compactHeight = header.getBoundingClientRect().height;
   var compactTitleSize = parseFloat(getComputedStyle(title).fontSize) || fullTitleSize;
+  // The painted title is the full one scaled, so it never ellipsises; make it
+  // small enough to fit the room the bar leaves beside the buttons, and keep
+  // it centred in that room vertically.
+  if (title.scrollWidth > title.clientWidth) {
+    compactTitleSize = compactTitleSize * title.clientWidth / title.scrollWidth;
+  }
+  var compactLineHeight = compact.title.height;
+  compact.title = {
+    left: compact.title.left,
+    top: compact.title.top + (compactLineHeight - full.title.height * compactTitleSize / fullTitleSize) / 2
+  };
   var compactDateSize = parseFloat(getComputedStyle(date).fontSize) || fullDateSize;
   header.classList.remove('masthead-measuring-compact');
+  if (fittedTitleSize) title.style.fontSize = fittedTitleSize;
 
   mastheadState.metrics = {
     header: header,
