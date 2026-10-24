@@ -2,6 +2,13 @@
 
 const Database = require('better-sqlite3');
 const path = require('path');
+const {
+  backfillStorySearch,
+  ensureStorySearch,
+  indexBriefingRow,
+  searchStories,
+  storyEntries,
+} = require('./story-search');
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS briefings (
@@ -148,12 +155,26 @@ function initDB(dbPath) {
   // Migration: drop UNIQUE constraint on briefings.date (allow multiple per day)
   migrateDropBriefingDateUnique(sqlite);
 
+  // Search is a derived sidecar. The briefing JSON remains the source of
+  // truth, so a missing index can always be recreated at startup.
+  ensureStorySearch(sqlite);
+
   // Seed defaults
   seedCategories(sqlite);
   seedSettings(sqlite);
 
   // Prepare commonly used statements
   const stmts = prepareStatements(sqlite);
+  const insertBriefingWithSearch = sqlite.transaction((date, briefingData, dataStr, itemCount, headline) => {
+    const result = stmts.insertBriefing.run(date, headline, dataStr, itemCount);
+    indexBriefingRow(sqlite, {
+      id: Number(result.lastInsertRowid),
+      date,
+      data: briefingData,
+    });
+    return Number(result.lastInsertRowid);
+  });
+  const storySearchBackfill = backfillStorySearch(sqlite);
 
   const db = {
     raw: sqlite,
@@ -173,7 +194,7 @@ function initDB(dbPath) {
         }
       }
       const headline = briefingData.headline || null;
-      stmts.insertBriefing.run(date, headline, dataStr, itemCount);
+      return insertBriefingWithSearch(date, briefingData, dataStr, itemCount, headline);
     },
 
     getBriefingById(id) {
@@ -188,9 +209,19 @@ function initDB(dbPath) {
       return { ...row, data: JSON.parse(row.data) };
     },
 
-    listBriefings(limit = 90) {
-      return stmts.listBriefings.all(limit);
+    listBriefings() {
+      return stmts.listBriefings.all().map(briefingListItem);
     },
+
+    searchStories(query, limit) {
+      return searchStories(sqlite, query, limit);
+    },
+
+    backfillStorySearch() {
+      return backfillStorySearch(sqlite);
+    },
+
+    storySearchBackfill,
 
     // --- Sources ---
     getSources() {
@@ -456,11 +487,25 @@ function prepareStatements(sqlite) {
       'INSERT INTO briefings (date, headline, data, item_count) VALUES (?, ?, ?, ?)'
     ),
     getBriefingById: sqlite.prepare('SELECT * FROM briefings WHERE id = ?'),
-    getLatestBriefing: sqlite.prepare('SELECT * FROM briefings ORDER BY created_at DESC LIMIT 1'),
-    listBriefings: sqlite.prepare('SELECT id, date, headline, item_count, created_at FROM briefings ORDER BY created_at DESC LIMIT ?'),
+    getLatestBriefing: sqlite.prepare('SELECT * FROM briefings ORDER BY created_at DESC, id DESC LIMIT 1'),
+    listBriefings: sqlite.prepare('SELECT id, date, headline, data, item_count, created_at FROM briefings ORDER BY created_at DESC, id DESC'),
     insertLogEntry: sqlite.prepare(
       'INSERT INTO log_entries (run_id, timestamp, level, component, message, metadata) VALUES (?, ?, ?, ?, ?, ?)'
     ),
+  };
+}
+
+function briefingListItem(row) {
+  let data = null;
+  try { data = JSON.parse(row.data); } catch (_) { /* retain stored metadata for malformed legacy rows */ }
+  const entries = data ? storyEntries(data.sections) : [];
+  const storedCount = Number(row.item_count);
+  return {
+    id: row.id,
+    date: row.date,
+    headline: row.headline || (data && data.headline) || (entries[0] && entries[0].item.title) || '',
+    item_count: storedCount > 0 ? storedCount : entries.length,
+    created_at: row.created_at,
   };
 }
 

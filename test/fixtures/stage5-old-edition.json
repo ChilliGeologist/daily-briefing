@@ -1,0 +1,25 @@
+{
+  "id": 3,
+  "date": "2026-03-25",
+  "headline": "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
+  "data": {
+    "headline": "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
+    "sections": [
+      {
+        "title": "Top Stories",
+        "items": [
+          {
+            "title": "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
+            "summary": "Waste collectors warn bin services could stop within days as diesel becomes nearly impossible to source, while prices hit $4.25/L in remote areas.",
+            "detail": "The fuel crisis triggered by the US-Israel war on Iran is now hitting essential services hard. Waste collectors say they're operating at unsustainable losses, freight costs are up 40%, and some Tasmanian service stations have run out of unleaded entirely.",
+            "url": "https://www.abc.net.au/news/2026-03-25/waste-collectors-diesel-shortage-essential-service/106490734",
+            "source": "ABC News Australia",
+            "sources": "[{'name': 'ABC News Australia', 'short_name': 'ABC', 'url': 'https://www.abc.net.au/news/2026-03-25/waste-collectors-diesel-shortage-essential-service/106490734'}]",
+            "significance": "high",
+            "reading_time": 2
+          }
+        ]
+      }
+    ]
+  }
+}

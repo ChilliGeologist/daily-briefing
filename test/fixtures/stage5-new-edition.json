@@ -1,0 +1,39 @@
+{
+  "id": 219,
+  "date": "2026-10-24",
+  "headline": "White House says Melania Trump brokered truce for Ukraine city 'on brink of disaster'",
+  "data": {
+    "headline": "White House says Melania Trump brokered truce for Ukraine city 'on brink of disaster'",
+    "sections": [
+      {
+        "id": "australia",
+        "title": "Australia",
+        "items": [
+          {
+            "id": "s100",
+            "title": "Backpackers say visa changes make regional work less attractive",
+            "kicker": "Visa reforms",
+            "summary": "Backpackers report that a new ballot system and reduced visa numbers for second and third-year stays are discouraging them from taking regional jobs.",
+            "sources": [
+              {
+                "name": "r/australia",
+                "url": "https://www.reddit.com/r/australia/comments/1xdrd06/backpackers_say_visa_changes_make_regional_work/"
+              },
+              {
+                "name": "r/popular",
+                "url": "https://www.reddit.com/r/australia/comments/1xdrd06/backpackers_say_visa_changes_make_regional_work/"
+              }
+            ],
+            "article_html": "<p>Sweeping wine residue from a tank in the heat of the day is no-one's idea of a dream job.</p><p>The Irish backpacker is willing to get her hands dirty in exchange for a visa.</p>",
+            "description": "And not a single word or question in the article about paying Australians more to do the job.",
+            "top_comments": [
+              "It came up when the Australian fruit picker farmers got caught out barely paying backpackers for the work.",
+              "Agri/horticulture awards are just a joke."
+            ]
+          }
+        ],
+        "more": []
+      }
+    ]
+  }
+}

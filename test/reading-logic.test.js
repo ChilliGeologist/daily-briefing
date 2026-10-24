@@ -114,6 +114,7 @@ test('prepareReaderContent uses the summary without an article and keeps communi
     top_comments: [' First reply. ', '', null, 'Second reply.'],
   }, false), {
     fallback: 'Short summary.',
+    detail: 'The fuller detail shown after the tap.',
     post: 'The post text.',
     replies: ['First reply.', 'Second reply.'],
   });
@@ -129,12 +130,13 @@ test('prepareReaderContent falls back to summary and omits article fallback when
   ]);
 });
 
-test('prepareReaderContent ignores detail from an old stored edition', () => {
+test('prepareReaderContent keeps the longer detail from an old stored edition', () => {
   assert.deepStrictEqual(prepareReaderContent({
     summary: 'The current reader fallback.',
-    detail: 'Legacy expansion copy must not render.',
+    detail: 'Legacy expansion copy renders after the summary.',
   }, false), {
     fallback: 'The current reader fallback.',
+    detail: 'Legacy expansion copy renders after the summary.',
     post: '',
     replies: [],
   });
