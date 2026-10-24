@@ -253,7 +253,10 @@ var mastheadState = {
   metrics: null,
   frame: null,
   measureFrame: null,
-  progress: -1
+  progress: -1,
+  // How folded the masthead was when the reader opened. A story never unfolds
+  // it below this: opening one from a folded edition keeps the thin bar.
+  readerFloor: 0
 };
 
 function activeReadingPage() {
@@ -312,8 +315,10 @@ function applyMastheadProgress(progress) {
 function currentMastheadProgress() {
   var page = activeReadingPage();
   var top = page ? page.scrollTop : 0;
-  if (prefersReducedMotion()) return top >= MASTHEAD_REDUCED_THRESHOLD ? 1 : 0;
-  return top / MASTHEAD_COLLAPSE_DISTANCE;
+  var progress = prefersReducedMotion()
+    ? (top >= MASTHEAD_REDUCED_THRESHOLD ? 1 : 0)
+    : Math.min(1, top / MASTHEAD_COLLAPSE_DISTANCE);
+  return readingState.readerOpen ? Math.max(mastheadState.readerFloor, progress) : progress;
 }
 
 function syncMastheadNow() {
@@ -1561,6 +1566,9 @@ function renderReader(item) {
 function showReader(item, key, appHistoryEntry) {
   if (!item) return;
   if (!readingState.readerOpen) readingState.briefingScrollTop = $('#briefing-page').scrollTop;
+  // Measured before readerOpen flips, so it reads the edition's (or, going
+  // story to story, the current story's) fold.
+  mastheadState.readerFloor = currentMastheadProgress();
   renderReader(item);
   readingState.readerOpen = true;
   readingState.storyId = key;
