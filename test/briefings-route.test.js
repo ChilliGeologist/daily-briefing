@@ -78,7 +78,7 @@ test('briefing archive and search routes return the complete stage 5 shapes', as
         title: 'Backpackers say visa changes make regional work less attractive',
         kicker: 'Visa reforms',
         section: 'Australia',
-        snippet: 'Backpackers say <mark>visa</mark> changes make <mark>regional</mark> work less attractive',
+        snippet: ' … system and reduced <mark>visa</mark> numbers for second and third-year stays are discouraging them from taking <mark>regional</mark> jobs.',
       }],
     }],
   });
@@ -122,7 +122,7 @@ test('briefing archive and search routes return the complete stage 5 shapes', as
         title: "Australia's fuel crisis deepens: waste collection under threat, diesel hits $4.25/L",
         kicker: '',
         section: 'Top Stories',
-        snippet: '<mark>Australia</mark>&#39;s fuel crisis deepens: waste collection under threat, diesel hits $4.25/L',
+        snippet: 'Waste collectors warn bin services could stop within days as diesel becomes nearly impossible to source, while prices … ',
       }],
     }],
   });

@@ -310,8 +310,12 @@ function searchStories(sqlite, query, requestedLimit, before) {
       byId.set(String(row.briefing_id), edition);
       editions.push(edition);
     }
-    const snippets = [row.title_snippet, row.kicker_snippet, row.summary_snippet, row.body_snippet, row.outlets_snippet];
-    let bestSnippet = row.title;
+    // The headline is shown above the snippet already, so the snippet comes
+    // from the text under it. With no match there, fall back to the start of
+    // the summary (FTS5 returns a column's opening words when it has no hit).
+    // Outlet names still match, but never become the snippet.
+    const snippets = [row.summary_snippet, row.body_snippet];
+    let bestSnippet = row.summary_snippet || row.body_snippet || row.title;
     let bestScore = 0;
     for (const candidate of snippets) {
       const matches = String(candidate || '').match(/\uE000(.*?)\uE001/g) || [];

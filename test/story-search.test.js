@@ -194,7 +194,7 @@ test('search groups newest editions first, ranks title matches and escapes snipp
           title: 'Backpackers say visa changes make regional work less attractive',
           kicker: 'Visa reforms',
           section: 'Australia',
-          snippet: '<mark>Backpackers</mark> say visa changes make regional work less attractive',
+          snippet: '<mark>Backpackers</mark> report that a new ballot system and reduced visa numbers for second and third-year stays are … ',
         },
         {
           key: 'extra',
@@ -235,11 +235,11 @@ test('search pages on edition boundaries with a stable cursor, has_more and an u
         stories: [
           {
             key: 'story-30-1', title: 'Council report 30-1', kicker: '', section: 'Local',
-            snippet: '<mark>Council</mark> report 30-1',
+            snippet: '<mark>Council</mark> summary 30-1',
           },
           {
             key: 'story-30-2', title: 'Council report 30-2', kicker: '', section: 'Local',
-            snippet: '<mark>Council</mark> report 30-2',
+            snippet: '<mark>Council</mark> summary 30-2',
           },
         ],
       },
@@ -250,11 +250,11 @@ test('search pages on edition boundaries with a stable cursor, has_more and an u
         stories: [
           {
             key: 'story-20-1', title: 'Council report 20-1', kicker: '', section: 'Local',
-            snippet: '<mark>Council</mark> report 20-1',
+            snippet: '<mark>Council</mark> summary 20-1',
           },
           {
             key: 'story-20-2', title: 'Council report 20-2', kicker: '', section: 'Local',
-            snippet: '<mark>Council</mark> report 20-2',
+            snippet: '<mark>Council</mark> summary 20-2',
           },
         ],
       },
@@ -276,11 +276,11 @@ test('search pages on edition boundaries with a stable cursor, has_more and an u
       stories: [
         {
           key: 'story-10-1', title: 'Council report 10-1', kicker: '', section: 'Local',
-          snippet: '<mark>Council</mark> report 10-1',
+          snippet: '<mark>Council</mark> summary 10-1',
         },
         {
           key: 'story-10-2', title: 'Council report 10-2', kicker: '', section: 'Local',
-          snippet: '<mark>Council</mark> report 10-2',
+          snippet: '<mark>Council</mark> summary 10-2',
         },
       ],
     }],
