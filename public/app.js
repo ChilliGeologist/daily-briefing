@@ -222,6 +222,7 @@ var currentBriefingId = null;
 var currentBriefingIsLatest = false;
 var briefingLoadTarget = null;
 var briefingLoadSequence = 0;
+var alertLoadTarget = null;
 var readingStories = new Map();
 var readingStoryKeys = new Map();
 var readingStoryOpeners = new Map();
@@ -247,7 +248,8 @@ var readingState = {
   storyId: null,
   openerId: null,
   briefingScrollTop: 0,
-  appHistoryEntry: false
+  appHistoryEntry: false,
+  alertId: null
 };
 
 var MASTHEAD_COLLAPSE_DISTANCE = 96;
@@ -609,6 +611,10 @@ function prepareReaderForCurl(key) {
 }
 
 function completeReaderReturn() {
+  if (readingState.alertId) {
+    router.navigate('/');
+    return;
+  }
   if (readingState.appHistoryEntry && history.state && history.state.appHistoryEntry) {
     history.back();
   } else {
@@ -697,6 +703,7 @@ function resetReadingStage() {
   readingState.storyId = null;
   readingState.openerId = null;
   readingState.appHistoryEntry = false;
+  readingState.alertId = null;
   scheduleMastheadUpdate();
 }
 
@@ -734,6 +741,12 @@ function readingTimeText(value) {
   if (value === undefined || value === null || value === '') return '';
   var text = String(value);
   return /read$/i.test(text) ? text : text + ' min read';
+}
+
+function formatAlertedTime(value) {
+  var date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 }
 
 function sourceNames(item) {
@@ -1260,6 +1273,11 @@ function requestedEditionId() {
 
 function loadReadingFromLocation() {
   if (location.pathname !== '/') return;
+  var alertId = requestedAlertId();
+  if (alertId) {
+    loadAlert(alertId);
+    return;
+  }
   var id = requestedEditionId();
   var alreadyLoaded = briefingLoaded && (id
     ? String(currentBriefingId) === String(id)
@@ -1269,6 +1287,60 @@ function loadReadingFromLocation() {
     return;
   }
   loadBriefing(id || undefined);
+}
+
+function requestedAlertId() {
+  if (location.pathname !== '/') return null;
+  var value = new URLSearchParams(location.search).get('alert');
+  return value && /^\d+$/.test(value) ? value : null;
+}
+
+async function loadAlert(id) {
+  if (alertLoadTarget === String(id) || (readingState.alertId && String(readingState.alertId) === String(id))) return;
+  alertLoadTarget = String(id);
+  var loading = $('#loading');
+  var emptyState = $('#empty-state');
+  resetReadingStage();
+  resetThumbIndex();
+  readingStories.clear();
+  readingStoryKeys.clear();
+  readingStoryOpeners.clear();
+  briefingLoaded = false;
+  $('#sections-container').replaceChildren();
+  loading.classList.remove('hidden');
+  emptyState.classList.add('hidden');
+  try {
+    var response = await fetch('/api/alerts/' + encodeURIComponent(id));
+    var result = await response.json();
+    loading.classList.add('hidden');
+    if (!response.ok || !result.alert) throw new Error(result.error || 'Alert not found');
+    var alert = result.alert;
+    currentDate = null;
+    currentBriefingId = null;
+    currentBriefingIsLatest = false;
+    $('#briefing-date').textContent = 'Urgent alert';
+    updateEditionNotice();
+    briefingLoaded = true;
+    showReader({
+      title: alert.headline,
+      kicker: alert.kicker,
+      summary: alert.summary,
+      source_name: alert.source_name,
+      article_url: alert.original_url,
+      canonical_url: alert.canonical_url,
+      alert_reason: alert.reason,
+      alerted_at: alert.sent_at
+    }, 'alert-' + alert.id, false);
+    readingState.alertId = String(alert.id);
+    document.title = alert.headline + ' — The Daily Gump';
+  } catch (error) {
+    loading.classList.add('hidden');
+    emptyState.classList.remove('hidden');
+    $('#briefing-date').textContent = '';
+    console.error('Failed to load alert:', error);
+  } finally {
+    alertLoadTarget = null;
+  }
 }
 
 function renderReadingBand(band) {
@@ -1493,6 +1565,9 @@ function renderReadingStory(item, lead, showPicture) {
   }
   summaryChildren.push(el('span', { className: 'reading-story-title', textContent: item.title || 'Untitled story' }));
   if (item.summary) summaryChildren.push(el('span', { className: 'reading-story-summary', textContent: item.summary }));
+  if (item.alerted_at) summaryChildren.push(el('span', {
+    className: 'reading-story-alerted', textContent: 'Alerted ' + formatAlertedTime(item.alerted_at)
+  }));
   var opener = el('button', {
     type: 'button',
     className: 'reading-story-open',
@@ -1554,6 +1629,9 @@ function renderReader(item) {
   var time = readingTimeText(item.reading_time);
   if (time) metadata.push(time);
   if (metadata.length) header.appendChild(el('p', { className: 'reader-byline', textContent: metadata.join(' · ') }));
+  if (item.alerted_at) header.appendChild(el('p', {
+    className: 'reader-alerted', textContent: 'Alerted ' + formatAlertedTime(item.alerted_at)
+  }));
 
   var readerImages = window.EditionLayout.readerImageUrls(item).map(safeUrl).filter(Boolean);
   if (readerImages.length) {
@@ -1586,6 +1664,9 @@ function renderReader(item) {
     body.appendChild(el('p', { className: 'reader-summary', textContent: item.summary }));
   }
   if (item.told) body.appendChild(renderToldPanel(item.told));
+  if (item.alert_reason) body.appendChild(el('p', {
+    className: 'reader-alert-reason', textContent: 'Why now: ' + item.alert_reason
+  }));
 
   var hasArticle = false;
   if (typeof item.article_html === 'string' && item.article_html.trim()) {
@@ -2241,6 +2322,7 @@ function loadGeneralTab(container) {
   // Re-bind interactive controls now that they exist in the DOM
   bindThemeSwitcher();
   bindNotifToggle();
+  bindNotifTest();
   bindInstallButton();
   // Reflect current state onto the newly rendered controls
   applyTheme(getStoredTheme());
@@ -3536,8 +3618,63 @@ function renderPipelineContent() {
     })
   ]));
 
+  container.appendChild(el('section', { className: 'alert-checks', id: 'alert-checks' }, [
+    el('h3', { textContent: 'Urgent checks' }),
+    el('p', { className: 'alert-checks-empty', textContent: 'Loading today’s checks…' })
+  ]));
+  loadAlertChecks();
+
   // Run history
   container.appendChild(el('div', { id: 'pipeline-history', style: { marginTop: '16px' } }));
+}
+
+async function loadAlertChecks() {
+  var container = $('#alert-checks');
+  if (!container) return;
+  try {
+    var response = await fetch('/api/alerts/checks');
+    var result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load checks');
+    container.replaceChildren(el('h3', { textContent: 'Urgent checks' }));
+    if (!result.checks || result.checks.length === 0) {
+      container.appendChild(el('p', { className: 'alert-checks-empty', textContent: 'No checks today.' }));
+      return;
+    }
+    result.checks.forEach(function(check) {
+      var time = new Date(check.started_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+      var sources = check.sources_read || [];
+      var card = el('article', { className: 'alert-check' });
+      card.appendChild(el('div', { className: 'alert-check-heading' }, [
+        el('strong', { textContent: time }),
+        el('span', { textContent: check.status })
+      ]));
+      card.appendChild(el('p', {
+        className: 'alert-check-meta',
+        textContent: sources.length + ' sources · ' + check.items_seen + ' recent items · ' + check.candidates_count + ' candidates'
+      }));
+      if (sources.length) {
+        card.appendChild(el('details', { className: 'alert-check-sources' }, [
+          el('summary', { textContent: 'Sources read' }),
+          el('p', { textContent: sources.join(', ') })
+        ]));
+      }
+      if (check.error) card.appendChild(el('p', { className: 'alert-check-note', textContent: check.error }));
+      (check.candidates || []).forEach(function(candidate) {
+        var outcome = candidate.sent ? 'Sent' : 'Not sent';
+        var why = candidate.reason || candidate.not_sent_reason || 'No reason recorded';
+        card.appendChild(el('div', { className: 'alert-candidate' }, [
+          el('strong', { textContent: candidate.headline }),
+          el('span', { textContent: outcome + ' · ' + why })
+        ]));
+      });
+      container.appendChild(card);
+    });
+  } catch (error) {
+    container.replaceChildren(
+      el('h3', { textContent: 'Urgent checks' }),
+      el('p', { className: 'alert-checks-empty', textContent: 'Checks could not be loaded.' })
+    );
+  }
 }
 
 async function pollPipelineStatus() {
@@ -3618,6 +3755,7 @@ async function pollPipelineStatus() {
       });
       historyEl.appendChild(histList);
     }
+    loadAlertChecks();
   } catch (e) {
     console.error('Pipeline status poll failed:', e);
   }
@@ -3878,6 +4016,7 @@ var notifVapidKey = null;
 
 async function updateNotifUI() {
   var btn = $('#btn-notif-toggle');
+  var testBtn = $('#btn-notif-test');
   var status = $('#notif-status');
   if (!btn || !status) return;
 
@@ -3885,6 +4024,7 @@ async function updateNotifUI() {
     btn.disabled = true;
     btn.textContent = 'Not supported';
     status.textContent = 'Push not available';
+    if (testBtn) testBtn.disabled = true;
     return;
   }
 
@@ -3912,10 +4052,12 @@ async function updateNotifUI() {
     btn.textContent = 'Disable';
     btn.classList.add('active');
     status.textContent = 'Notifications enabled';
+    if (testBtn) testBtn.disabled = false;
   } else {
     btn.textContent = 'Enable';
     btn.classList.remove('active');
     status.textContent = '';
+    if (testBtn) testBtn.disabled = true;
   }
 }
 
@@ -3960,6 +4102,28 @@ function bindNotifToggle() {
   });
 }
 bindNotifToggle();
+
+function bindNotifTest() {
+  var btn = $('#btn-notif-test');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async function() {
+    var status = $('#notif-status');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      var response = await fetch('/api/push/test', { method: 'POST' });
+      var result = await response.json();
+      if (!response.ok || !result.sent) throw new Error(result.error || 'No notification was sent');
+      status.textContent = 'Test sent';
+    } catch (error) {
+      status.textContent = 'Test failed';
+    }
+    btn.textContent = 'Send me a test';
+    await updateNotifUI();
+  });
+}
+bindNotifTest();
 
 function urlBase64ToUint8Array(base64String) {
   var padding = '='.repeat((4 - base64String.length % 4) % 4);

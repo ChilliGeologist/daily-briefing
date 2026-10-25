@@ -3,7 +3,7 @@
 const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 
-module.exports = function (db, pipeline, ollama, settings, log, sseManager) {
+module.exports = function (db, pipeline, ollama, settings, log, sseManager, sendNotification) {
   router.post('/pipeline/run', (req, res) => {
     try {
       if (pipeline.isRunning()) {
@@ -13,7 +13,10 @@ module.exports = function (db, pipeline, ollama, settings, log, sseManager) {
       const emitSSE = (data) => sseManager.broadcast(data);
 
       setImmediate(() => {
-        pipeline.runPipeline(db, ollama, settings, log, emitSSE, 'manual');
+        pipeline.runPipeline(db, ollama, settings, log, emitSSE, 'manual', {
+          notify: req.body && req.body.notify === true,
+          sendNotification,
+        });
       });
 
       res.json({ ok: true, runId });

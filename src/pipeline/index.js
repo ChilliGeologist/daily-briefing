@@ -17,6 +17,7 @@ const { createWriter, createToldWriter } = require('./writer');
 const { writeStories } = require('./writer/write');
 const { editStories } = require('./writer/edit');
 const { addToldToStories, buildTold, distinctNonRedditVersions } = require('./writer/told');
+const { buildMorningPayload, markAlertedStories } = require('../notifications');
 
 let currentRun = null;
 let cancelRequested = false;
@@ -225,8 +226,25 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
       stats: { write: writeStats, edit: edited.stats },
       log: runLog,
     });
-    db.insertBriefing(briefingDate, briefingData);
+    if (db.getRecentSentAlerts) {
+      const recentAlerts = db.getRecentSentAlerts(new Date(Date.now() - (3 * 24 * 60 * 60 * 1000)).toISOString());
+      markAlertedStories(briefingData, recentAlerts);
+    }
+    const editionId = db.insertBriefing(briefingDate, briefingData);
     emit({ type: 'stage', stage: 'assemble', status: 'complete' });
+
+    if (trigger === 'scheduled' || options.notify === true) {
+      try {
+        if (!options.sendNotification) throw new Error('push delivery is not configured');
+        const results = await options.sendNotification(buildMorningPayload(briefingData, editionId));
+        const sent = results.filter(result => result.ok).length;
+        const failed = results.length - sent;
+        runLog.info('notifications', `Morning notification sent to ${sent} subscription${sent === 1 ? '' : 's'}`);
+        if (failed > 0) runLog.warn('notifications', `Morning notification failed for ${failed} subscription${failed === 1 ? '' : 's'}`);
+      } catch (error) {
+        runLog.warn('notifications', `Morning notification failed: ${error.message}`);
+      }
+    }
 
     // Success
     const duration_ms = Date.now() - start;
@@ -238,6 +256,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     return {
       success: true,
       briefingDate,
+      editionId,
       stats: {
         collected: collected.length,
         filtered: kept.length,

@@ -19,6 +19,9 @@ async function fetchWithTimeout(url, options) {
 }
 
 async function generate(url, model, prompt, options) {
+  const requestOptions = { ...(options || {}) };
+  const format = requestOptions.format;
+  delete requestOptions.format;
   // Use chat endpoint with think:false to avoid reasoning token overhead
   const body = await fetchWithTimeout(`${url}/api/chat`, {
     method: 'POST',
@@ -29,7 +32,8 @@ async function generate(url, model, prompt, options) {
       stream: false,
       think: false,
       keep_alive: '30m',
-      options: { num_predict: 500, temperature: 0.3, ...options },
+      ...(format ? { format } : {}),
+      options: { num_predict: 500, temperature: 0.3, ...requestOptions },
     }),
   });
 
