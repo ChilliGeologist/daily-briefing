@@ -7,15 +7,21 @@ let activeJobs = [];
 let _settings = null;
 let _db = null;
 let _runPipelineFn = null;
+let _runAlertWatchFn = null;
 let _log = null;
 
-function initScheduler(settings, db, runPipelineFn, log) {
+const DAY_WATCH_CRON = '*/30 6-21 * * *';
+const NIGHT_WATCH_CRON = '0 0-5,22-23 * * *';
+
+function initScheduler(settings, db, runPipelineFn, log, runAlertWatchFn) {
   _settings = settings;
   _db = db;
   _runPipelineFn = runPipelineFn;
+  _runAlertWatchFn = runAlertWatchFn;
   _log = log;
 
   schedulePipelineJobs();
+  scheduleAlertWatchJobs();
   scheduleLogPruning();
 }
 
@@ -42,6 +48,22 @@ function schedulePipelineJobs() {
   _log.info('scheduler', `Scheduled pipeline runs: ${schedule.join(', ')} (${timezone})`);
 }
 
+function scheduleAlertWatchJobs() {
+  if (!_runAlertWatchFn) return;
+  const timezone = _settings.getTimezone();
+  const schedules = [
+    { expression: DAY_WATCH_CRON, time: 'every 30 minutes, 06:00–21:30', type: 'alert-watch-day' },
+    { expression: NIGHT_WATCH_CRON, time: 'hourly, 22:00–05:00', type: 'alert-watch-night' },
+  ];
+  for (const entry of schedules) {
+    const job = cron.schedule(entry.expression, () => {
+      _runAlertWatchFn();
+    }, { timezone });
+    activeJobs.push({ time: entry.time, job, type: entry.type });
+  }
+  _log.info('scheduler', `Urgent watch: ${DAY_WATCH_CRON}; night emergencies: ${NIGHT_WATCH_CRON} (${timezone})`);
+}
+
 function scheduleLogPruning() {
   const timezone = _settings.getTimezone();
 
@@ -57,6 +79,7 @@ function scheduleLogPruning() {
 function refreshSchedule() {
   stopAll();
   schedulePipelineJobs();
+  scheduleAlertWatchJobs();
   scheduleLogPruning();
 }
 
@@ -99,4 +122,7 @@ function stopAll() {
   activeJobs = [];
 }
 
-module.exports = { initScheduler, refreshSchedule, getNextRuns, stopAll };
+module.exports = {
+  initScheduler, refreshSchedule, getNextRuns, stopAll,
+  DAY_WATCH_CRON, NIGHT_WATCH_CRON,
+};

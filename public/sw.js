@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daily-briefing-v9';
+const CACHE_NAME = 'daily-briefing-v10';
 const PRECACHE = [
   '/',
   '/style.css',
@@ -48,11 +48,23 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   const data = e.data?.json() || { title: 'Daily Briefing', body: 'New briefing available' };
   e.waitUntil(self.registration.showNotification(data.title, {
-    body: data.body, icon: '/icon-192.png', badge: '/icon-192.png'
+    body: data.body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: data.tag,
+    data: { url: data.url || '/' }
   }));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  e.waitUntil(clients.openWindow('/'));
+  const target = new URL(e.notification.data?.url || '/', self.location.origin).href;
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async windows => {
+    const existing = windows.find(client => new URL(client.url).origin === self.location.origin);
+    if (existing) {
+      if ('navigate' in existing) await existing.navigate(target);
+      return existing.focus();
+    }
+    return clients.openWindow(target);
+  }));
 });

@@ -169,6 +169,13 @@ function cosine(a, b) {
   return dot / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
 }
 
+function deterministicSameStory(a, b) {
+  if (sharesUrl(a, b) || substantialContentOverlap(a, b)) return true;
+  if (!allowsSimilarityMerge(a, b)) return false;
+  const vectors = tfIdfVectors([a, b]);
+  return cosine(vectors[0], vectors[1]) >= HIGH_SIMILARITY;
+}
+
 function pathnameOf(item) {
   if (!item.canonical_url) return null;
   try {
@@ -306,4 +313,4 @@ async function clusterItems(items, {
   };
 }
 
-module.exports = { tokenize, substantialContentOverlap, clusterItems };
+module.exports = { tokenize, substantialContentOverlap, deterministicSameStory, clusterItems };

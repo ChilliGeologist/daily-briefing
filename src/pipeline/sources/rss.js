@@ -93,6 +93,11 @@ const LAND_WARNING = /\b(?:severe weather|flood|fire weather|frost|sheep grazier
 async function parseWarningFeed(body, source) {
   const parser = new RSSParser();
   const feed = await parser.parseString(body);
+  let isTasAlert = false;
+  try { isTasAlert = /(^|\.)alert\.tas\.gov\.au$/i.test(new URL(source.url).hostname); } catch (_) { /* normal filtering below */ }
+  if (isTasAlert) {
+    return (feed.items || []).map(item => normaliseFeedItem(item, source, { default_category: 'local' }));
+  }
   return (feed.items || []).filter(item => {
     const text = `${item.title || ''} ${stripHTML(item.contentSnippet || item.content || '')}`;
     if (/\b(?:marine|coastal waters?|cancellation|cancelled|canceled)\b/i.test(text)) return false;

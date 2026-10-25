@@ -1,0 +1,40 @@
+[
+  {
+    "id": "plex-cve",
+    "title": "CISA: Hackers chain Plex flaws in Plex2Shell attacks to breach servers",
+    "description": "The U.S. Cybersecurity and Infrastructure Security Agency is warning that attackers are actively exploiting four vulnerabilities in Plex Media Server.",
+    "source_name": "Bleeping Computer",
+    "source_type": "rss",
+    "published": "2026-10-21T18:34:42.000Z",
+    "canonical_url": "https://www.bleepingcomputer.com/news/security/cisa-hackers-chain-plex-flaws-in-plex2shell-attacks-to-breach-servers"
+  },
+  {
+    "id": "bom-north",
+    "title": "Severe Weather Warning for North East and Central North",
+    "description": "Damaging winds are forecast for Launceston and the Central North this afternoon.",
+    "source_name": "BoM Tasmania warnings",
+    "source_type": "rss",
+    "source_kind": "warning",
+    "published": "2026-10-25T01:15:00.000Z",
+    "canonical_url": "https://www.bom.gov.au/tas/warnings/severe-weather.shtml"
+  },
+  {
+    "id": "hobart-fire",
+    "title": "Hobart East residents question lack of total fire ban amid fire fears",
+    "description": "Residents east of Hobart are criticising authorities for not enforcing a total fire ban despite fears of nearby blazes.",
+    "source_name": "TasALERT",
+    "source_type": "rss",
+    "source_kind": "warning",
+    "published": "2026-10-25T01:30:00.000Z",
+    "canonical_url": "https://www.abc.net.au/news/2026-09-21/tas-seven-mile-beach-fire-resident-concerns/107175956"
+  },
+  {
+    "id": "plex-feature",
+    "title": "Plex now helps sell movie theater tickets",
+    "description": "Plex is expanding its services to include movie ticket sales, aiming to be a central content discovery platform.",
+    "source_name": "Ars Technica",
+    "source_type": "rss",
+    "published": "2026-10-25T00:45:00.000Z",
+    "canonical_url": "https://arstechnica.com/gadgets/2026/10/plex-now-helps-sell-movie-theater-tickets"
+  }
+]

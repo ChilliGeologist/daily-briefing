@@ -10,6 +10,8 @@ const scheduler = require('./src/scheduler');
 const pipeline = require('./src/pipeline');
 const ollama = require('./src/ollama');
 const updater = require('./src/updater');
+const pushRoutes = require('./src/routes/push');
+const { runAlertWatch } = require('./src/alert-watch');
 
 const PORT = process.env.PORT || 3100;
 const DB_PATH = path.join(__dirname, 'data', 'briefings.db');
@@ -29,6 +31,7 @@ const log = createLogger(db);
 
 // Init settings
 const settings = createSettings(db);
+const sendNotification = payload => pushRoutes.sendNotification(db, payload);
 
 // SSE Manager
 const sseClients = new Map();
@@ -47,8 +50,11 @@ const sseManager = {
 // Init scheduler with SSE broadcast
 scheduler.initScheduler(settings, db, (trigger) => {
   const emitSSE = (data) => sseManager.broadcast(data);
-  pipeline.runPipeline(db, ollama, settings, log, emitSSE, trigger);
-}, log);
+  pipeline.runPipeline(db, ollama, settings, log, emitSSE, trigger, { sendNotification });
+}, log, () => runAlertWatch(db, ollama, settings, log, {
+  sendNotification,
+  isPipelineRunning: pipeline.isRunning,
+}));
 
 // Init auto-update check
 updater.startAutoCheck(settings.getUpdateCheckInterval(), (status) => {
@@ -89,10 +95,11 @@ app.use('/api', require('./src/routes/briefings')(db));
 app.use('/api', require('./src/routes/sources')(db));
 app.use('/api', require('./src/routes/categories')(db));
 app.use('/api', require('./src/routes/settings')(db, settings, scheduler));
-app.use('/api', require('./src/routes/pipeline')(db, pipeline, ollama, settings, log, sseManager));
+app.use('/api', require('./src/routes/pipeline')(db, pipeline, ollama, settings, log, sseManager, sendNotification));
 app.use('/api', require('./src/routes/logs')(db));
 app.use('/api', require('./src/routes/ollama')(ollama, settings));
-app.use('/api', require('./src/routes/push')(db));
+app.use('/api', pushRoutes(db, { sendNotification }));
+app.use('/api', require('./src/routes/alerts')(db, settings));
 app.use('/api', require('./src/routes/updates')(updater));
 app.use('/api', require('./src/routes/backup')(db, DB_PATH));
 

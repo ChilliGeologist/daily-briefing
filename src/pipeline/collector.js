@@ -16,9 +16,9 @@ function assignListPositions(items) {
   ));
 }
 
-async function collect(db, log, emitProgress) {
+async function collect(db, log, emitProgress, options = {}) {
   const start = Date.now();
-  const sources = db.getEnabledSources();
+  const sources = options.sources || db.getEnabledSources();
 
   log.info('collector', `Starting collection from ${sources.length} enabled sources`);
 

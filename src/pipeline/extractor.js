@@ -438,6 +438,7 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
 module.exports = {
   extract,
   extractClusters,
+  extractArticle,
   isRedditUrl,
   redditPermalinkUrl,
   parseRedditComments,

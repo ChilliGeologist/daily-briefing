@@ -89,10 +89,55 @@ const SCHEMA = `
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS alert_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_date TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    sources_read TEXT NOT NULL DEFAULT '[]',
+    items_seen INTEGER NOT NULL DEFAULT 0,
+    candidates_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    check_id INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    kicker TEXT NOT NULL,
+    reason TEXT,
+    summary TEXT,
+    original_url TEXT,
+    canonical_url TEXT,
+    title_hash TEXT NOT NULL,
+    source_name TEXT,
+    source_kind TEXT,
+    candidate_kind TEXT NOT NULL,
+    model_verdict TEXT NOT NULL DEFAULT 'not_asked',
+    sent INTEGER NOT NULL DEFAULT 0,
+    not_sent_reason TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    FOREIGN KEY (check_id) REFERENCES alert_checks(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS watch_seen (
+    canonical_url TEXT NOT NULL,
+    title_hash TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
+    PRIMARY KEY (canonical_url, title_hash)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);
   CREATE INDEX IF NOT EXISTS idx_log_entries_run_id ON log_entries(run_id);
   CREATE INDEX IF NOT EXISTS idx_log_entries_timestamp ON log_entries(timestamp);
   CREATE INDEX IF NOT EXISTS idx_sources_enabled ON sources(enabled);
+  CREATE INDEX IF NOT EXISTS idx_alert_checks_local_date ON alert_checks(local_date, started_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_alerts_check_id ON alerts(check_id);
+  CREATE INDEX IF NOT EXISTS idx_alerts_local_sent ON alerts(local_date, sent);
+  CREATE INDEX IF NOT EXISTS idx_watch_seen_at ON watch_seen(seen_at);
 `;
 
 const SYSTEM_CATEGORY_SLUG = 'other';
@@ -449,6 +494,115 @@ function initDB(dbPath) {
         .map(r => ({ ...r, keys: JSON.parse(r.keys || '{}') }));
     },
 
+    // --- Urgent alert watch ---
+    createAlertCheck({ local_date, started_at, status = 'running' }) {
+      const result = sqlite.prepare(
+        'INSERT INTO alert_checks (local_date, started_at, status) VALUES (?, ?, ?)'
+      ).run(local_date, started_at, status);
+      return Number(result.lastInsertRowid);
+    },
+
+    finishAlertCheck(id, fields) {
+      const allowed = new Set([
+        'finished_at', 'status', 'sources_read', 'items_seen', 'candidates_count', 'error',
+      ]);
+      const sets = [];
+      const values = [];
+      for (const [key, raw] of Object.entries(fields || {})) {
+        if (!allowed.has(key)) continue;
+        sets.push(`${key} = ?`);
+        values.push(key === 'sources_read' ? JSON.stringify(raw || []) : raw);
+      }
+      if (sets.length === 0) return;
+      values.push(id);
+      sqlite.prepare(`UPDATE alert_checks SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    },
+
+    addAlert(fields) {
+      const result = sqlite.prepare(`
+        INSERT INTO alerts (
+          check_id, local_date, headline, kicker, reason, summary,
+          original_url, canonical_url, title_hash, source_name, source_kind,
+          candidate_kind, model_verdict, sent, not_sent_reason, created_at, sent_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        fields.check_id, fields.local_date, fields.headline, fields.kicker,
+        fields.reason || null, fields.summary || null, fields.original_url || null,
+        fields.canonical_url || null, fields.title_hash, fields.source_name || null,
+        fields.source_kind || null, fields.candidate_kind,
+        fields.model_verdict || 'not_asked', fields.sent ? 1 : 0,
+        fields.not_sent_reason || null, fields.created_at, fields.sent_at || null
+      );
+      return Number(result.lastInsertRowid);
+    },
+
+    updateAlert(id, fields) {
+      const allowed = new Set(['reason', 'model_verdict', 'sent', 'not_sent_reason', 'sent_at', 'summary']);
+      const sets = [];
+      const values = [];
+      for (const [key, raw] of Object.entries(fields || {})) {
+        if (!allowed.has(key)) continue;
+        sets.push(`${key} = ?`);
+        values.push(key === 'sent' ? (raw ? 1 : 0) : raw);
+      }
+      if (sets.length === 0) return;
+      values.push(id);
+      sqlite.prepare(`UPDATE alerts SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    },
+
+    getAlertById(id) {
+      return sqlite.prepare('SELECT * FROM alerts WHERE id = ?').get(id) || null;
+    },
+
+    getSentAlerts(localDate) {
+      return sqlite.prepare(
+        'SELECT * FROM alerts WHERE local_date = ? AND sent = 1 ORDER BY sent_at ASC, id ASC'
+      ).all(localDate);
+    },
+
+    getRecentSentAlerts(since) {
+      return sqlite.prepare(
+        'SELECT * FROM alerts WHERE sent = 1 AND sent_at >= ? ORDER BY sent_at DESC, id DESC'
+      ).all(since);
+    },
+
+    countSentAlerts(localDate) {
+      return sqlite.prepare(
+        'SELECT COUNT(*) AS count FROM alerts WHERE local_date = ? AND sent = 1'
+      ).get(localDate).count;
+    },
+
+    listAlertChecks(localDate) {
+      const checks = sqlite.prepare(
+        'SELECT * FROM alert_checks WHERE local_date = ? ORDER BY started_at DESC, id DESC'
+      ).all(localDate);
+      const alerts = sqlite.prepare(
+        'SELECT * FROM alerts WHERE check_id = ? ORDER BY id ASC'
+      );
+      return checks.map(check => ({
+        ...check,
+        sources_read: parseStoredArray(check.sources_read),
+        candidates: alerts.all(check.id),
+      }));
+    },
+
+    hasWatchSeen(canonicalUrl, hash) {
+      return Boolean(sqlite.prepare(
+        'SELECT 1 FROM watch_seen WHERE canonical_url = ? AND title_hash = ?'
+      ).get(canonicalUrl, hash));
+    },
+
+    markWatchSeen(canonicalUrl, hash, seenAt) {
+      sqlite.prepare(`
+        INSERT INTO watch_seen (canonical_url, title_hash, seen_at) VALUES (?, ?, ?)
+        ON CONFLICT(canonical_url, title_hash) DO UPDATE SET seen_at = excluded.seen_at
+      `).run(canonicalUrl, hash, seenAt);
+    },
+
+    pruneWatchSeen(before) {
+      return sqlite.prepare('DELETE FROM watch_seen WHERE seen_at < ?').run(before).changes;
+    },
+
     close() {
       sqlite.close();
     },
@@ -507,6 +661,15 @@ function briefingListItem(row) {
     item_count: storedCount > 0 ? storedCount : entries.length,
     created_at: row.created_at,
   };
+}
+
+function parseStoredArray(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
 }
 
 module.exports = { initDB };

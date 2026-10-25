@@ -4,6 +4,7 @@ const router = require('express').Router();
 const fs = require('fs');
 const path = require('path');
 const webPush = require('web-push');
+const { buildTestPayload } = require('../notifications');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const PUBLIC_KEY_PATH = path.join(DATA_DIR, 'vapid-public.key');
@@ -30,14 +31,14 @@ function initVapid() {
 
 initVapid();
 
-async function sendNotification(db, title, body) {
+async function sendNotification(db, payload, send = webPush.sendNotification.bind(webPush)) {
   const subs = db.getPushSubscriptions();
   const results = [];
   for (const sub of subs) {
     try {
-      await webPush.sendNotification(
+      await send(
         { endpoint: sub.endpoint, keys: sub.keys },
-        JSON.stringify({ title, body })
+        JSON.stringify(payload)
       );
       results.push({ endpoint: sub.endpoint, ok: true });
     } catch (err) {
@@ -51,7 +52,8 @@ async function sendNotification(db, title, body) {
   return results;
 }
 
-module.exports = function (db) {
+module.exports = function (db, options = {}) {
+  const deliver = options.sendNotification || (payload => sendNotification(db, payload));
   router.get('/push/vapid-key', (req, res) => {
     try {
       res.json({ publicKey: vapidPublicKey });
@@ -79,6 +81,19 @@ module.exports = function (db) {
       if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
       db.removePushSubscription(endpoint);
       res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/push/test', async (req, res) => {
+    try {
+      const results = await deliver(buildTestPayload());
+      res.json({
+        ok: results.some(result => result.ok),
+        sent: results.filter(result => result.ok).length,
+        failed: results.filter(result => !result.ok).length,
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
