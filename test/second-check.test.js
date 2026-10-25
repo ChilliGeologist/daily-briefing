@@ -148,9 +148,9 @@ describe('how it was told second check', () => {
       system: 'Verify one proposed outlet stance. Answer each field exactly as requested.',
       user: `Outlet: Al Jazeera. Its own words: No Kings network opposed to United States President Donald Trump
 The No Kings network is organising protests against the president. Phrase: "opposed to United States President Donald Trump". Subject: Donald Trump.
-a) Is Donald Trump a person, political party, organisation, government, or a cause people argue for or against? Not an event, accident, disaster, animal, object or crowd. (yes/no)
+a) Is Donald Trump a person, political party, organisation, government, or a cause with real supporters and opponents (a policy or position)? Not an event, accident, disaster, animal, object or crowd, and not a crime, its motive or a harm nobody defends, such as racism or terrorism. (yes/no)
 b) In this phrase is the outlet itself expressing a view about Donald Trump, through its own word choice, rather than describing someone else's position or plainly reporting what happened? (yes/no)
-c) If yes, which way: toward or against?`,
+c) If yes, which way: toward (favourable or sympathetic to Donald Trump) or against (unfavourable or critical)?`,
       schema: {
         type: 'object',
         additionalProperties: false,
