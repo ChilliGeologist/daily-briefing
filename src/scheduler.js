@@ -2,6 +2,7 @@
 
 const cron = require('node-cron');
 const { isRunning } = require('./pipeline/index');
+const { recomputeLearning } = require('./learning');
 
 let activeJobs = [];
 let _settings = null;
@@ -12,6 +13,7 @@ let _log = null;
 
 const DAY_WATCH_CRON = '*/30 6-21 * * *';
 const NIGHT_WATCH_CRON = '0 0-5,22-23 * * *';
+const LEARNING_CRON = '30 3 * * 0';
 
 function initScheduler(settings, db, runPipelineFn, log, runAlertWatchFn) {
   _settings = settings;
@@ -23,6 +25,7 @@ function initScheduler(settings, db, runPipelineFn, log, runAlertWatchFn) {
   schedulePipelineJobs();
   scheduleAlertWatchJobs();
   scheduleLogPruning();
+  scheduleLearning();
 }
 
 function schedulePipelineJobs() {
@@ -76,11 +79,25 @@ function scheduleLogPruning() {
   activeJobs.push({ time: '03:00', job, type: 'prune' });
 }
 
+function scheduleLearning() {
+  const timezone = _settings.getTimezone();
+  const job = cron.schedule(LEARNING_CRON, () => {
+    try {
+      const result = recomputeLearning(_db);
+      _log.info('learning', `Worked out ${result.nudges.length} learned nudges from ${result.seen_count} seen stories`);
+    } catch (error) {
+      _log.error('learning', `Could not work out learned nudges: ${error.message}`);
+    }
+  }, { timezone });
+  activeJobs.push({ time: 'Sunday 03:30', job, type: 'learning' });
+}
+
 function refreshSchedule() {
   stopAll();
   schedulePipelineJobs();
   scheduleAlertWatchJobs();
   scheduleLogPruning();
+  scheduleLearning();
 }
 
 function getNextRuns() {
@@ -124,5 +141,5 @@ function stopAll() {
 
 module.exports = {
   initScheduler, refreshSchedule, getNextRuns, stopAll,
-  DAY_WATCH_CRON, NIGHT_WATCH_CRON,
+  DAY_WATCH_CRON, NIGHT_WATCH_CRON, LEARNING_CRON,
 };

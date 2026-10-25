@@ -1,6 +1,6 @@
 'use strict';
 
-const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against. Subjects must be a person, political party, organisation, government or a cause people argue for or against, never an event, accident, disaster, animal, object or crowd. For every outlet classify its stance as toward, against or plain. For toward or against, quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default and its quote may be empty or omitted. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
+const TOLD_SYSTEM_PROMPT = `Compare how news outlets told the same story. You see each outlet's headline and opening only, with quotes removed. Judge the outlet's own word choice and what it chose to lead with. Name at most three subjects that the coverage is for or against. Subjects must be a person, political party, organisation, government or a cause people argue for or against, never an event, accident, disaster, animal, object or crowd. A cause is a policy or position with real supporters and opponents, such as a treaty, a tax or a ban; it is never a crime, its motive, or a harm nobody defends, such as racism, terrorism, violence or abuse. For every outlet classify its stance as toward, against or plain. Toward means the outlet's wording treats the subject favourably or sympathetically; against means unfavourably or critically. Naming or describing what happened, including calling an attack racist or terrorist, is plain. For toward or against, quote no more than 12 words verbatim from that outlet's supplied words. Plain is the default and its quote may be empty or omitted. Reporting an allegation is not itself against. Loaded words such as shock, slams, rage, disgraced, hero and brave; choosing which side's claim leads; and omitting one side's response can indicate a stance. Do not use political left/right labels.`;
 
 const TOLD_VERIFY_SYSTEM_PROMPT = 'Verify one proposed outlet stance. Answer each field exactly as requested.';
 const TOLD_VERIFY_NUM_PREDICT = 80;
@@ -240,9 +240,9 @@ function toldVerificationPrompt(version, subject, stance) {
   const ownWords = `${headline}\n${opening}`.trim();
   const separator = /[.!?]$/u.test(ownWords) ? ' ' : '. ';
   return `Outlet: ${version.name}. Its own words: ${ownWords}${separator}Phrase: "${stance.quote}". Subject: ${subject.name}.\n`
-    + `a) Is ${subject.name} a person, political party, organisation, government, or a cause people argue for or against? Not an event, accident, disaster, animal, object or crowd. (yes/no)\n`
+    + `a) Is ${subject.name} a person, political party, organisation, government, or a cause with real supporters and opponents (a policy or position)? Not an event, accident, disaster, animal, object or crowd, and not a crime, its motive or a harm nobody defends, such as racism or terrorism. (yes/no)\n`
     + `b) In this phrase is the outlet itself expressing a view about ${subject.name}, through its own word choice, rather than describing someone else's position or plainly reporting what happened? (yes/no)\n`
-    + 'c) If yes, which way: toward or against?';
+    + `c) If yes, which way: toward (favourable or sympathetic to ${subject.name}) or against (unfavourable or critical)?`;
 }
 
 function answerValue(value) {

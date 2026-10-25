@@ -1,6 +1,7 @@
 'use strict';
 
 const { matchInterests, interestScore } = require('./writer/interests');
+const { learningNudge, nudgeLookup } = require('../learning');
 
 // Three outlets add 25 * log2(3) = 39.6 coverage points over one outlet.
 // A weight-3 local match adds 39 points, putting those signals roughly level.
@@ -53,7 +54,7 @@ function positionScore(items) {
   }, 0);
 }
 
-function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }) {
+function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests, learnedNudges }) {
   const coverageScore = 25 * Math.log2(Math.max(1, cluster.coverage));
   const recency = recencyScore(newestItem(cluster), now);
   const position = positionScore(cluster.items);
@@ -72,8 +73,16 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests 
   }
   const interestPoints = interestScore(interest_matches) * INTEREST_POINTS;
   const priority = Math.max(...cluster.items.map(item => item.source_priority ?? 1));
-  const rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);
-  return { ...cluster, interest_matches, rank_score };
+  const base_rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);
+  const scored = { ...cluster, interest_matches, base_rank_score };
+  const learned = learningNudge(scored, learnedNudges, { includeKicker: false });
+  const rank_score = base_rank_score * learned.factor;
+  return {
+    ...scored,
+    rank_score,
+    learning_nudge: learned.nudge,
+    learning_features: learned.features,
+  };
 }
 
 function rankClusters(clusters, {
@@ -84,10 +93,17 @@ function rankClusters(clusters, {
   limit,
   perSourceFloor = 2,
   perCategoryFloor = 12,
+  learnedNudges = [],
 } = {}) {
-  const scored = clusters
-    .map(cluster => scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests }))
-    .sort((a, b) => b.rank_score - a.rank_score);
+  const learnedLookup = nudgeLookup(learnedNudges);
+  const scored = clusters.map(cluster => scoreCluster(cluster, {
+      now, boostKeywords, penaltyKeywords, interests, learnedNudges: learnedLookup,
+    }));
+  const baseRankByCluster = new Map([...scored]
+    .sort((a, b) => b.base_rank_score - a.base_rank_score)
+    .map((cluster, index) => [cluster, index + 1]));
+  for (const cluster of scored) cluster.base_rank = baseRankByCluster.get(cluster);
+  scored.sort((a, b) => b.rank_score - a.rank_score);
   const selectionLimit = limit == null ? scored.length : Math.max(0, limit);
   const topIds = new Set(scored.slice(0, selectionLimit).map(cluster => cluster.id));
   const sources = [...new Set(scored.flatMap(cluster =>
@@ -145,6 +161,16 @@ function rankClusters(clusters, {
       clusters: clusters.length,
       selected: rankedSelected.length,
       floor_added: floorAdded,
+      applied_nudges: scored
+        .filter(cluster => cluster.learning_nudge !== 0)
+        .sort((left, right) => Math.abs(right.learning_nudge) - Math.abs(left.learning_nudge))
+        .slice(0, 10)
+        .map(cluster => ({
+          id: cluster.id,
+          title: cluster.lead && cluster.lead.title,
+          nudge: cluster.learning_nudge,
+          features: cluster.learning_features,
+        })),
     },
   };
 }

@@ -2,6 +2,7 @@
 
 const { SECTIONS, TOP_SECTION } = require('./writer/sections');
 const { communityReplies, isCommunityItem } = require('./writer/prompts');
+const { learningNudge, nudgeLookup } = require('../learning');
 
 const COMMUNITY_POST_CHARS = 6000;
 const COMMUNITY_REPLY_COUNT = 5;
@@ -59,20 +60,63 @@ function storiesForIds(ids, storiesById, significance, excluded = new Set()) {
   return output;
 }
 
+function orderSectionIds(ids, storiesById, sectionId, learnedLookup, applied) {
+  const entries = (ids || []).map((id, index) => {
+    const story = getStory(storiesById, id);
+    const learned = story
+      ? learningNudge(story, learnedLookup, { section: sectionId })
+      : { nudge: 0, factor: 1, features: [] };
+    const baseScore = Number(story && (story.base_relevance_score ?? story.relevance_score));
+    return {
+      id,
+      index,
+      story,
+      learned,
+      score: (Number.isFinite(baseScore) ? baseScore : 0) * learned.factor,
+    };
+  });
+  if (!entries.some(entry => entry.learned.nudge !== 0)) return entries.map(entry => entry.id);
+  entries.sort((left, right) => (right.score - left.score) || (left.index - right.index));
+  for (const entry of entries) {
+    if (!entry.story || entry.learned.nudge === 0) continue;
+    applied.push({
+      id: entry.story.id,
+      title: entry.story.headline || entry.story.title,
+      section: sectionId,
+      nudge: entry.learned.nudge,
+      features: entry.learned.features,
+    });
+  }
+  return entries.map(entry => entry.id);
+}
+
 function assemble(edit, storiesById, meta = {}) {
   const topIds = (edit.top || []).filter(id => Boolean(getStory(storiesById, id)));
   const topSet = new Set(topIds);
   const sections = [];
+  const learnedLookup = nudgeLookup(meta.learnedNudges || []);
+  const appliedNudges = [];
   const topItems = storiesForIds(topIds, storiesById, 'high');
   if (topItems.length > 0) {
     sections.push({ ...TOP_SECTION, icon: 'globe', items: topItems, more: [] });
   }
 
   for (const section of SECTIONS) {
-    const items = storiesForIds((edit.sections || {})[section.id], storiesById, 'medium', topSet);
+    const sectionItemIds = (edit.sections || {})[section.id] || [];
+    const moreIds = (edit.more || {})[section.id] || [];
+    const ordered = orderSectionIds(
+      [...sectionItemIds, ...moreIds].filter(id => !topSet.has(id)),
+      storiesById,
+      section.id,
+      learnedLookup,
+      appliedNudges
+    );
+    const orderedItemIds = ordered.slice(0, sectionItemIds.length);
+    const orderedMoreIds = ordered.slice(sectionItemIds.length);
+    const items = storiesForIds(orderedItemIds, storiesById, 'medium', topSet);
     const itemIds = new Set(items.map(item => item.id));
     const more = storiesForIds(
-      (edit.more || {})[section.id],
+      orderedMoreIds,
       storiesById,
       'medium',
       new Set([...topSet, ...itemIds])
@@ -89,6 +133,14 @@ function assemble(edit, storiesById, meta = {}) {
   const totalItems = sections.reduce((total, section) => total + section.items.length + section.more.length, 0);
   if (meta.log && meta.log.info) {
     meta.log.info('assembler', `Assembled briefing: ${sections.length} sections, ${totalItems} items total`);
+    if (appliedNudges.length > 0) {
+      const largest = appliedNudges
+        .sort((left, right) => Math.abs(right.nudge) - Math.abs(left.nudge))
+        .slice(0, 10);
+      meta.log.info('pipeline:learning', `Applied learned nudges to ${appliedNudges.length} section stories`, {
+        top: largest,
+      });
+    }
   }
 
   return {
@@ -99,4 +151,4 @@ function assemble(edit, storiesById, meta = {}) {
   };
 }
 
-module.exports = { assemble };
+module.exports = { assemble, orderSectionIds };

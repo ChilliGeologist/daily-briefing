@@ -100,6 +100,7 @@ app.use('/api', require('./src/routes/logs')(db));
 app.use('/api', require('./src/routes/ollama')(ollama, settings));
 app.use('/api', pushRoutes(db, { sendNotification }));
 app.use('/api', require('./src/routes/alerts')(db, settings));
+app.use('/api', require('./src/routes/learning')(db));
 app.use('/api', require('./src/routes/updates')(updater));
 app.use('/api', require('./src/routes/backup')(db, DB_PATH));
 

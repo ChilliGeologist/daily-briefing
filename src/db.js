@@ -130,6 +130,33 @@ const SCHEMA = `
     PRIMARY KEY (canonical_url, title_hash)
   );
 
+  CREATE TABLE IF NOT EXISTS story_events (
+    briefing_id INTEGER NOT NULL,
+    story_key TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('seen', 'opened', 'read_full')),
+    at TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    kicker TEXT NOT NULL DEFAULT '',
+    outlets TEXT NOT NULL DEFAULT '[]',
+    interest_labels TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (briefing_id, story_key, kind),
+    FOREIGN KEY (briefing_id) REFERENCES briefings(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS learned_nudges (
+    feature_type TEXT NOT NULL CHECK (feature_type IN ('kicker', 'outlet', 'section')),
+    feature_value TEXT NOT NULL,
+    display_value TEXT NOT NULL,
+    nudge REAL NOT NULL,
+    seen_count INTEGER NOT NULL,
+    weighted_opens REAL NOT NULL,
+    open_rate REAL NOT NULL,
+    shrunk_rate REAL NOT NULL,
+    overall_rate REAL NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (feature_type, feature_value)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);
   CREATE INDEX IF NOT EXISTS idx_log_entries_run_id ON log_entries(run_id);
   CREATE INDEX IF NOT EXISTS idx_log_entries_timestamp ON log_entries(timestamp);
@@ -138,6 +165,7 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_alerts_check_id ON alerts(check_id);
   CREATE INDEX IF NOT EXISTS idx_alerts_local_sent ON alerts(local_date, sent);
   CREATE INDEX IF NOT EXISTS idx_watch_seen_at ON watch_seen(seen_at);
+  CREATE INDEX IF NOT EXISTS idx_story_events_at ON story_events(at);
 `;
 
 const SYSTEM_CATEGORY_SLUG = 'other';
@@ -601,6 +629,75 @@ function initDB(dbPath) {
 
     pruneWatchSeen(before) {
       return sqlite.prepare('DELETE FROM watch_seen WHERE seen_at < ?').run(before).changes;
+    },
+
+    // --- Reading events and learned ordering ---
+    insertStoryEvents(rows) {
+      const insert = sqlite.prepare(`
+        INSERT OR IGNORE INTO story_events
+          (briefing_id, story_key, kind, at, section, kicker, outlets, interest_labels)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const transaction = sqlite.transaction(values => values.reduce((count, row) => count + insert.run(
+        row.briefing_id, row.story_key, row.kind, row.at, row.section, row.kicker,
+        row.outlets, row.interest_labels
+      ).changes, 0));
+      return transaction(rows);
+    },
+
+    getLearningStories(since) {
+      return sqlite.prepare(`
+        SELECT briefing_id, story_key,
+          MAX(section) AS section,
+          MAX(kicker) AS kicker,
+          MAX(outlets) AS outlets,
+          MAX(interest_labels) AS interest_labels,
+          MAX(CASE WHEN kind = 'seen' THEN 1 ELSE 0 END) AS seen,
+          MAX(CASE WHEN kind = 'opened' THEN 1 ELSE 0 END) AS opened,
+          MAX(CASE WHEN kind = 'read_full' THEN 1 ELSE 0 END) AS read_full
+        FROM story_events
+        WHERE at >= ?
+        GROUP BY briefing_id, story_key
+        ORDER BY briefing_id, story_key
+      `).all(since);
+    },
+
+    getLearnedNudges() {
+      return sqlite.prepare(`
+        SELECT feature_type, feature_value, display_value, nudge, seen_count,
+          weighted_opens, open_rate, shrunk_rate, overall_rate, computed_at
+        FROM learned_nudges
+        ORDER BY ABS(nudge) DESC, feature_type, feature_value
+      `).all();
+    },
+
+    replaceLearnedNudges(rows) {
+      const insert = sqlite.prepare(`
+        INSERT INTO learned_nudges
+          (feature_type, feature_value, display_value, nudge, seen_count,
+           weighted_opens, open_rate, shrunk_rate, overall_rate, computed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const transaction = sqlite.transaction(values => {
+        sqlite.prepare('DELETE FROM learned_nudges').run();
+        for (const row of values) {
+          insert.run(
+            row.feature_type, row.feature_value, row.display_value, row.nudge,
+            row.seen_count, row.weighted_opens, row.open_rate, row.shrunk_rate,
+            row.overall_rate, row.computed_at
+          );
+        }
+      });
+      transaction(rows || []);
+    },
+
+    forgetLearning() {
+      const transaction = sqlite.transaction(() => {
+        sqlite.prepare('DELETE FROM story_events').run();
+        sqlite.prepare('DELETE FROM learned_nudges').run();
+        sqlite.prepare("DELETE FROM settings WHERE key = 'learning_last_computed_at'").run();
+      });
+      transaction();
     },
 
     close() {

@@ -143,15 +143,20 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'rank', status: 'running' });
     const preferences = settings.getPreferences();
+    const learnedNudges = db.getLearnedNudges ? db.getLearnedNudges() : [];
     const { selected, stats: rankStats } = rankClusters(clusters, {
       now: Date.now(),
       boostKeywords: preferences.boost_keywords,
       penaltyKeywords: preferences.penalty_keywords,
       interests: settings.getInterests(),
       limit: settings.getMaxCandidates(),
+      learnedNudges,
     });
     runLog.info('pipeline:rank',
       `Ranked ${rankStats.clusters} stories: ${rankStats.selected} selected (${rankStats.floor_added} by source floor)`);
+    runLog.info('pipeline:learning', `Applied learned nudges to ${rankStats.applied_nudges.length} ranked stories`, {
+      top: rankStats.applied_nudges,
+    });
     db.updateRun(runId, { items_scored: selected.length });
     emit({ type: 'stage', stage: 'rank', status: 'complete', stats: rankStats });
     checkCancelled();
@@ -211,7 +216,12 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stage = 'edit';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'edit', status: 'running' });
-    const edited = await editStories(stories, writer, settings, runLog);
+    // The learned order may decide which stories reach the writer and how
+    // sections read, but "You should know" is chosen in the unnudged order.
+    const storiesForEditing = [...stories].sort((left, right) =>
+      (Number(left.base_rank ?? left.rank) - Number(right.base_rank ?? right.rank))
+    );
+    const edited = await editStories(storiesForEditing, writer, settings, runLog);
     emit({ type: 'stage', stage: 'edit', status: 'complete', stats: edited.stats });
     checkCancelled();
 
@@ -225,6 +235,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
       writer: usedWriters.join(' + ') || writer.name,
       stats: { write: writeStats, edit: edited.stats },
       log: runLog,
+      learnedNudges,
     });
     if (db.getRecentSentAlerts) {
       const recentAlerts = db.getRecentSentAlerts(new Date(Date.now() - (3 * 24 * 60 * 60 * 1000)).toISOString());
