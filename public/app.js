@@ -47,7 +47,7 @@ function safeUrl(url) {
 function formatDate(dateStr) {
   if (!dateStr) return '';
   var d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString('en-AU', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 }
@@ -55,7 +55,7 @@ function formatDate(dateStr) {
 function formatDateShort(dateStr) {
   if (!dateStr) return '';
   var d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString('en-AU', {
     weekday: 'short', month: 'short', day: 'numeric'
   });
 }
@@ -156,8 +156,8 @@ function resolvedTheme(mode, now) {
 function updateThemeColour() {
   var meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) return;
-  var reading = $('#app') && $('#app').dataset.view === 'reading';
-  var property = reading ? '--paper-page' : '--bg';
+  var view = $('#app') && $('#app').dataset.view;
+  var property = view === 'reading' || view === 'archive' ? '--paper-page' : '--bg';
   var colour = getComputedStyle(document.documentElement).getPropertyValue(property).trim();
   if (colour) meta.setAttribute('content', colour);
 }
@@ -219,6 +219,9 @@ document.addEventListener('visibilitychange', function() {
 
 var currentDate = null;
 var currentBriefingId = null;
+var currentBriefingIsLatest = false;
+var briefingLoadTarget = null;
+var briefingLoadSequence = 0;
 var readingStories = new Map();
 var readingStoryKeys = new Map();
 var readingStoryOpeners = new Map();
@@ -609,7 +612,8 @@ function completeReaderReturn() {
   if (readingState.appHistoryEntry && history.state && history.state.appHistoryEntry) {
     history.back();
   } else {
-    history.replaceState({}, '', '/');
+    var editionUrl = currentBriefingId ? '/?edition=' + encodeURIComponent(currentBriefingId) : '/';
+    history.replaceState({ editionId: currentBriefingId }, '', editionUrl);
     closeReader();
   }
 }
@@ -705,6 +709,17 @@ function storyKey(item) {
   return key;
 }
 
+function indexReadingStoryKeys(sections) {
+  var entries = window.ReadingLogic.storyEntries(sections || []);
+  entries.forEach(function(entry) {
+    readingStoryKeys.set(entry.item, entry.key);
+    if (!readingStories.has(entry.key)) readingStories.set(entry.key, entry.item);
+  });
+  readingFallbackId = entries.filter(function(entry) {
+    return entry.key.indexOf('legacy-story-') === 0;
+  }).length;
+}
+
 function sectionFallbackId(section) {
   var title = section && section.title ? section.title : 'section';
   var fallback = String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -722,9 +737,13 @@ function readingTimeText(value) {
 }
 
 function sourceNames(item) {
-  return (Array.isArray(item && item.sources) ? item.sources : []).map(function(source) {
+  var names = window.ReadingLogic.parseSources(item && item.sources).map(function(source) {
     return typeof source === 'string' ? source : source && source.name;
   }).filter(Boolean);
+  [item && item.source, item && item.source_name].forEach(function(name) {
+    if (name && names.indexOf(name) === -1) names.push(name);
+  });
+  return names;
 }
 
 var SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -1131,7 +1150,12 @@ function syncEditionLayout() {
 }
 
 async function loadBriefing(id) {
-  var url = id ? '/api/briefing/' + id : '/api/briefing';
+  var hasId = id !== undefined && id !== null && id !== '';
+  var target = hasId ? String(id) : 'latest';
+  if (briefingLoadTarget === target) return;
+  briefingLoadTarget = target;
+  var loadSequence = ++briefingLoadSequence;
+  var url = hasId ? '/api/briefing/' + encodeURIComponent(id) : '/api/briefing';
   var loading = $('#loading');
   var emptyState = $('#empty-state');
   var container = $('#sections-container');
@@ -1152,11 +1176,13 @@ async function loadBriefing(id) {
   try {
     var res = await fetch(url);
     var json = await res.json();
+    if (loadSequence !== briefingLoadSequence) return;
     loading.classList.add('hidden');
 
     if (!json.data || json.error) {
       currentDate = null;
       currentBriefingId = null;
+      currentBriefingIsLatest = false;
       emptyState.classList.remove('hidden');
       $('#briefing-date').textContent = '';
       $('#briefing-headline').textContent = '';
@@ -1167,16 +1193,21 @@ async function loadBriefing(id) {
 
     currentDate = json.date;
     currentBriefingId = json.id;
+    currentBriefingIsLatest = Boolean(json.is_latest);
     var briefing = json.data;
+
+    indexReadingStoryKeys(briefing.sections);
 
     $('#briefing-date').textContent = formatDate(json.date);
     $('#briefing-headline').textContent = '';
     scheduleMastheadMeasure();
     document.title = formatDate(json.date) + ' \u2014 ' + appTitle;
 
-    $$('.archive-item').forEach(function(archiveItem) {
-      archiveItem.classList.toggle('active', archiveItem.dataset.id === String(json.id));
+    $$('.archive-edition').forEach(function(archiveItem) {
+      archiveItem.classList.toggle('current', archiveItem.dataset.id === String(json.id));
     });
+
+    updateEditionNotice();
 
     syncEditionLayout();
     var thumbSections = [];
@@ -1201,12 +1232,43 @@ async function loadBriefing(id) {
     briefingLoaded = true;
     syncReaderFromLocation();
   } catch (err) {
+    if (loadSequence !== briefingLoadSequence) return;
     loading.classList.add('hidden');
     emptyState.classList.remove('hidden');
     briefingLoaded = true;
     syncReaderFromLocation();
     console.error('Failed to load briefing:', err);
+  } finally {
+    if (loadSequence === briefingLoadSequence) briefingLoadTarget = null;
   }
+}
+
+function updateEditionNotice() {
+  var notice = $('#edition-notice');
+  if (!notice) return;
+  var older = Boolean(currentBriefingId && !currentBriefingIsLatest);
+  notice.classList.toggle('hidden', !older);
+  $('#edition-notice-text').textContent = older ? 'Edition of ' + formatDate(currentDate) : '';
+  scheduleMastheadMeasure();
+}
+
+function requestedEditionId() {
+  if (location.pathname !== '/') return null;
+  var value = new URLSearchParams(location.search).get('edition');
+  return value && /^\d+$/.test(value) ? value : null;
+}
+
+function loadReadingFromLocation() {
+  if (location.pathname !== '/') return;
+  var id = requestedEditionId();
+  var alreadyLoaded = briefingLoaded && (id
+    ? String(currentBriefingId) === String(id)
+    : currentBriefingIsLatest);
+  if (alreadyLoaded) {
+    syncReaderFromLocation();
+    return;
+  }
+  loadBriefing(id || undefined);
 }
 
 function renderReadingBand(band) {
@@ -1453,7 +1515,7 @@ $('#briefing-page').addEventListener('click', function(event) {
 // ============================================================
 
 function firstSafeSourceUrl(item) {
-  var sources = Array.isArray(item && item.sources) ? item.sources : [];
+  var sources = window.ReadingLogic.parseSources(item && item.sources);
   for (var index = 0; index < sources.length; index++) {
     var sourceUrl = typeof sources[index] === 'object' && sources[index] ? sources[index].url : '';
     var safe = safeUrl(sourceUrl);
@@ -1463,7 +1525,8 @@ function firstSafeSourceUrl(item) {
 }
 
 function originalUrl(item) {
-  return safeUrl(item && item.article_url) || safeUrl(item && item.canonical_url) || firstSafeSourceUrl(item);
+  return safeUrl(item && item.article_url) || safeUrl(item && item.canonical_url) ||
+    safeUrl(item && item.url) || firstSafeSourceUrl(item);
 }
 
 function originalSiteName(item, url) {
@@ -1537,6 +1600,9 @@ function renderReader(item) {
   if (readerContent.fallback && !item.told) {
     body.appendChild(el('p', { className: 'reader-fallback', textContent: readerContent.fallback }));
   }
+  if (readerContent.detail && !item.told) {
+    body.appendChild(el('p', { className: 'reader-detail', textContent: readerContent.detail }));
+  }
   if (readerContent.post) {
     body.appendChild(el('p', { className: 'reader-community-post', textContent: readerContent.post }));
   }
@@ -1598,6 +1664,7 @@ function openReaderById(key, pushHistory) {
     url.pathname = '/';
     url.search = '';
     url.hash = '';
+    if (currentBriefingId) url.searchParams.set('edition', String(currentBriefingId));
     url.searchParams.set('story', String(key));
     history.pushState({
       reading: true,
@@ -1666,7 +1733,8 @@ function syncReaderFromLocation() {
   var state = history.state || {};
   var wrongEdition = state.editionId !== undefined && state.editionId !== null && String(state.editionId) !== String(currentBriefingId);
   if (wrongEdition || !readingStories.has(key)) {
-    history.replaceState({}, '', '/');
+    var editionUrl = currentBriefingId ? '/?edition=' + encodeURIComponent(currentBriefingId) : '/';
+    history.replaceState({ editionId: currentBriefingId }, '', editionUrl);
     closeReader();
     return;
   }
@@ -1849,62 +1917,271 @@ window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',
 // 6. Archive
 // ============================================================
 
-var ARCHIVE_PAGE_SIZE = 20;
 var archiveBriefings = [];
-var archivePage = 0;
+var archiveQuery = '';
+var archiveSearchTimer = null;
+var archiveSearchRequest = 0;
+var archiveSearchResult = null;
+var archiveScrollTop = 0;
+var archiveRestoreScroll = false;
 
 async function loadArchive() {
+  var input = $('#archive-search-input');
+  input.value = archiveQuery;
+  $('#archive-status').textContent = 'Loading previous editions…';
   try {
     var res = await fetch('/api/briefings');
     var json = await res.json();
     archiveBriefings = json.briefings || [];
-    archivePage = 0;
-    if (currentBriefingId) {
-      var idx = archiveBriefings.findIndex(function(b) { return b.id === currentBriefingId; });
-      if (idx >= 0) archivePage = Math.floor(idx / ARCHIVE_PAGE_SIZE);
+    if (archiveQuery.trim()) {
+      if (archiveSearchResult && archiveSearchResult.query === archiveQuery.trim()) {
+        renderArchiveResults(archiveSearchResult);
+        restoreArchivePosition();
+      } else {
+        await runArchiveSearch(true, false);
+      }
     }
-    renderArchivePage();
+    else {
+      renderArchiveEditions();
+      restoreArchivePosition();
+    }
   } catch (err) {
+    $('#archive-status').textContent = 'Previous editions could not be loaded.';
     console.error('Failed to load archive:', err);
   }
 }
 
-function formatArchiveTime(createdAt) {
-  if (!createdAt) return '';
-  // created_at is like "2026-04-11 09:36:36" — extract time portion
-  var timePart = (createdAt.includes('T') ? createdAt.split('T')[1] : createdAt.split(' ')[1]) || '';
-  return timePart.slice(0, 5);
+function archiveMonth(dateStr) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', {
+    month: 'long', year: 'numeric'
+  });
 }
 
-function renderArchivePage() {
+function archiveDay(dateStr) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  });
+}
+
+function localDateKey() {
+  var today = new Date();
+  return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0');
+}
+
+function rememberArchivePosition() {
+  archiveScrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+  archiveRestoreScroll = true;
+}
+
+function restoreArchivePosition() {
+  if (!archiveRestoreScroll) return;
+  requestAnimationFrame(function() {
+    window.scrollTo(0, archiveScrollTop);
+    archiveRestoreScroll = false;
+  });
+}
+
+function openArchiveEdition(id) {
+  rememberArchivePosition();
+  router.navigate('/?edition=' + encodeURIComponent(id), { editionId: id });
+}
+
+function openArchiveResult(editionId, storyKeyValue) {
+  rememberArchivePosition();
+  var editionUrl = '/?edition=' + encodeURIComponent(editionId);
+  router.navigate(editionUrl, { editionId: editionId });
+  var storyUrl = editionUrl + '&story=' + encodeURIComponent(storyKeyValue);
+  history.pushState({
+    reading: true,
+    appHistoryEntry: true,
+    editionId: editionId,
+    storyId: String(storyKeyValue)
+  }, '', storyUrl);
+}
+
+function renderArchiveEditions() {
   var list = $('#archive-list');
   list.replaceChildren();
+  $('#archive-status').textContent = archiveBriefings.length +
+    (archiveBriefings.length === 1 ? ' edition' : ' editions');
+  var currentMonth = '';
+  var todayKey = localDateKey();
 
-  var totalPages = Math.ceil(archiveBriefings.length / ARCHIVE_PAGE_SIZE);
-  var start = archivePage * ARCHIVE_PAGE_SIZE;
-  var page = archiveBriefings.slice(start, start + ARCHIVE_PAGE_SIZE);
-
-  page.forEach(function(b) {
-    var timeStr = formatArchiveTime(b.created_at);
-    var item = el('div', {
-      className: 'archive-item' + (b.id === currentBriefingId ? ' active' : ''),
-      'data-id': b.id,
-      onclick: function() { loadBriefing(b.id); }
-    }, [
-      el('span', { className: 'archive-date', textContent: formatDateShort(b.date) + (timeStr ? ' ' + timeStr : '') }),
-      el('span', { className: 'archive-headline', textContent: b.headline || 'No headline' }),
-      el('span', { className: 'archive-count', textContent: (b.item_count || 0) + ' items' })
+  archiveBriefings.forEach(function(b) {
+    var month = archiveMonth(b.date);
+    if (month !== currentMonth) {
+      currentMonth = month;
+      list.appendChild(el('h3', { className: 'archive-month', textContent: month }));
+    }
+    var isToday = b.date === todayKey;
+    var date = el('span', { className: 'archive-edition-date' }, [
+      archiveDay(b.date),
+      isToday ? el('span', { className: 'archive-today', textContent: 'Today' }) : null
     ]);
-    list.appendChild(item);
+    list.appendChild(el('button', {
+      type: 'button',
+      className: 'archive-edition' + (String(b.id) === String(currentBriefingId) ? ' current' : ''),
+      'data-id': b.id,
+      onclick: function() { openArchiveEdition(b.id); }
+    }, [
+      date,
+      el('span', { className: 'archive-edition-headline', textContent: b.headline || 'No headline' }),
+      el('span', {
+        className: 'archive-edition-count',
+        textContent: b.item_count + (b.item_count === 1 ? ' story' : ' stories')
+      })
+    ]));
+  });
+}
+
+function appendMarkedSnippet(node, snippet) {
+  var mark = null;
+  function decodeEntities(value) {
+    var textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+  String(snippet || '').split(/(<\/?mark>)/i).forEach(function(part) {
+    if (!part) return;
+    if (/^<mark>$/i.test(part)) {
+      mark = el('mark');
+      node.appendChild(mark);
+    } else if (/^<\/mark>$/i.test(part)) {
+      mark = null;
+    } else {
+      (mark || node).appendChild(document.createTextNode(decodeEntities(part)));
+    }
+  });
+}
+
+function renderArchiveResults(result) {
+  var list = $('#archive-list');
+  list.replaceChildren();
+  $('#archive-status').textContent = result.total + (result.total === 1 ? ' story found' : ' stories found');
+  if (!result.total) {
+    list.appendChild(el('p', {
+      className: 'archive-empty',
+      textContent: 'Nothing found for “' + archiveQuery.trim() + '”.'
+    }));
+    return;
+  }
+
+  result.editions.forEach(function(edition) {
+    list.appendChild(el('h3', {
+      className: 'archive-result-date',
+      textContent: formatDate(edition.date)
+    }));
+    edition.stories.forEach(function(story) {
+      var snippet = el('span', { className: 'archive-result-snippet' });
+      appendMarkedSnippet(snippet, story.snippet);
+      list.appendChild(el('button', {
+        type: 'button',
+        className: 'archive-result',
+        onclick: function() { openArchiveResult(edition.id, story.key); }
+      }, [
+        el('span', {
+          className: 'archive-result-meta',
+          textContent: [story.kicker, story.section].filter(Boolean).join(' · ')
+        }),
+        el('span', { className: 'archive-result-title', textContent: story.title || 'Untitled story' }),
+        snippet
+      ]));
+    });
   });
 
-  if (totalPages > 1) {
-    var btnNewer = el('button', { textContent: '\u2190 Newer', disabled: archivePage === 0, onclick: function() { archivePage--; renderArchivePage(); } });
-    var info = el('span', { className: 'archive-page-info', textContent: (start + 1) + '\u2013' + Math.min(start + ARCHIVE_PAGE_SIZE, archiveBriefings.length) + ' of ' + archiveBriefings.length });
-    var btnOlder = el('button', { textContent: 'Older \u2192', disabled: archivePage >= totalPages - 1, onclick: function() { archivePage++; renderArchivePage(); } });
-    list.appendChild(el('div', { className: 'archive-pagination' }, [btnNewer, info, btnOlder]));
+  if (result.has_more && result.next_before) {
+    list.appendChild(el('button', {
+      type: 'button',
+      className: 'archive-more',
+      textContent: 'Show older results',
+      onclick: function(event) {
+        event.currentTarget.disabled = true;
+        event.currentTarget.textContent = 'Loading older results…';
+        runArchiveSearch(false, true);
+      }
+    }));
   }
 }
+
+function mergeArchiveSearchResults(current, older) {
+  if (!current) return older;
+  var seen = new Set(current.editions.map(function(edition) { return String(edition.id); }));
+  var editions = current.editions.slice();
+  older.editions.forEach(function(edition) {
+    if (seen.has(String(edition.id))) return;
+    seen.add(String(edition.id));
+    editions.push(edition);
+  });
+  return {
+    query: older.query,
+    total: older.total,
+    has_more: older.has_more,
+    next_before: older.next_before,
+    editions: editions
+  };
+}
+
+async function runArchiveSearch(restorePosition, append) {
+  var query = archiveQuery.trim();
+  if (!query) {
+    archiveSearchResult = null;
+    renderArchiveEditions();
+    if (restorePosition) restoreArchivePosition();
+    return;
+  }
+  if (append && (!archiveSearchResult || !archiveSearchResult.next_before)) return;
+  var request = ++archiveSearchRequest;
+  if (!append) $('#archive-status').textContent = 'Searching…';
+  try {
+    var searchUrl = '/api/search?q=' + encodeURIComponent(query);
+    if (append) searchUrl += '&before=' + encodeURIComponent(archiveSearchResult.next_before);
+    var res = await fetch(searchUrl);
+    var result = await res.json();
+    if (request !== archiveSearchRequest) return;
+    if (!res.ok) throw new Error(result.error || 'Search failed');
+    archiveSearchResult = append ? mergeArchiveSearchResults(archiveSearchResult, result) : result;
+    renderArchiveResults(archiveSearchResult);
+    if (restorePosition) restoreArchivePosition();
+  } catch (err) {
+    if (request !== archiveSearchRequest) return;
+    if (append && archiveSearchResult) {
+      renderArchiveResults(archiveSearchResult);
+      $('#archive-status').textContent += ' · Older results could not be loaded.';
+    } else {
+      $('#archive-status').textContent = 'Search could not be completed.';
+    }
+    console.error('Failed to search archive:', err);
+  }
+}
+
+$('#archive-search-input').addEventListener('input', function(event) {
+  archiveQuery = event.target.value;
+  archiveSearchResult = null;
+  archiveRestoreScroll = false;
+  archiveScrollTop = 0;
+  window.scrollTo(0, 0);
+  if (archiveSearchTimer !== null) clearTimeout(archiveSearchTimer);
+  archiveSearchRequest += 1;
+  if (!archiveQuery.trim()) {
+    renderArchiveEditions();
+    return;
+  }
+  $('#archive-status').textContent = 'Searching…';
+  archiveSearchTimer = setTimeout(function() {
+    archiveSearchTimer = null;
+    runArchiveSearch(false);
+  }, 250);
+});
+
+$('#archive-search-form').addEventListener('submit', function(event) {
+  event.preventDefault();
+  if (archiveSearchTimer !== null) clearTimeout(archiveSearchTimer);
+  archiveSearchTimer = null;
+  archiveQuery = $('#archive-search-input').value;
+  archiveSearchResult = null;
+  runArchiveSearch(false, false);
+});
 
 $('#app-title').addEventListener('click', function() {
   if (readingState.readerOpen) returnFromReader();
@@ -1916,6 +2193,10 @@ $('#btn-archive').addEventListener('click', function() {
 });
 
 $('#btn-close-archive').addEventListener('click', function() {
+  router.navigate('/');
+});
+
+$('#edition-today').addEventListener('click', function() {
   router.navigate('/');
 });
 
@@ -3750,7 +4031,7 @@ var router = (function() {
   var ROUTES = {
     '/':         { viewId: 'reading-stage',      btnId: null,           title: 'Daily Briefing' },
     '/settings': { viewId: 'settings-panel',     btnId: 'btn-settings', title: 'Daily Briefing — Settings' },
-    '/archive':  { viewId: 'archive-panel',      btnId: 'btn-archive',  title: 'Daily Briefing — Archive' },
+    '/archive':  { viewId: 'archive-panel',      btnId: 'btn-archive',  title: 'Daily Briefing — Previous editions' },
     '/pipeline': { viewId: 'pipeline-panel',     btnId: 'btn-pipeline', title: 'Daily Briefing — Status' },
   };
   var currentPath = null;
@@ -3761,7 +4042,7 @@ var router = (function() {
 
   function onEnter(path) {
     if (path === '/') {
-      syncReaderFromLocation();
+      loadReadingFromLocation();
     } else if (path === '/settings') {
       var activeTab = $('.settings-tab.active');
       switchSettingsTab(activeTab ? activeTab.dataset.tab : 'general');
@@ -3775,6 +4056,8 @@ var router = (function() {
   function onLeave(path) {
     if (path === '/pipeline') {
       closePipelinePanel();
+    } else if (path === '/archive') {
+      rememberArchivePosition();
     } else if (path === '/') {
       resetReadingStage();
     }
@@ -3815,11 +4098,17 @@ var router = (function() {
     currentPath = path;
   }
 
-  function navigate(path) {
-    var target = normalize(path);
-    if (target === currentPath) return;
-    history.pushState({}, '', target);
-    render(target);
+  function navigate(target, state) {
+    var url = new URL(target, location.origin);
+    var path = normalize(url.pathname);
+    var destination = path + (path === url.pathname ? url.search : '');
+    if (destination === location.pathname + location.search) return;
+    history.pushState(state || {}, '', destination);
+    if (path === currentPath) {
+      if (path === '/') loadReadingFromLocation();
+      return;
+    }
+    render(path);
   }
 
   function toggle(path) {
@@ -3829,7 +4118,7 @@ var router = (function() {
   function init() {
     window.addEventListener('popstate', function() {
       render(location.pathname);
-      syncReaderFromLocation();
+      if (normalize(location.pathname) === '/') loadReadingFromLocation();
     });
     render(location.pathname);
   }
@@ -3854,9 +4143,6 @@ document.addEventListener('keydown', function(e) {
 
 // Load app title from settings
 loadAppTitle();
-
-// Load briefing
-loadBriefing();
 
 // Pipeline status indicator + global SSE
 updatePipelineStatus();

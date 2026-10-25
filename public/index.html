@@ -27,7 +27,7 @@
           <button class="btn-icon" id="btn-settings" title="Settings">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
-          <button class="btn-icon" id="btn-archive" title="Archive">
+          <button class="btn-icon" id="btn-archive" title="Previous editions">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
           </button>
         </div>
@@ -39,11 +39,17 @@
 
     <div id="archive-panel" class="panel archive-panel view">
       <div class="panel-header">
-        <h2>Archive</h2>
+        <h2>Previous editions</h2>
         <button class="btn-icon" id="btn-close-archive">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      <form id="archive-search-form" class="archive-search" role="search">
+        <label for="archive-search-input">Search every saved story</label>
+        <input id="archive-search-input" type="search" autocomplete="off"
+               placeholder="Search headlines, stories and outlets">
+      </form>
+      <p id="archive-status" class="archive-status" aria-live="polite"></p>
       <div id="archive-list" class="archive-list"></div>
     </div>
 
@@ -109,6 +115,12 @@
         </button>
       </div>
       <div id="pipeline-content"></div>
+    </div>
+
+    <div id="edition-notice" class="edition-notice hidden">
+      <span id="edition-notice-text"></span>
+      <span aria-hidden="true"> · </span>
+      <button type="button" id="edition-today">Back to today</button>
     </div>
 
     <main id="reading-stage" class="reading-stage view view--active">
