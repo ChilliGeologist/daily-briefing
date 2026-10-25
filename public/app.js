@@ -4272,7 +4272,22 @@ async function loadAlertChecks() {
       container.appendChild(el('p', { className: 'alert-checks-empty', textContent: 'No checks today.' }));
       return;
     }
-    result.checks.forEach(function(check) {
+    // Only checks that found something (or went wrong) get a card; the quiet
+    // ones are counted in one line so the panel stays short by evening.
+    var shown = result.checks.filter(function(check) {
+      return (check.candidates && check.candidates.length) || check.candidates_count > 0 || check.error;
+    });
+    var quiet = result.checks.length - shown.length;
+    if (quiet > 0) {
+      var latest = formatDisplayTime(result.checks[0].started_at);
+      container.appendChild(el('p', {
+        className: 'alert-checks-empty',
+        textContent: shown.length
+          ? quiet + ' other ' + (quiet === 1 ? 'check' : 'checks') + ' today found nothing.'
+          : 'Nothing found today. ' + quiet + ' ' + (quiet === 1 ? 'check' : 'checks') + ', the latest at ' + latest + '.'
+      }));
+    }
+    shown.forEach(function(check) {
       var time = formatDisplayTime(check.started_at);
       var sources = check.sources_read || [];
       var card = el('article', { className: 'alert-check' });
