@@ -89,12 +89,13 @@ function el(tag, attrs, children) {
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 
-// Close any currently-open inline edit form (source or category).
-// Removes the .editing class from the row and detaches the form node.
+// Close any currently-open inline edit form.
 function closeOpenEditForm() {
-  var open = document.querySelector('.source-item.editing, .category-item.editing');
+  var open = document.querySelector('.source-item.editing, .source-add.editing, .category-item.editing');
   if (!open) return;
   open.classList.remove('editing');
+  var summary = open.querySelector('.source-summary, .source-add-button');
+  if (summary) summary.setAttribute('aria-expanded', 'false');
   var btn = open.querySelector('.btn-icon-edit');
   if (btn) btn.textContent = '✎';
   var form = open.querySelector('.source-edit-form, .category-edit-form');
@@ -2458,6 +2459,7 @@ $('#btn-close-settings').addEventListener('click', function() {
 
 var settingsPageData = null;
 var behindScenesLoaded = false;
+var settingsPageLoadPromise = null;
 
 async function saveSettings(values, status) {
   try {
@@ -2507,9 +2509,58 @@ function renderInterestEditor(settings) {
   var starting = JSON.parse(JSON.stringify(settings.starting_interests || settings.interests || []));
   var list = el('div', { className: 'interest-list' });
   var status = el('p', { className: 'status-msg', 'aria-live': 'polite' });
+  var activeRow = null;
+  var save;
+
+  function setDirty() {
+    status.textContent = 'Unsaved changes';
+    status.className = 'status-msg unsaved';
+    if (save) save.disabled = false;
+  }
+
+  function updateSummary(row) {
+    var value = interestValue(row);
+    var summary = row.querySelector('.interest-summary');
+    var name = summary.querySelector('.interest-summary-name');
+    var words = summary.querySelector('.interest-summary-words');
+    var tags = summary.querySelector('.interest-summary-tags');
+    name.textContent = value.label.trim() || 'New interest';
+    words.textContent = value.terms.map(function(term) { return term.trim(); }).filter(Boolean).join(', ') || 'Add words to match';
+    tags.replaceChildren(el('span', { className: 'interest-tag', textContent: ({ 1: 'A little', 2: 'A lot', 3: 'Most' })[value.weight] || 'A lot' }));
+    if (value.urgent) tags.appendChild(el('span', { className: 'interest-tag', textContent: 'Can interrupt me' }));
+    if (value.requires_place) tags.appendChild(el('span', { className: 'interest-tag', textContent: 'Only near home' }));
+  }
+
+  function closeRow(row) {
+    if (!row) return;
+    updateSummary(row);
+    row.classList.remove('editing');
+    row.querySelector('.interest-summary').setAttribute('aria-expanded', 'false');
+    if (activeRow === row) activeRow = null;
+  }
+
+  function openRow(row) {
+    if (activeRow && activeRow !== row) closeRow(activeRow);
+    if (row.classList.contains('editing')) {
+      closeRow(row);
+      return;
+    }
+    activeRow = row;
+    row.classList.add('editing');
+    row.querySelector('.interest-summary').setAttribute('aria-expanded', 'true');
+    var name = row.querySelector('[data-field="label"]');
+    if (!name.value) name.focus();
+  }
 
   function rowFor(interest) {
     var row = el('article', { className: 'interest-row', 'data-kind': interest.kind || 'topic' });
+    var summary = el('button', { className: 'interest-summary', type: 'button', 'aria-expanded': 'false' }, [
+      el('span', { className: 'interest-summary-copy' }, [
+        el('strong', { className: 'interest-summary-name' }),
+        el('span', { className: 'interest-summary-words' })
+      ]),
+      el('span', { className: 'interest-summary-tags' })
+    ]);
     var name = el('input', { className: 'form-input', 'data-field': 'label', value: interest.label || '', placeholder: 'Name' });
     var terms = el('input', { className: 'form-input', 'data-field': 'terms', value: (interest.terms || []).join(', '), placeholder: 'Words and phrases, separated by commas' });
     var weight = el('select', { className: 'form-select', 'data-field': 'weight' });
@@ -2550,39 +2601,60 @@ function renderInterestEditor(settings) {
       }
       tryButton.disabled = false;
     }});
-    var remove = el('button', { className: 'btn btn-danger', textContent: 'Remove', onclick: function() { row.remove(); } });
-    row.append(
+    var done = el('button', { className: 'btn btn-secondary', textContent: 'Done', onclick: function() { closeRow(row); } });
+    var remove = el('button', { className: 'btn btn-danger', textContent: 'Remove', onclick: function() {
+      if (activeRow === row) activeRow = null;
+      row.remove();
+      setDirty();
+    }});
+    var editor = el('div', { className: 'interest-editor' }, [
       el('label', {}, [el('span', { textContent: 'Name' }), name]),
       el('label', { className: 'interest-terms' }, [el('span', { textContent: 'Words that match' }), terms]),
       el('label', {}, [el('span', { textContent: 'How much it matters' }), weight]),
       el('div', { className: 'interest-switches' }, [urgent.element, place.element]),
-      el('div', { className: 'settings-actions' }, [tryButton, remove]),
+      el('div', { className: 'settings-actions' }, [tryButton, remove, done]),
       matches
-    );
+    ]);
+    summary.addEventListener('click', function() { openRow(row); });
+    [name, terms].forEach(function(input) { input.addEventListener('input', setDirty); });
+    [weight, urgent.input, place.input].forEach(function(input) { input.addEventListener('change', setDirty); });
+    row.append(summary, editor);
+    updateSummary(row);
     return row;
   }
 
   function renderRows(values) {
+    activeRow = null;
     list.replaceChildren();
     values.forEach(function(interest) { list.appendChild(rowFor(interest)); });
   }
   renderRows(interests);
   var add = el('button', { className: 'btn btn-secondary', textContent: 'Add an interest', onclick: function() {
-    list.appendChild(rowFor({ label: '', kind: 'topic', terms: [], weight: 2, urgent: false, requires_place: false }));
-    list.lastElementChild.querySelector('[data-field="label"]').focus();
+    var row = rowFor({ label: '', kind: 'topic', terms: [], weight: 2, urgent: false, requires_place: false });
+    list.appendChild(row);
+    setDirty();
+    openRow(row);
   }});
   var reset = el('button', { className: 'btn btn-secondary', textContent: 'Reset to the starting list', onclick: function() {
-    if (confirm('Reset every interest to the starting list?')) renderRows(starting);
+    if (confirm('Reset every interest to the starting list?')) {
+      renderRows(starting);
+      setDirty();
+    }
   }});
-  var save = el('button', { className: 'btn btn-primary', textContent: 'Save interests', onclick: async function() {
+  save = el('button', { className: 'btn btn-primary', textContent: 'Save interests', disabled: true, onclick: async function() {
     var values = Array.from(list.children).map(interestValue);
-    if (await saveSettings({ interests: values }, status)) settings.interests = values;
+    if (await saveSettings({ interests: values }, status)) {
+      settings.interests = values;
+      save.disabled = true;
+    }
   }});
+  status.textContent = 'Saved';
+  status.className = 'status-msg success';
   container.replaceChildren(
     el('p', { className: 'settings-intro', textContent: 'Choose the places and subjects the paper watches for.' }),
     list,
-    el('div', { className: 'settings-actions settings-actions-wide' }, [add, reset, save]),
-    status
+    el('div', { className: 'settings-actions settings-actions-wide' }, [add, reset]),
+    el('div', { className: 'interest-save-bar' }, [save, status])
   );
 }
 
@@ -2759,7 +2831,7 @@ async function loadSettingsPage() {
     if (!response.ok) throw new Error('Could not load settings');
     settingsPageData = await response.json();
     renderInterestEditor(settingsPageData);
-    loadSourcesTab($('#settings-sources-body'));
+    var sourcesLoading = loadSourcesTab($('#settings-sources-body'));
     renderNotificationsSettings(settingsPageData);
     renderPaperSettings(settingsPageData);
     var details = $('#behind-the-scenes');
@@ -2771,10 +2843,68 @@ async function loadSettingsPage() {
         if (details.open && settingsPageData) loadBehindScenes(settingsPageData);
       });
     }
+    await sourcesLoading;
+    if (location.hash) {
+      var sectionId = location.hash.slice(1);
+      scrollToSettingsSection(sectionId, false);
+      // Native fragment scrolling can run once more after async content settles.
+      setTimeout(function() {
+        if (location.pathname === '/settings' && location.hash === '#' + sectionId) scrollToSettingsSection(sectionId, false);
+      }, 100);
+    }
   } catch (error) {
     $('#settings-interests-body').textContent = 'Could not load settings.';
   }
 }
+
+function settingsScrollParent(node) {
+  for (var parent = node.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+    var overflow = getComputedStyle(parent).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && parent.scrollHeight > parent.clientHeight) return parent;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+function settingsScrollOffset(scroller) {
+  var rootTop = scroller === document.scrollingElement || scroller === document.documentElement
+    ? 0 : scroller.getBoundingClientRect().top;
+  var offset = 8;
+  ['#app > header', '#settings-panel > .panel-header', '.settings-contents'].forEach(function(selector) {
+    var element = document.querySelector(selector);
+    if (!element || element.offsetParent === null) return;
+    var position = getComputedStyle(element).position;
+    if (position !== 'fixed' && position !== 'sticky') return;
+    var rect = element.getBoundingClientRect();
+    if (rect.top <= rootTop + offset + 1 && rect.bottom > rootTop + offset) offset = rect.bottom - rootTop + 8;
+  });
+  return offset;
+}
+
+function scrollToSettingsSection(id, updateHash) {
+  var section = document.getElementById(id);
+  if (!section) return;
+  var heading = section.querySelector('h3') || section;
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      var scroller = settingsScrollParent(section);
+      var offset = settingsScrollOffset(scroller);
+      if (scroller === document.scrollingElement || scroller === document.documentElement) {
+        window.scrollTo({ top: Math.max(0, window.scrollY + heading.getBoundingClientRect().top - offset), behavior: 'auto' });
+      } else {
+        scroller.scrollTo({ top: scroller.scrollTop + heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - offset, behavior: 'auto' });
+      }
+      if (updateHash !== false) history.replaceState(history.state, '', location.pathname + location.search + '#' + id);
+    });
+  });
+}
+
+$$('.settings-contents a').forEach(function(link) {
+  link.addEventListener('click', async function(event) {
+    event.preventDefault();
+    if (settingsPageLoadPromise) await settingsPageLoadPromise;
+    scrollToSettingsSection(link.getAttribute('href').slice(1), true);
+  });
+});
 
 // --- Tab: General ---
 function loadGeneralTab(container) {
@@ -2830,64 +2960,52 @@ function renderSourceItem(source) {
   var statusClass = lastRun && lastRun.status === 'ok' ? 'success' : lastRun ? 'error' : 'never';
   var statusText = !lastRun ? 'No morning run yet'
     : lastRun.status === 'ok'
-      ? 'Worked this morning · ' + lastRun.item_count + (lastRun.item_count === 1 ? ' story' : ' stories')
-      : 'Did not work this morning' + (lastRun.error ? ' · ' + lastRun.error : '');
+      ? lastRun.item_count + (lastRun.item_count === 1 ? ' story this morning' : ' stories this morning')
+      : 'Didn’t work this morning' + (lastRun.error ? ': ' + String(lastRun.error).replace(/\s+/g, ' ').slice(0, 90) : '');
 
-  var toggleLabel = el('label', { className: 'toggle' });
+  var toggleLabel = el('label', { className: 'toggle source-toggle' });
   var toggleInput = el('input', { type: 'checkbox' });
   toggleInput.checked = !!source.enabled;
-  toggleLabel.append(toggleInput, el('span', { className: 'toggle-slider' }));
+  toggleInput.setAttribute('aria-label', 'Use ' + source.name);
+  var toggleText = el('span', { className: 'source-toggle-text', textContent: toggleInput.checked ? 'On' : 'Off' });
+  toggleLabel.append(toggleInput, el('span', { className: 'toggle-slider' }), toggleText);
 
-  var nameEl = el('div', { className: 'source-name', textContent: source.name });
-  var urlEl = el('div', { className: 'source-url', textContent: source.type === 'reddit' ? 'https://www.reddit.com/r/' + source.url : source.url });
-  var resultEl = el('div', { className: 'source-result ' + statusClass, textContent: statusText });
-  var typeBadge = el('span', { className: 'source-type-badge ' + source.type, textContent: source.type });
-
-  var editBtn = el('button', {
-    className: 'btn-icon-edit',
-    textContent: '\u270e',
-    title: 'Edit source'
-  });
+  var nameEl = el('span', { className: 'source-name', textContent: source.name });
+  var resultEl = el('span', { className: 'source-result ' + statusClass, textContent: statusText });
+  var summary = el('button', { className: 'source-summary', type: 'button', 'aria-expanded': 'false' }, [nameEl, resultEl]);
 
   var item = el('div', { className: 'source-item' + (source.enabled ? '' : ' disabled') }, [
-    el('div', { className: 'source-status ' + statusClass, title: statusText }),
-    el('div', { className: 'source-info' }, [nameEl, resultEl, urlEl]),
-    typeBadge,
-    el('div', { className: 'source-controls' }, [
-      editBtn,
-      toggleLabel,
-      el('button', {
-        className: 'btn btn-danger btn-sm',
-        textContent: '\u00d7',
-        title: 'Delete source',
-        onclick: async function() {
-          if (!confirm('Delete source "' + source.name + '"?')) return;
-          await fetch('/api/sources/' + source.id, { method: 'DELETE' });
-          item.remove();
-        }
-      })
-    ])
+    summary,
+    toggleLabel
   ]);
 
-  editBtn.addEventListener('click', function() {
+  summary.addEventListener('click', function() {
     if (item.classList.contains('editing')) {
       closeOpenEditForm();
       return;
     }
     closeOpenEditForm();
-    var form = renderSourceEditForm(source, { nameEl: nameEl, urlEl: urlEl, typeBadge: typeBadge });
+    var form = renderSourceEditForm(source, { nameEl: nameEl, item: item });
     item.appendChild(form);
     item.classList.add('editing');
-    editBtn.textContent = '✕';
+    summary.setAttribute('aria-expanded', 'true');
   });
 
   toggleInput.addEventListener('change', async function() {
-    await fetch('/api/sources/' + source.id, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: toggleInput.checked ? 1 : 0 })
-    });
-    item.classList.toggle('disabled', !toggleInput.checked);
+    var enabled = toggleInput.checked;
+    try {
+      var response = await fetch('/api/sources/' + source.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled ? 1 : 0 })
+      });
+      if (!response.ok) throw new Error('Could not change source');
+      source.enabled = enabled ? 1 : 0;
+      item.classList.toggle('disabled', !enabled);
+      toggleText.textContent = enabled ? 'On' : 'Off';
+    } catch (_) {
+      toggleInput.checked = !enabled;
+    }
   });
 
   return item;
@@ -2927,7 +3045,21 @@ function renderSourceEditForm(source, refs) {
 
   var saveBtn = el('button', {
     className: 'btn btn-primary btn-sm',
-    textContent: 'Save'
+    textContent: 'Save source'
+  });
+
+  var removeBtn = el('button', {
+    className: 'btn btn-danger btn-sm',
+    textContent: 'Remove',
+    onclick: async function() {
+      if (!confirm('Remove source "' + source.name + '"?')) return;
+      var response = await fetch('/api/sources/' + source.id, { method: 'DELETE' });
+      if (response.ok) refs.item.remove();
+      else {
+        errorEl.textContent = 'Could not remove source';
+        errorEl.classList.remove('hidden');
+      }
+    }
   });
 
   function save() {
@@ -2957,9 +3089,6 @@ function renderSourceEditForm(source, refs) {
       source.type = payload.type;
       source.default_category = payload.default_category;
       refs.nameEl.textContent = name;
-      refs.urlEl.textContent = source.type === 'reddit' ? 'https://www.reddit.com/r/' + url : url;
-      refs.typeBadge.textContent = source.type;
-      refs.typeBadge.className = 'source-type-badge ' + source.type;
       closeOpenEditForm();
     }).catch(function(err) {
       errorEl.textContent = err.message;
@@ -2981,7 +3110,7 @@ function renderSourceEditForm(source, refs) {
     el('div', { className: 'form-row' }, [el('label', { textContent: 'Type' }), typeSelect]),
     el('div', { className: 'form-row' }, [el('label', { textContent: 'Section' }), defaultSelect]),
     errorEl,
-    el('div', { className: 'form-actions' }, [cancelBtn, saveBtn])
+    el('div', { className: 'form-actions' }, [removeBtn, cancelBtn, saveBtn])
   );
 
   setTimeout(function() { nameInput.focus(); nameInput.select(); }, 0);
@@ -2989,7 +3118,9 @@ function renderSourceEditForm(source, refs) {
 }
 
 function renderAddSourceForm() {
-  var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
+  var wrapper = el('div', { className: 'source-add' });
+  var openButton = el('button', { className: 'btn btn-secondary source-add-button', textContent: 'Add a source', 'aria-expanded': 'false' });
+  var form = el('div', { className: 'source-add-form' });
 
   var pasteInput = el('input', { className: 'form-input', placeholder: 'Paste RSS feed, Reddit link, or site URL' });
   var statusEl = el('div', { className: 'status-msg hidden' });
@@ -3095,14 +3226,24 @@ function renderAddSourceForm() {
   );
 
   form.append(
-    el('div', { className: 'form-label', textContent: 'Add a source' }),
     el('div', { style: { marginBottom: '8px' } }, [pasteInput]),
     el('div', { className: 'settings-actions' }, [addBtn, saveDetected, advancedToggle]),
     statusEl,
     previewWrap,
     advancedWrap
   );
-  return form;
+  openButton.addEventListener('click', function() {
+    if (wrapper.classList.contains('editing')) {
+      closeOpenEditForm();
+      return;
+    }
+    closeOpenEditForm();
+    wrapper.classList.add('editing');
+    openButton.setAttribute('aria-expanded', 'true');
+    pasteInput.focus();
+  });
+  wrapper.append(openButton, form);
+  return wrapper;
 }
 
 // --- Tab: Categories ---
@@ -4801,7 +4942,7 @@ var router = (function() {
     if (path === '/') {
       loadReadingFromLocation();
     } else if (path === '/settings') {
-      loadSettingsPage();
+      settingsPageLoadPromise = loadSettingsPage();
     } else if (path === '/archive') {
       loadArchive();
     } else if (path === '/pipeline') {

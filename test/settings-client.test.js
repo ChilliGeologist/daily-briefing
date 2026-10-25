@@ -24,3 +24,18 @@ test('settings is one page with the agreed contents and controls', () => {
     preferences_tab: false,
   });
 });
+
+test('settings lists stay compact until one row is opened', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../public/style.css'), 'utf8');
+
+  assert.match(app, /className: 'interest-summary'/);
+  assert.match(app, /activeRow && activeRow !== row/);
+  assert.match(app, /status\.textContent = 'Unsaved changes'/);
+  assert.match(app, /textContent: 'Done'/);
+  assert.match(app, /className: 'source-summary'/);
+  assert.match(app, /stories this morning/);
+  assert.match(app, /function scrollToSettingsSection/);
+  assert.match(css, /\.interest-row\.editing \.interest-editor \{ display: grid; \}/);
+  assert.match(css, /\.settings-switch input:checked \+ \.toggle-slider \{ background: var\(--paper-rust\); \}/);
+});

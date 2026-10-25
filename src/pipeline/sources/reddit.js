@@ -15,7 +15,13 @@ const parser = new RSSParser({
 });
 
 function subredditName(source) {
-  return (source.url || '').replace(/^\/?r\//, '').trim();
+  const value = (source.url || '').trim();
+  try {
+    const parsed = new URL(value);
+    const match = parsed.pathname.match(/^\/r\/([^/]+)/i);
+    if (match && isRedditUrl(parsed.toString())) return match[1];
+  } catch (_) { /* Existing sources store a subreddit name, not a URL. */ }
+  return value.replace(/^\/?r\//, '');
 }
 
 function isRedditUrl(url) {
@@ -185,6 +191,7 @@ async function fetchReddit(source, log) {
 
 module.exports = {
   fetchReddit,
+  subredditName,
   extractImage,
   extractImages,
   extractExternalUrl,
