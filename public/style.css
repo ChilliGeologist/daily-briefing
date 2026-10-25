@@ -1175,37 +1175,88 @@ main {
   margin-top: 8px;
 }
 
-.alert-checks {
+.status-paper-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
   margin-top: 24px;
-  padding-top: 18px;
-  border-top: 2px solid var(--border);
 }
 
-.alert-checks h3 {
+.status-paper-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--paper-rule);
+  background: var(--paper-page);
+  color: var(--paper-ink);
+}
+
+.alert-checks {
+  padding-top: 18px;
+}
+
+.status-paper-panel h3 {
   margin: 0 0 10px;
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 20px;
-  color: var(--text);
+  color: var(--paper-ink);
 }
 
 .alert-checks-empty,
 .alert-check-meta,
 .alert-check-note,
 .alert-check-sources {
-  color: var(--text-dim);
+  color: var(--paper-quiet);
   font-size: 12px;
+}
+
+.learning-empty,
+.learning-computed,
+.learning-item small {
+  color: var(--paper-quiet);
+  font-size: 12px;
+}
+
+.learning-list {
+  display: grid;
+  gap: 0;
+}
+
+.learning-item {
+  padding: 11px 0;
+  border-top: 1px solid var(--paper-rule);
+}
+
+.learning-item p {
+  margin: 0 0 3px;
+  color: var(--paper-ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.learning-computed { margin: 10px 0 0; }
+
+.learning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+@media (max-width: 680px) {
+  .status-paper-panels { grid-template-columns: 1fr; }
 }
 
 .alert-check {
   padding: 12px 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--paper-rule);
 }
 
 .alert-check-heading {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: var(--text);
+  color: var(--paper-ink);
   font-size: 13px;
   text-transform: capitalize;
 }
@@ -1227,13 +1278,13 @@ main {
   gap: 3px;
   margin-top: 9px;
   padding-left: 10px;
-  border-left: 2px solid var(--border-light);
-  color: var(--text);
+  border-left: 2px solid var(--paper-rule);
+  color: var(--paper-ink);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.alert-candidate span { color: var(--text-muted); }
+.alert-candidate span { color: var(--paper-quiet); }
 
 /* Run history in pipeline + log tab */
 .run-list { display: grid; gap: 4px; }

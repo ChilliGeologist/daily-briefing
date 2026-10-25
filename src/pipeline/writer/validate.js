@@ -604,6 +604,7 @@ function emptySections() {
 }
 
 function rankValue(story, index) {
+  if (Number.isFinite(Number(story.base_rank))) return Number(story.base_rank);
   return Number.isFinite(Number(story.rank)) ? Number(story.rank) : index + 1;
 }
 
@@ -880,5 +881,6 @@ module.exports = {
   validateWrite,
   validateEdit,
   deterministicEdit,
+  eligibleTopCandidate,
   defaultSection,
 };

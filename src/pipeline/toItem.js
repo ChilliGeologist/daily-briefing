@@ -53,6 +53,8 @@ function toItem(rankedCluster) {
     ...(images.length > 0 ? { images } : {}),
     published: newestPublished(items, lead.published),
     relevance_score: rankedCluster.rank_score,
+    ...(rankedCluster.base_rank_score != null ? { base_relevance_score: rankedCluster.base_rank_score } : {}),
+    ...(rankedCluster.base_rank != null ? { base_rank: rankedCluster.base_rank } : {}),
     article_content: rankedCluster.article_text,
     article_html: rankedCluster.article_html,
     article_url: rankedCluster.article_url,

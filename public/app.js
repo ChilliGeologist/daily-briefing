@@ -252,6 +252,151 @@ var readingState = {
   alertId: null
 };
 
+var STORY_EVENT_STORAGE_KEY = 'daily-gump-story-events-v1';
+var storyEventQueue = [];
+var storyEventRecorded = new Set();
+var storyEventSending = false;
+var storySeenObserver = null;
+var storySeenTimers = new Map();
+var readerReadTimer = null;
+var readerHasScrolled = false;
+
+function storyEventIdentity(event) {
+  return [event.briefing_id, event.story_key, event.kind].join('\u0000');
+}
+
+function loadStoryEventQueue() {
+  try {
+    var stored = JSON.parse(localStorage.getItem(STORY_EVENT_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) return;
+    storyEventQueue = stored.filter(function(event) {
+      return event && Number.isInteger(event.briefing_id) && typeof event.story_key === 'string' &&
+        ['seen', 'opened', 'read_full'].includes(event.kind);
+    });
+    storyEventQueue.forEach(function(event) { storyEventRecorded.add(storyEventIdentity(event)); });
+  } catch (_) { /* the memory queue still works */ }
+}
+
+function saveStoryEventQueue() {
+  try { localStorage.setItem(STORY_EVENT_STORAGE_KEY, JSON.stringify(storyEventQueue)); }
+  catch (_) { /* the memory queue still works */ }
+}
+
+function isEditionStory(key) {
+  return Boolean(currentBriefingId && readingStories.has(String(key)));
+}
+
+function queueStoryEvent(kind, key) {
+  if (!isEditionStory(key)) return;
+  var event = {
+    briefing_id: Number(currentBriefingId),
+    story_key: String(key),
+    kind: kind
+  };
+  var identity = storyEventIdentity(event);
+  if (storyEventRecorded.has(identity)) return;
+  storyEventRecorded.add(identity);
+  storyEventQueue.push(event);
+  saveStoryEventQueue();
+}
+
+function removeFlushedStoryEvents(events) {
+  var sent = new Set(events.map(storyEventIdentity));
+  storyEventQueue = storyEventQueue.filter(function(event) { return !sent.has(storyEventIdentity(event)); });
+  saveStoryEventQueue();
+}
+
+async function flushStoryEvents(useBeacon) {
+  if (storyEventSending || storyEventQueue.length === 0 || navigator.onLine === false) return;
+  var batch = storyEventQueue.slice(0, 100);
+  var body = JSON.stringify({ events: batch });
+  if (useBeacon && navigator.sendBeacon) {
+    try {
+      if (navigator.sendBeacon('/api/events', new Blob([body], { type: 'application/json' }))) {
+        removeFlushedStoryEvents(batch);
+        return;
+      }
+    } catch (_) { /* fetch below when the page remains alive */ }
+  }
+  storyEventSending = true;
+  try {
+    var response = await fetch('/api/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: body,
+      keepalive: true
+    });
+    if (response.ok) removeFlushedStoryEvents(batch);
+  } catch (_) { /* keep the queue for the next flush */ }
+  finally { storyEventSending = false; }
+}
+
+function stopStorySeenObserver() {
+  if (storySeenObserver) storySeenObserver.disconnect();
+  storySeenObserver = null;
+  storySeenTimers.forEach(function(timer) { clearTimeout(timer); });
+  storySeenTimers.clear();
+}
+
+function startStorySeenObserver() {
+  stopStorySeenObserver();
+  if (!currentBriefingIsLatest || !currentBriefingId || !window.IntersectionObserver) return;
+  var observedBriefingId = Number(currentBriefingId);
+  storySeenObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      var story = entry.target;
+      var key = story.dataset.storyId;
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5 && document.visibilityState !== 'hidden') {
+        if (storySeenTimers.has(story)) return;
+        storySeenTimers.set(story, setTimeout(function() {
+          storySeenTimers.delete(story);
+          if (storySeenObserver && currentBriefingIsLatest && Number(currentBriefingId) === observedBriefingId &&
+              document.visibilityState !== 'hidden') {
+            queueStoryEvent('seen', key);
+            storySeenObserver.unobserve(story);
+          }
+        }, 1000));
+      } else if (storySeenTimers.has(story)) {
+        clearTimeout(storySeenTimers.get(story));
+        storySeenTimers.delete(story);
+      }
+    });
+  }, { root: $('#briefing-page'), threshold: [0.5] });
+  $$('#briefing-page .reading-story').forEach(function(story) { storySeenObserver.observe(story); });
+}
+
+function stopReaderReadTracking() {
+  if (readerReadTimer !== null) clearTimeout(readerReadTimer);
+  readerReadTimer = null;
+  readerHasScrolled = false;
+}
+
+function startReaderReadTracking(key) {
+  stopReaderReadTracking();
+  if (!isEditionStory(key)) return;
+  var briefingId = Number(currentBriefingId);
+  var storyId = String(key);
+  readerReadTimer = setTimeout(function() {
+    readerReadTimer = null;
+    if (readingState.readerOpen && readerHasScrolled && Number(currentBriefingId) === briefingId &&
+        readingState.storyId === storyId) queueStoryEvent('read_full', storyId);
+  }, 45000);
+}
+
+loadStoryEventQueue();
+setInterval(function() { flushStoryEvents(false); }, 20000);
+window.addEventListener('online', function() { flushStoryEvents(false); });
+window.addEventListener('pagehide', function() { flushStoryEvents(true); });
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') {
+    stopStorySeenObserver();
+    flushStoryEvents(true);
+  } else {
+    flushStoryEvents(false);
+    if (!readingState.readerOpen) startStorySeenObserver();
+  }
+});
+
 var MASTHEAD_COLLAPSE_DISTANCE = 96;
 var MASTHEAD_REDUCED_THRESHOLD = 48;
 var mastheadState = {
@@ -687,6 +832,7 @@ function resetReadingStage() {
   curlState.animation = null;
   curlState.gesture = null;
   clearCurlPresentation();
+  stopReaderReadTracking();
 
   var stage = $('#reading-stage');
   var briefingPage = $('#briefing-page');
@@ -1174,6 +1320,7 @@ async function loadBriefing(id) {
   var container = $('#sections-container');
 
   resetReadingStage();
+  stopStorySeenObserver();
   resetThumbIndex();
   $('#briefing-page').scrollTop = 0;
   readingState.briefingScrollTop = 0;
@@ -1241,6 +1388,7 @@ async function loadBriefing(id) {
       });
     });
     renderThumbIndex(thumbSections);
+    startStorySeenObserver();
     refreshCurlGhost();
     briefingLoaded = true;
     syncReaderFromLocation();
@@ -1301,6 +1449,7 @@ async function loadAlert(id) {
   var loading = $('#loading');
   var emptyState = $('#empty-state');
   resetReadingStage();
+  stopStorySeenObserver();
   resetThumbIndex();
   readingStories.clear();
   readingStoryKeys.clear();
@@ -1712,6 +1861,7 @@ function renderReader(item) {
 
 function showReader(item, key, appHistoryEntry) {
   if (!item) return;
+  stopStorySeenObserver();
   if (!readingState.readerOpen) readingState.briefingScrollTop = $('#briefing-page').scrollTop;
   // Measured before readerOpen flips, so it reads the edition's (or, going
   // story to story, the current story's) fold.
@@ -1721,6 +1871,8 @@ function showReader(item, key, appHistoryEntry) {
   readingState.storyId = key;
   readingState.openerId = key;
   readingState.appHistoryEntry = Boolean(appHistoryEntry);
+  queueStoryEvent('opened', key);
+  startReaderReadTracking(key);
   $('#reader-page').scrollTop = 0;
   syncMastheadNow();
   setInert($('#briefing-page'), true);
@@ -1760,6 +1912,7 @@ function openReaderById(key, pushHistory) {
 function closeReader() {
   if (!readingState.readerOpen) return;
   var openerId = readingState.openerId;
+  stopReaderReadTracking();
   readingState.readerOpen = false;
   readingState.storyId = null;
   readingState.appHistoryEntry = false;
@@ -1774,6 +1927,7 @@ function closeReader() {
   setInert($('#briefing-page'), false);
   setInert($('#section-thumb-layer'), false);
   $('#section-thumb-layer').removeAttribute('aria-hidden');
+  startStorySeenObserver();
   requestAnimationFrame(function() {
     $('#briefing-page').scrollTop = readingState.briefingScrollTop;
     var opener = readingStoryOpeners.get(openerId);
@@ -1824,6 +1978,13 @@ function syncReaderFromLocation() {
 }
 
 $('#reader-back').addEventListener('click', returnFromReader);
+
+$('#reader-page').addEventListener('scroll', function() {
+  if (!readingState.readerOpen || !isEditionStory(readingState.storyId) || this.scrollTop <= 0) return;
+  readerHasScrolled = true;
+  var progress = (this.scrollTop + this.clientHeight) / Math.max(1, this.scrollHeight);
+  if (progress >= 0.75) queueStoryEvent('read_full', readingState.storyId);
+}, { passive: true });
 
 function pointerPosition(event) {
   var rect = $('#reading-stage').getBoundingClientRect();
@@ -3618,11 +3779,18 @@ function renderPipelineContent() {
     })
   ]));
 
-  container.appendChild(el('section', { className: 'alert-checks', id: 'alert-checks' }, [
-    el('h3', { textContent: 'Urgent checks' }),
-    el('p', { className: 'alert-checks-empty', textContent: 'Loading today’s checks…' })
+  container.appendChild(el('div', { className: 'status-paper-panels' }, [
+    el('section', { className: 'status-paper-panel alert-checks', id: 'alert-checks' }, [
+      el('h3', { textContent: 'Urgent checks' }),
+      el('p', { className: 'alert-checks-empty', textContent: 'Loading today’s checks…' })
+    ]),
+    el('section', { className: 'status-paper-panel learning-panel', id: 'learning-panel' }, [
+      el('h3', { textContent: 'What the paper has learned' }),
+      el('p', { className: 'learning-empty', textContent: 'Loading…' })
+    ])
   ]));
   loadAlertChecks();
+  loadLearningPanel();
 
   // Run history
   container.appendChild(el('div', { id: 'pipeline-history', style: { marginTop: '16px' } }));
@@ -3673,6 +3841,99 @@ async function loadAlertChecks() {
     container.replaceChildren(
       el('h3', { textContent: 'Urgent checks' }),
       el('p', { className: 'alert-checks-empty', textContent: 'Checks could not be loaded.' })
+    );
+  }
+}
+
+function learningSentence(nudge) {
+  var name = nudge.display_value || nudge.feature_value;
+  if (nudge.feature_type === 'kicker' && name) name = name.charAt(0).toUpperCase() + name.slice(1);
+  if (nudge.feature_type === 'outlet') {
+    return nudge.nudge > 0
+      ? 'You open stories from ' + name + ' more than most: nudged up a little.'
+      : 'You rarely open stories from ' + name + ': nudged down.';
+  }
+  return nudge.nudge > 0
+    ? 'You open ' + name + ' stories more than most: nudged up a little.'
+    : 'You rarely open ' + name + ' stories: nudged down.';
+}
+
+function learningTime(value) {
+  var date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-AU', {
+    day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'
+  }).toLowerCase();
+}
+
+async function loadLearningPanel() {
+  var container = $('#learning-panel');
+  if (!container) return;
+  try {
+    var response = await fetch('/api/learning');
+    var result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load learning');
+    var nudges = (result.nudges || []).filter(function(nudge) { return Number(nudge.nudge) !== 0; });
+    var children = [el('h3', { textContent: 'What the paper has learned' })];
+    if (nudges.length === 0) {
+      children.push(el('p', {
+        className: 'learning-empty',
+        textContent: 'Nothing yet. Read a few more papers and check back.'
+      }));
+    } else {
+      var list = el('div', { className: 'learning-list' });
+      nudges.forEach(function(nudge) {
+        list.appendChild(el('article', { className: 'learning-item' }, [
+          el('p', { textContent: learningSentence(nudge) }),
+          el('small', { textContent: nudge.seen_count + ' stories' })
+        ]));
+      });
+      children.push(list);
+    }
+    if (result.last_computed_at) children.push(el('p', {
+      className: 'learning-computed',
+      textContent: 'Last worked out ' + learningTime(result.last_computed_at)
+    }));
+    children.push(el('div', { className: 'learning-actions' }, [
+      el('button', {
+        className: 'btn btn-primary',
+        textContent: 'Work it out now',
+        onclick: async function(event) {
+          var button = event.currentTarget;
+          button.disabled = true;
+          button.textContent = 'Working…';
+          try {
+            var worked = await fetch('/api/learning/recompute', { method: 'POST' });
+            if (!worked.ok) throw new Error('Could not work it out');
+            await loadLearningPanel();
+          } catch (_) {
+            button.disabled = false;
+            button.textContent = 'Try again';
+          }
+        }
+      }),
+      el('button', {
+        className: 'btn btn-danger',
+        textContent: 'Forget all this',
+        onclick: async function(event) {
+          if (!confirm('Forget what the paper has learned?')) return;
+          var button = event.currentTarget;
+          button.disabled = true;
+          try {
+            var forgotten = await fetch('/api/learning', { method: 'DELETE' });
+            if (!forgotten.ok) throw new Error('Could not forget');
+            await loadLearningPanel();
+          } catch (_) {
+            button.disabled = false;
+          }
+        }
+      })
+    ]));
+    container.replaceChildren.apply(container, children);
+  } catch (_) {
+    container.replaceChildren(
+      el('h3', { textContent: 'What the paper has learned' }),
+      el('p', { className: 'learning-empty', textContent: 'Could not load this yet.' })
     );
   }
 }
@@ -3756,6 +4017,7 @@ async function pollPipelineStatus() {
       historyEl.appendChild(histList);
     }
     loadAlertChecks();
+    loadLearningPanel();
   } catch (e) {
     console.error('Pipeline status poll failed:', e);
   }
