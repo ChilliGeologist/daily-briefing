@@ -94,14 +94,20 @@ function assemble(edit, storiesById, meta = {}) {
   const topIds = (edit.top || []).filter(id => Boolean(getStory(storiesById, id)));
   const topSet = new Set(topIds);
   const sections = [];
-  const learnedLookup = nudgeLookup(meta.learnedNudges || []);
+  const learnedLookup = nudgeLookup(meta.learningEnabled === false ? [] : (meta.learnedNudges || []));
   const appliedNudges = [];
   const topItems = storiesForIds(topIds, storiesById, 'high');
   if (topItems.length > 0) {
     sections.push({ ...TOP_SECTION, icon: 'globe', items: topItems, more: [] });
   }
 
-  for (const section of SECTIONS) {
+  const sectionById = new Map(SECTIONS.map(section => [section.id, section]));
+  const configuredSections = Array.isArray(meta.sections)
+    ? meta.sections.map(entry => ({ ...sectionById.get(entry.id), hidden: Boolean(entry.hidden) }))
+      .filter(section => section.id)
+    : SECTIONS;
+  for (const section of configuredSections) {
+    if (section.hidden) continue;
     const sectionItemIds = (edit.sections || {})[section.id] || [];
     const moreIds = (edit.more || {})[section.id] || [];
     const ordered = orderSectionIds(

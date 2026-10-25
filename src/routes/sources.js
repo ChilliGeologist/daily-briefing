@@ -2,15 +2,41 @@
 
 const router = require('express').Router();
 const { detectSource } = require('../sourceDetect');
+const { fetchRSS } = require('../pipeline/sources/rss');
+const { fetchReddit } = require('../pipeline/sources/reddit');
+const { fetchAPI } = require('../pipeline/sources/api');
 
 const VALID_TYPES = ['rss', 'reddit', 'api'];
+const FETCHERS = { rss: fetchRSS, reddit: fetchReddit, api: fetchAPI };
+const quietLog = { debug() {}, info() {}, warn() {}, error() {} };
 
 module.exports = function (db) {
   router.get('/sources', (req, res) => {
     try {
-      res.json({ sources: db.getSources() });
+      const results = typeof db.getLatestSourceRunResults === 'function' ? db.getLatestSourceRunResults() : {};
+      res.json({ sources: db.getSources().map(source => ({
+        ...source,
+        last_run: results[source.id] || null,
+      })) });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/sources/preview', async (req, res) => {
+    try {
+      const { name, type, url, config, default_category } = req.body || {};
+      if (!name || !VALID_TYPES.includes(type) || !url) {
+        return res.status(400).json({ error: 'A detected source is required' });
+      }
+      const result = await FETCHERS[type]({ name, type, url, config: config || {}, default_category }, quietLog);
+      if (result.error) return res.status(400).json({ error: result.error });
+      res.json({
+        count: result.items.length,
+        headlines: result.items.slice(0, 3).map(item => String(item.title || '')).filter(Boolean),
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
     }
   });
 

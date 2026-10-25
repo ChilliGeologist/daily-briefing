@@ -26,11 +26,9 @@ module.exports = function (ollamaClient, settings) {
       const { title, description } = req.body;
       if (!title) return res.status(400).json({ error: 'title is required' });
 
-      const preferences = settings.getPreferences();
-
       const prompt = `You are a news editor. Rewrite and summarise this article for a daily briefing.
 
-Style: ${preferences.tone}. Language: ${preferences.language}.
+Style: concise, no fluff. Language: English.
 
 Original headline: ${title}
 Sources: Preview

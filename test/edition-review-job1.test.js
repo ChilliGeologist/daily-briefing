@@ -318,14 +318,14 @@ describe('Job 1 task 5 — warning, release and no-solo-top sources', () => {
     ]);
   });
 
-  it('removes heat-word bonus and top eligibility from a lone no-solo-top outlet', () => {
+  it('removes top eligibility from a lone no-solo-top outlet', () => {
     const cluster = noSolo => ({
       id: noSolo ? 'pulse' : 'normal', coverage: 1,
       lead: { title: 'Breaking shock emergency', description: 'Breaking shock emergency', source_name: noSolo ? 'Pulse Tasmania' : 'Outlet', no_solo_top: noSolo },
       items: [{ title: 'Breaking shock emergency', description: 'Breaking shock emergency', source_name: noSolo ? 'Pulse Tasmania' : 'Outlet', no_solo_top: noSolo, list_position: 1 }],
     });
-    const ranked = rankClusters([cluster(true), cluster(false)], { now: Date.now(), boostKeywords: ['breaking'], interests: [] }).selected;
-    assert.deepStrictEqual(ranked.map(item => [item.id, item.rank_score]), [['normal', 45], ['pulse', 35]]);
+    const ranked = rankClusters([cluster(true), cluster(false)], { now: Date.now(), interests: [] }).selected;
+    assert.deepStrictEqual(ranked.map(item => [item.id, item.rank_score]), [['pulse', 35], ['normal', 35]]);
     const stories = ranked.map((item, index) => ({
       ...item, id: item.id, rank: index + 1, section: 'tasmania', sources: [{ name: item.lead.source_name }],
       no_solo_top: item.lead.no_solo_top, interest_matches: [{ label: 'Tasmania', kind: 'place' }],

@@ -15,18 +15,6 @@ function recencyScore(item, now = Date.now()) {
   return 40 - (35 * (ageHours - 6) / 42);
 }
 
-function keywordBonus(item, preferences) {
-  const text = ((item.title || '') + ' ' + (item.description || '')).toLowerCase();
-  let bonus = 0;
-  for (const keyword of (preferences.boost_keywords || [])) {
-    if (text.includes(keyword.toLowerCase())) bonus += 10;
-  }
-  for (const keyword of (preferences.penalty_keywords || [])) {
-    if (text.includes(keyword.toLowerCase())) bonus -= 10;
-  }
-  return bonus;
-}
-
 function newestItem(cluster) {
   let newest = null;
   let newestTime = -Infinity;
@@ -54,15 +42,10 @@ function positionScore(items) {
   }, 0);
 }
 
-function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests, learnedNudges }) {
+function scoreCluster(cluster, { now, interests, learnedNudges }) {
   const coverageScore = 25 * Math.log2(Math.max(1, cluster.coverage));
   const recency = recencyScore(newestItem(cluster), now);
   const position = positionScore(cluster.items);
-  const noSoloTop = cluster.coverage <= 1 && cluster.items.some(item => item.no_solo_top);
-  const keywords = keywordBonus(cluster.lead, {
-    boost_keywords: noSoloTop ? [] : (boostKeywords || []),
-    penalty_keywords: penaltyKeywords || [],
-  });
   const interestText = cluster.items
     .map(item => `${item.title || ''} ${item.description || ''}`)
     .join('\n');
@@ -73,7 +56,7 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests,
   }
   const interestPoints = interestScore(interest_matches) * INTEREST_POINTS;
   const priority = Math.max(...cluster.items.map(item => item.source_priority ?? 1));
-  const base_rank_score = Math.max(0, (coverageScore + recency + position + keywords + interestPoints) * priority);
+  const base_rank_score = Math.max(0, (coverageScore + recency + position + interestPoints) * priority);
   const scored = { ...cluster, interest_matches, base_rank_score };
   const learned = learningNudge(scored, learnedNudges, { includeKicker: false });
   const rank_score = base_rank_score * learned.factor;
@@ -87,8 +70,6 @@ function scoreCluster(cluster, { now, boostKeywords, penaltyKeywords, interests,
 
 function rankClusters(clusters, {
   now = Date.now(),
-  boostKeywords = [],
-  penaltyKeywords = [],
   interests = [],
   limit,
   perSourceFloor = 2,
@@ -97,7 +78,7 @@ function rankClusters(clusters, {
 } = {}) {
   const learnedLookup = nudgeLookup(learnedNudges);
   const scored = clusters.map(cluster => scoreCluster(cluster, {
-      now, boostKeywords, penaltyKeywords, interests, learnedNudges: learnedLookup,
+      now, interests, learnedNudges: learnedLookup,
     }));
   const baseRankByCluster = new Map([...scored]
     .sort((a, b) => b.base_rank_score - a.base_rank_score)
@@ -175,4 +156,4 @@ function rankClusters(clusters, {
   };
 }
 
-module.exports = { rankClusters, recencyScore, keywordBonus, INTEREST_POINTS };
+module.exports = { rankClusters, recencyScore, INTEREST_POINTS };

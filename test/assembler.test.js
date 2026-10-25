@@ -146,3 +146,41 @@ it('counts regular and more items when a briefing is inserted', t => {
   });
   assert.strictEqual(db.getLatestBriefing().item_count, 4);
 });
+
+it('orders configured sections and skips a hidden section', () => {
+  const stories = new Map([
+    ['world', story('world', 'world', 'World')],
+    ['gaming', story('gaming', 'gaming', 'Gaming')],
+    ['tas', story('tas', 'tasmania', 'Tasmania')],
+  ]);
+  const result = assemble({
+    top: [],
+    sections: { tasmania: ['tas'], world: ['world'], gaming: ['gaming'] },
+    more: {},
+  }, stories, {
+    sections: [
+      { id: 'world', hidden: false },
+      { id: 'gaming', hidden: true },
+      { id: 'tasmania', hidden: false },
+    ],
+  });
+  assert.deepStrictEqual(result.sections.map(section => ({
+    id: section.id,
+    stories: section.items.map(item => item.id),
+  })), [
+    { id: 'world', stories: ['world'] },
+    { id: 'tasmania', stories: ['tas'] },
+  ]);
+});
+
+it('leaves section story order unchanged when learning is switched off', () => {
+  const first = story('first', 'world', 'First', { base_relevance_score: 100, sources: [{ name: 'Plain' }] });
+  const second = story('second', 'world', 'Second', { base_relevance_score: 90, sources: [{ name: 'Liked' }] });
+  const result = assemble({
+    top: [], sections: { world: ['first', 'second'] }, more: {},
+  }, new Map([['first', first], ['second', second]]), {
+    learningEnabled: false,
+    learnedNudges: [{ feature_type: 'outlet', feature_value: 'liked', nudge: 0.15 }],
+  });
+  assert.deepStrictEqual(result.sections[0].items.map(item => item.id), ['first', 'second']);
+});

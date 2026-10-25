@@ -35,8 +35,6 @@
       <p class="headline" id="briefing-headline"></p>
     </header>
 
-    <div class="suggestion-banner hidden" id="suggestion-banner"></div>
-
     <div id="archive-panel" class="panel archive-panel view">
       <div class="panel-header">
         <h2>Previous editions</h2>
@@ -60,52 +58,35 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div class="settings-tabs" id="settings-tabs">
-        <button class="settings-tab active" data-tab="general">General</button>
-        <button class="settings-tab" data-tab="sources">Sources</button>
-        <button class="settings-tab" data-tab="categories">Categories</button>
-        <button class="settings-tab" data-tab="preferences">Preferences</button>
-        <button class="settings-tab" data-tab="schedule">Schedule</button>
-        <button class="settings-tab" data-tab="ollama">Ollama</button>
-        <button class="settings-tab" data-tab="backup">Backup</button>
-        <button class="settings-tab" data-tab="log">Log</button>
+      <nav class="settings-contents" aria-label="Settings contents">
+        <a href="#your-interests">Your interests</a>
+        <a href="#sources">Sources</a>
+        <a href="#notifications">Notifications</a>
+        <a href="#the-paper">The paper</a>
+        <a href="#behind-the-scenes">Behind the scenes</a>
+      </nav>
+      <div id="settings-page" class="settings-page">
+        <section id="your-interests" class="settings-section">
+          <h3>Your interests</h3>
+          <div id="settings-interests-body" class="settings-section-body">Loading…</div>
+        </section>
+        <section id="sources" class="settings-section">
+          <h3>Sources</h3>
+          <div id="settings-sources-body" class="settings-section-body">Loading…</div>
+        </section>
+        <section id="notifications" class="settings-section">
+          <h3>Notifications</h3>
+          <div id="settings-notifications-body" class="settings-section-body">Loading…</div>
+        </section>
+        <section id="the-paper" class="settings-section">
+          <h3>The paper</h3>
+          <div id="settings-paper-body" class="settings-section-body">Loading…</div>
+        </section>
+        <details id="behind-the-scenes" class="settings-section settings-details">
+          <summary><h3>Behind the scenes</h3></summary>
+          <div id="settings-behind-body" class="settings-section-body">Open to load.</div>
+        </details>
       </div>
-      <div class="settings-tab-content" id="settings-tab-content"></div>
-
-      <template id="tpl-general-tab">
-        <div class="settings-row">
-          <span class="settings-theme-label">Theme</span>
-          <div class="theme-switcher" id="theme-switcher">
-            <button class="theme-option" data-theme="auto" title="Auto">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/><path d="M20.6 15.4A6 6 0 1 1 12.6 7.4 5 5 0 0 0 20.6 15.4z"/></svg>
-              <span>Auto</span>
-            </button>
-            <button class="theme-option" data-theme="system" title="System">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              <span>System</span>
-            </button>
-            <button class="theme-option" data-theme="light" title="Light">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              <span>Light</span>
-            </button>
-            <button class="theme-option" data-theme="dark" title="Dark">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-              <span>Dark</span>
-            </button>
-          </div>
-        </div>
-        <div class="settings-row">
-          <span class="settings-theme-label">Notifications</span>
-          <button class="btn-notif-toggle" id="btn-notif-toggle">Enable</button>
-          <button class="btn-notif-toggle" id="btn-notif-test">Send me a test</button>
-          <span class="notif-status" id="notif-status"></span>
-        </div>
-        <div class="settings-row">
-          <span class="settings-theme-label">Install App</span>
-          <button class="btn-notif-toggle" id="btn-install">Install</button>
-          <span class="notif-status" id="install-status"></span>
-        </div>
-      </template>
     </div>
 
     <div id="pipeline-panel" class="panel pipeline-panel view">

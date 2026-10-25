@@ -70,6 +70,8 @@ function el(tag, attrs, children) {
       else if (k === 'onclick') e.addEventListener('click', v);
       else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+      else if (v === false || v == null) continue;
+      else if (v === true) e.setAttribute(k, '');
       else e.setAttribute(k, v);
     }
   }
@@ -2454,26 +2456,324 @@ $('#btn-close-settings').addEventListener('click', function() {
   router.navigate('/');
 });
 
-$$('.settings-tab').forEach(function(tab) {
-  tab.addEventListener('click', function() { switchSettingsTab(tab.dataset.tab); });
-});
+var settingsPageData = null;
+var behindScenesLoaded = false;
 
-function switchSettingsTab(tabName) {
-  $$('.settings-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tabName); });
-  var container = $('#settings-tab-content');
-  container.replaceChildren();
+async function saveSettings(values, status) {
+  try {
+    var response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values)
+    });
+    var result = await response.json().catch(function() { return {}; });
+    if (!response.ok) throw new Error(result.error || 'Could not save');
+    if (status) {
+      status.textContent = 'Saved';
+      status.className = 'status-msg success';
+    }
+    return true;
+  } catch (error) {
+    if (status) {
+      status.textContent = error.message;
+      status.className = 'status-msg error';
+    }
+    return false;
+  }
+}
 
-  var loaders = {
-    general: loadGeneralTab,
-    sources: loadSourcesTab,
-    categories: loadCategoriesTab,
-    preferences: loadPreferencesTab,
-    schedule: loadScheduleTab,
-    ollama: loadOllamaTab,
-    backup: loadBackupTab,
-    log: loadLogTab,
+function switchControl(labelText, checked) {
+  var label = el('label', { className: 'settings-switch' });
+  var input = el('input', { type: 'checkbox' });
+  input.checked = Boolean(checked);
+  label.append(input, el('span', { className: 'toggle-slider' }), el('span', { textContent: labelText }));
+  return { element: label, input: input };
+}
+
+function interestValue(row) {
+  return {
+    label: row.querySelector('[data-field="label"]').value,
+    kind: row.dataset.kind || 'topic',
+    terms: row.querySelector('[data-field="terms"]').value.split(','),
+    weight: Number(row.querySelector('[data-field="weight"]').value),
+    urgent: row.querySelector('[data-field="urgent"]').checked,
+    requires_place: row.querySelector('[data-field="place"]').checked
   };
-  if (loaders[tabName]) loaders[tabName](container);
+}
+
+function renderInterestEditor(settings) {
+  var container = $('#settings-interests-body');
+  var interests = JSON.parse(JSON.stringify(settings.interests || []));
+  var starting = JSON.parse(JSON.stringify(settings.starting_interests || settings.interests || []));
+  var list = el('div', { className: 'interest-list' });
+  var status = el('p', { className: 'status-msg', 'aria-live': 'polite' });
+
+  function rowFor(interest) {
+    var row = el('article', { className: 'interest-row', 'data-kind': interest.kind || 'topic' });
+    var name = el('input', { className: 'form-input', 'data-field': 'label', value: interest.label || '', placeholder: 'Name' });
+    var terms = el('input', { className: 'form-input', 'data-field': 'terms', value: (interest.terms || []).join(', '), placeholder: 'Words and phrases, separated by commas' });
+    var weight = el('select', { className: 'form-select', 'data-field': 'weight' });
+    [[1, 'A little'], [2, 'A lot'], [3, 'Most']].forEach(function(choice) {
+      var option = el('option', { value: String(choice[0]), textContent: choice[1] });
+      option.selected = Number(interest.weight) === choice[0];
+      weight.appendChild(option);
+    });
+    var urgent = switchControl('Can interrupt me', interest.urgent);
+    urgent.input.dataset.field = 'urgent';
+    var place = switchControl('Only near home', interest.requires_place);
+    place.input.dataset.field = 'place';
+    var matches = el('div', { className: 'interest-matches hidden', 'aria-live': 'polite' });
+    var tryButton = el('button', { className: 'btn btn-secondary', textContent: 'Try it', onclick: async function() {
+      tryButton.disabled = true;
+      matches.className = 'interest-matches';
+      matches.textContent = 'Looking through today’s stories…';
+      try {
+        var response = await fetch('/api/interests/try', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(interestValue(row))
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not try this');
+        matches.replaceChildren();
+        if (!result.matches.length) {
+          matches.textContent = 'No stories caught today.';
+        } else {
+          matches.appendChild(el('p', { textContent: result.matches.length + (result.matches.length === 1 ? ' story caught.' : ' stories caught.') }));
+          var found = el('ul');
+          result.matches.forEach(function(match) {
+            found.appendChild(el('li', { textContent: match.title + (match.source ? ' — ' + match.source : '') }));
+          });
+          matches.appendChild(found);
+        }
+      } catch (error) {
+        matches.textContent = error.message;
+      }
+      tryButton.disabled = false;
+    }});
+    var remove = el('button', { className: 'btn btn-danger', textContent: 'Remove', onclick: function() { row.remove(); } });
+    row.append(
+      el('label', {}, [el('span', { textContent: 'Name' }), name]),
+      el('label', { className: 'interest-terms' }, [el('span', { textContent: 'Words that match' }), terms]),
+      el('label', {}, [el('span', { textContent: 'How much it matters' }), weight]),
+      el('div', { className: 'interest-switches' }, [urgent.element, place.element]),
+      el('div', { className: 'settings-actions' }, [tryButton, remove]),
+      matches
+    );
+    return row;
+  }
+
+  function renderRows(values) {
+    list.replaceChildren();
+    values.forEach(function(interest) { list.appendChild(rowFor(interest)); });
+  }
+  renderRows(interests);
+  var add = el('button', { className: 'btn btn-secondary', textContent: 'Add an interest', onclick: function() {
+    list.appendChild(rowFor({ label: '', kind: 'topic', terms: [], weight: 2, urgent: false, requires_place: false }));
+    list.lastElementChild.querySelector('[data-field="label"]').focus();
+  }});
+  var reset = el('button', { className: 'btn btn-secondary', textContent: 'Reset to the starting list', onclick: function() {
+    if (confirm('Reset every interest to the starting list?')) renderRows(starting);
+  }});
+  var save = el('button', { className: 'btn btn-primary', textContent: 'Save interests', onclick: async function() {
+    var values = Array.from(list.children).map(interestValue);
+    if (await saveSettings({ interests: values }, status)) settings.interests = values;
+  }});
+  container.replaceChildren(
+    el('p', { className: 'settings-intro', textContent: 'Choose the places and subjects the paper watches for.' }),
+    list,
+    el('div', { className: 'settings-actions settings-actions-wide' }, [add, reset, save]),
+    status
+  );
+}
+
+function renderNotificationsSettings(settings) {
+  var container = $('#settings-notifications-body');
+  var cap = el('input', { className: 'form-input', type: 'number', min: '0', max: '100', value: String(settings.alert_daily_cap == null ? 3 : settings.alert_daily_cap) });
+  var quietStart = el('input', { className: 'form-input', type: 'time', value: (settings.quiet_hours || ['22:00', '06:00'])[0] });
+  var quietEnd = el('input', { className: 'form-input', type: 'time', value: (settings.quiet_hours || ['22:00', '06:00'])[1] });
+  var status = el('span', { className: 'notif-status', id: 'notif-status' });
+  var saveStatus = el('p', { className: 'status-msg', 'aria-live': 'polite' });
+  container.replaceChildren(
+    el('div', { className: 'settings-control-line' }, [
+      el('span', { textContent: 'Notifications' }),
+      el('button', { className: 'btn-notif-toggle', id: 'btn-notif-toggle', textContent: 'Enable' }),
+      el('button', { className: 'btn-notif-toggle', id: 'btn-notif-test', textContent: 'Send me a test' }),
+      status
+    ]),
+    el('div', { className: 'settings-grid' }, [
+      el('label', {}, [el('span', { textContent: 'Most urgent alerts in a day' }), cap]),
+      el('label', {}, [el('span', { textContent: 'Quiet hours start' }), quietStart]),
+      el('label', {}, [el('span', { textContent: 'Quiet hours finish' }), quietEnd])
+    ]),
+    el('div', { className: 'settings-actions' }, [el('button', { className: 'btn btn-primary', textContent: 'Save notifications', onclick: function() {
+      saveSettings({ alert_daily_cap: Number(cap.value), quiet_hours: [quietStart.value, quietEnd.value] }, saveStatus);
+    }})]),
+    saveStatus
+  );
+  bindNotifToggle();
+  bindNotifTest();
+  updateNotifUI();
+}
+
+var PAPER_SECTIONS = [
+  ['tasmania', 'Tasmania'], ['australia', 'Australia'], ['world', 'World'],
+  ['tech', 'Tech & Security'], ['homelab', 'Homelab & Self-hosting'],
+  ['gaming', 'Gaming'], ['sport', 'Sport'], ['internet', 'Around the internet']
+];
+
+function renderPaperSettings(settings) {
+  var container = $('#settings-paper-body');
+  var schedule = Array.isArray(settings.schedule) ? settings.schedule.slice() : ['06:00'];
+  var scheduleList = el('div', { className: 'schedule-list' });
+  var timeInput = el('input', { className: 'form-input', type: 'time', value: '06:00' });
+  var timezone = el('input', { className: 'form-input', value: settings.timezone || 'UTC' });
+  var topMin = el('input', { className: 'form-input', type: 'number', min: '1', value: String((settings.top_size || { min: 5 }).min) });
+  var topMax = el('input', { className: 'form-input', type: 'number', min: '1', value: String((settings.top_size || { max: 7 }).max) });
+  var sectionSize = el('input', { className: 'form-input', type: 'number', min: '1', value: String(settings.section_size == null ? 5 : settings.section_size) });
+  var learning = switchControl('Learn from what I read', settings.learning_enabled !== false);
+  var sectionById = new Map(PAPER_SECTIONS);
+  var sectionValues = (settings.sections || PAPER_SECTIONS.map(function(pair) { return { id: pair[0], hidden: false }; }))
+    .filter(function(entry) { return sectionById.has(entry.id); });
+  PAPER_SECTIONS.forEach(function(pair) {
+    if (!sectionValues.some(function(entry) { return entry.id === pair[0]; })) sectionValues.push({ id: pair[0], hidden: false });
+  });
+  var sectionList = el('div', { className: 'paper-section-list' });
+  var status = el('p', { className: 'status-msg', 'aria-live': 'polite' });
+
+  function renderSchedule() {
+    scheduleList.replaceChildren();
+    schedule.forEach(function(time, index) {
+      scheduleList.appendChild(el('div', { className: 'schedule-time' }, [
+        el('span', { textContent: time }),
+        el('button', { className: 'btn btn-danger', textContent: 'Remove', onclick: function() { schedule.splice(index, 1); renderSchedule(); } })
+      ]));
+    });
+  }
+  function renderSectionList() {
+    sectionList.replaceChildren();
+    sectionValues.forEach(function(entry, index) {
+      var shown = switchControl('Show', !entry.hidden);
+      shown.input.addEventListener('change', function() { entry.hidden = !shown.input.checked; });
+      sectionList.appendChild(el('div', { className: 'paper-section-row' }, [
+        el('strong', { textContent: sectionById.get(entry.id) }), shown.element,
+        el('button', { className: 'btn btn-secondary', textContent: 'Up', disabled: index === 0, onclick: function() {
+          sectionValues.splice(index - 1, 0, sectionValues.splice(index, 1)[0]); renderSectionList();
+        }}),
+        el('button', { className: 'btn btn-secondary', textContent: 'Down', disabled: index === sectionValues.length - 1, onclick: function() {
+          sectionValues.splice(index + 1, 0, sectionValues.splice(index, 1)[0]); renderSectionList();
+        }})
+      ]));
+    });
+  }
+  renderSchedule();
+  renderSectionList();
+  container.replaceChildren(
+    el('div', { className: 'settings-subsection' }, [
+      el('h4', { textContent: 'Written at' }), scheduleList,
+      el('div', { className: 'settings-inline' }, [timeInput, el('button', { className: 'btn btn-secondary', textContent: 'Add time', onclick: function() {
+        if (timeInput.value && schedule.indexOf(timeInput.value) === -1) { schedule.push(timeInput.value); schedule.sort(); renderSchedule(); }
+      }})]),
+      el('label', {}, [el('span', { textContent: 'Timezone' }), timezone])
+    ]),
+    el('div', { className: 'settings-grid' }, [
+      el('label', {}, [el('span', { textContent: 'You should know — at least' }), topMin]),
+      el('label', {}, [el('span', { textContent: 'You should know — at most' }), topMax]),
+      el('label', {}, [el('span', { textContent: 'Stories in each section' }), sectionSize])
+    ]),
+    el('div', { className: 'settings-subsection' }, [learning.element]),
+    el('div', { className: 'settings-subsection' }, [el('h4', { textContent: 'Sections' }), sectionList]),
+    el('div', { className: 'settings-actions' }, [el('button', { className: 'btn btn-primary', textContent: 'Save the paper', onclick: function() {
+      saveSettings({
+        schedule: schedule,
+        timezone: timezone.value,
+        top_size: { min: Number(topMin.value), max: Number(topMax.value) },
+        section_size: Number(sectionSize.value),
+        learning_enabled: learning.input.checked,
+        sections: sectionValues
+      }, status);
+    }})]), status
+  );
+}
+
+function themeChooser() {
+  var chooser = el('div', { className: 'theme-switcher' });
+  ['auto', 'system', 'light', 'dark'].forEach(function(mode) {
+    chooser.appendChild(el('button', { className: 'theme-option', 'data-theme': mode, textContent: mode.charAt(0).toUpperCase() + mode.slice(1) }));
+  });
+  return chooser;
+}
+
+async function loadBehindScenes(settings) {
+  if (behindScenesLoaded) return;
+  behindScenesLoaded = true;
+  var container = $('#settings-behind-body');
+  var appearance = el('div', { className: 'settings-subsection' }, [
+    el('h4', { textContent: 'Appearance' }), themeChooser(),
+    el('div', { className: 'settings-control-line' }, [
+      el('span', { textContent: 'Install app' }),
+      el('button', { className: 'btn-notif-toggle', id: 'btn-install', textContent: 'Install' }),
+      el('span', { className: 'notif-status', id: 'install-status' })
+    ])
+  ]);
+  var ai = el('div', { className: 'settings-subsection' });
+  var backup = el('div', { className: 'settings-subsection' });
+  var logs = el('div', { className: 'settings-subsection' });
+  container.replaceChildren(appearance, ai, backup, logs);
+  bindThemeSwitcher();
+  applyTheme(getStoredTheme());
+  bindInstallButton();
+  updateInstallUI();
+  await loadOllamaTab(ai);
+  var writerModel = el('input', { className: 'form-input', value: settings.writer_ollama_model || settings.ollama_model || 'gemma4:26b' });
+  var toldModel = el('input', { className: 'form-input', value: settings.told_ollama_model || settings.writer_ollama_model || settings.ollama_model || 'gemma4:26b' });
+  var writerThreads = el('input', { className: 'form-input', type: 'number', min: '1', value: String(settings.writer_num_thread == null ? 4 : settings.writer_num_thread) });
+  var toldThreads = el('input', { className: 'form-input', type: 'number', min: '1', value: String(settings.told_num_thread == null ? 4 : settings.told_num_thread) });
+  var context = el('input', { className: 'form-input', type: 'number', min: '1024', value: String(settings.ollama_num_ctx == null ? 8192 : settings.ollama_num_ctx) });
+  var modelStatus = el('p', { className: 'status-msg' });
+  ai.append(
+    el('div', { className: 'settings-grid' }, [
+      el('label', {}, [el('span', { textContent: 'Writer model' }), writerModel]),
+      el('label', {}, [el('span', { textContent: 'How it was told model' }), toldModel]),
+      el('label', {}, [el('span', { textContent: 'Writer threads' }), writerThreads]),
+      el('label', {}, [el('span', { textContent: 'How it was told threads' }), toldThreads]),
+      el('label', {}, [el('span', { textContent: 'Context size' }), context])
+    ]),
+    el('button', { className: 'btn btn-primary', textContent: 'Save AI settings', onclick: function() {
+      saveSettings({
+        writer_ollama_model: writerModel.value,
+        told_ollama_model: toldModel.value,
+        writer_num_thread: Number(writerThreads.value),
+        told_num_thread: Number(toldThreads.value),
+        ollama_num_ctx: Number(context.value)
+      }, modelStatus);
+    }}), modelStatus
+  );
+  loadBackupTab(backup);
+  loadLogTab(logs);
+}
+
+async function loadSettingsPage() {
+  behindScenesLoaded = false;
+  try {
+    var response = await fetch('/api/settings');
+    if (!response.ok) throw new Error('Could not load settings');
+    settingsPageData = await response.json();
+    renderInterestEditor(settingsPageData);
+    loadSourcesTab($('#settings-sources-body'));
+    renderNotificationsSettings(settingsPageData);
+    renderPaperSettings(settingsPageData);
+    var details = $('#behind-the-scenes');
+    $('#settings-behind-body').textContent = 'Open to load.';
+    if (details.open) loadBehindScenes(settingsPageData);
+    if (details.dataset.bound !== '1') {
+      details.dataset.bound = '1';
+      details.addEventListener('toggle', function() {
+        if (details.open && settingsPageData) loadBehindScenes(settingsPageData);
+      });
+    }
+  } catch (error) {
+    $('#settings-interests-body').textContent = 'Could not load settings.';
+  }
 }
 
 // --- Tab: General ---
@@ -2493,7 +2793,7 @@ function loadGeneralTab(container) {
 
 // --- Tab: Sources ---
 async function loadSourcesTab(container) {
-  container.textContent = 'Loading sources...';
+  container.textContent = 'Loading sources…';
   container.prepend(el('span', { className: 'mini-spinner' }));
   try {
     var res = await fetch('/api/sources');
@@ -2501,18 +2801,24 @@ async function loadSourcesTab(container) {
     var sources = sourcesJson.sources;
     container.replaceChildren();
 
-    var key = el('div', { className: 'source-key' }, [
-      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status success' }), el('span', { textContent: 'OK' })]),
-      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status error' }), el('span', { textContent: 'Error' })]),
-      el('span', { className: 'source-key-item' }, [el('span', { className: 'source-status never' }), el('span', { textContent: 'Not fetched' })])
-    ]);
-    container.appendChild(key);
-
-    var list = el('div', { className: 'source-list' });
-    sources.forEach(function(s) {
-      list.appendChild(renderSourceItem(s));
+    var sectionNames = {
+      local: 'Tasmania', tasmania: 'Tasmania', australia: 'Australia', 'top-stories': 'Australia',
+      world: 'World', tech: 'Tech & Security', homelab: 'Homelab & Self-hosting',
+      gaming: 'Gaming', sport: 'Sport', trending: 'Around the internet'
+    };
+    var order = ['Tasmania', 'Australia', 'World', 'Tech & Security', 'Homelab & Self-hosting', 'Gaming', 'Sport', 'Around the internet', 'Other'];
+    var grouped = {};
+    sources.forEach(function(source) {
+      var group = sectionNames[source.default_category] || 'Other';
+      if (!grouped[group]) grouped[group] = [];
+      grouped[group].push(source);
     });
-    container.appendChild(list);
+    order.forEach(function(group) {
+      if (!grouped[group]) return;
+      var list = el('div', { className: 'source-list' });
+      grouped[group].forEach(function(source) { list.appendChild(renderSourceItem(source)); });
+      container.append(el('h4', { className: 'source-group-title', textContent: group }), list);
+    });
     container.appendChild(renderAddSourceForm());
   } catch (err) {
     container.replaceChildren(el('p', { className: 'status-msg error', textContent: 'Failed to load sources' }));
@@ -2520,7 +2826,12 @@ async function loadSourcesTab(container) {
 }
 
 function renderSourceItem(source) {
-  var statusClass = source.last_fetch_status === 'ok' ? 'success' : source.last_fetch_status === 'never' ? 'never' : source.last_fetch_status ? 'error' : 'never';
+  var lastRun = source.last_run;
+  var statusClass = lastRun && lastRun.status === 'ok' ? 'success' : lastRun ? 'error' : 'never';
+  var statusText = !lastRun ? 'No morning run yet'
+    : lastRun.status === 'ok'
+      ? 'Worked this morning · ' + lastRun.item_count + (lastRun.item_count === 1 ? ' story' : ' stories')
+      : 'Did not work this morning' + (lastRun.error ? ' · ' + lastRun.error : '');
 
   var toggleLabel = el('label', { className: 'toggle' });
   var toggleInput = el('input', { type: 'checkbox' });
@@ -2529,6 +2840,7 @@ function renderSourceItem(source) {
 
   var nameEl = el('div', { className: 'source-name', textContent: source.name });
   var urlEl = el('div', { className: 'source-url', textContent: source.type === 'reddit' ? 'https://www.reddit.com/r/' + source.url : source.url });
+  var resultEl = el('div', { className: 'source-result ' + statusClass, textContent: statusText });
   var typeBadge = el('span', { className: 'source-type-badge ' + source.type, textContent: source.type });
 
   var editBtn = el('button', {
@@ -2538,8 +2850,8 @@ function renderSourceItem(source) {
   });
 
   var item = el('div', { className: 'source-item' + (source.enabled ? '' : ' disabled') }, [
-    el('div', { className: 'source-status ' + statusClass, title: source.last_fetch_status || 'never' }),
-    el('div', { className: 'source-info' }, [nameEl, urlEl]),
+    el('div', { className: 'source-status ' + statusClass, title: statusText }),
+    el('div', { className: 'source-info' }, [nameEl, resultEl, urlEl]),
     typeBadge,
     el('div', { className: 'source-controls' }, [
       editBtn,
@@ -2596,14 +2908,14 @@ function renderSourceEditForm(source, refs) {
 
   var defaultSelect = el('select', { className: 'form-select' });
   defaultSelect.appendChild(el('option', { value: '', textContent: '— none —' }));
-  fetch('/api/categories').then(function(r) { return r.json(); }).then(function(data) {
-    if (!form.isConnected) return;
-    (data.categories || []).forEach(function(c) {
-      var opt = el('option', { value: c.slug, textContent: c.name });
-      if (c.slug === source.default_category) opt.selected = true;
-      defaultSelect.appendChild(opt);
-    });
-  }).catch(function() { /* dropdown stays at 'none' if fetch fails */ });
+  [
+    ['local', 'Tasmania'], ['australia', 'Australia'], ['world', 'World'], ['tech', 'Tech & Security'],
+    ['homelab', 'Homelab & Self-hosting'], ['gaming', 'Gaming'], ['sport', 'Sport'], ['trending', 'Around the internet']
+  ].forEach(function(choice) {
+    var opt = el('option', { value: choice[0], textContent: choice[1] });
+    if (choice[0] === source.default_category) opt.selected = true;
+    defaultSelect.appendChild(opt);
+  });
 
   var errorEl = el('div', { className: 'status-msg error hidden' });
 
@@ -2667,7 +2979,7 @@ function renderSourceEditForm(source, refs) {
     el('div', { className: 'form-row' }, [el('label', { textContent: 'Name' }), nameInput]),
     el('div', { className: 'form-row' }, [el('label', { textContent: 'URL' }), urlInput]),
     el('div', { className: 'form-row' }, [el('label', { textContent: 'Type' }), typeSelect]),
-    el('div', { className: 'form-row' }, [el('label', { textContent: 'Default category' }), defaultSelect]),
+    el('div', { className: 'form-row' }, [el('label', { textContent: 'Section' }), defaultSelect]),
     errorEl,
     el('div', { className: 'form-actions' }, [cancelBtn, saveBtn])
   );
@@ -2704,14 +3016,19 @@ function renderAddSourceForm() {
       nameInput.value = '';
       urlInput.value = '';
       advancedWrap.classList.add('hidden');
-      switchSettingsTab('sources');
+      loadSourcesTab($('#settings-sources-body'));
     } else {
       var errData = await res.json().catch(function() { return {}; });
       showStatus(errData.error || 'Failed to add source', 'error');
     }
   }
 
-  var addBtn = el('button', { className: 'btn btn-primary', textContent: 'Add Source', onclick: async function() {
+  var detectedSource = null;
+  var previewWrap = el('div', { className: 'source-preview hidden' });
+  var saveDetected = el('button', { className: 'btn btn-primary hidden', textContent: 'Save source', onclick: async function() {
+    if (detectedSource) await createSource(detectedSource);
+  }});
+  var addBtn = el('button', { className: 'btn btn-primary', textContent: 'Test address', onclick: async function() {
     var url = pasteInput.value.trim();
     if (!url) return;
     showStatus('Detecting…', '');
@@ -2729,7 +3046,20 @@ function renderAddSourceForm() {
         urlInput.value = url;
         return;
       }
-      await createSource({ name: data.name, type: data.type, url: data.url, config: data.config });
+      detectedSource = { name: data.name, type: data.type, url: data.url, config: data.config };
+      showStatus('Testing ' + data.name + '…', '');
+      var previewResponse = await fetch('/api/sources/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(detectedSource)
+      });
+      var preview = await previewResponse.json();
+      if (!previewResponse.ok) throw new Error(preview.error || 'The source did not work');
+      previewWrap.replaceChildren(el('strong', { textContent: data.name }), el('p', { textContent: preview.count + (preview.count === 1 ? ' story found.' : ' stories found.') }));
+      var headlines = el('ul');
+      preview.headlines.forEach(function(headline) { headlines.appendChild(el('li', { textContent: headline })); });
+      previewWrap.appendChild(headlines);
+      previewWrap.classList.remove('hidden');
+      saveDetected.classList.remove('hidden');
+      showStatus('Ready to save.', 'success');
     } catch (e) {
       showStatus('Detection failed: ' + e.message, 'error');
       advancedWrap.classList.remove('hidden');
@@ -2765,10 +3095,11 @@ function renderAddSourceForm() {
   );
 
   form.append(
-    el('div', { className: 'form-label', textContent: 'Add New Source' }),
+    el('div', { className: 'form-label', textContent: 'Add a source' }),
     el('div', { style: { marginBottom: '8px' } }, [pasteInput]),
-    el('div', {}, [addBtn, advancedToggle]),
+    el('div', { className: 'settings-actions' }, [addBtn, saveDetected, advancedToggle]),
     statusEl,
+    previewWrap,
     advancedWrap
   );
   return form;
@@ -4470,8 +4801,7 @@ var router = (function() {
     if (path === '/') {
       loadReadingFromLocation();
     } else if (path === '/settings') {
-      var activeTab = $('.settings-tab.active');
-      switchSettingsTab(activeTab ? activeTab.dataset.tab : 'general');
+      loadSettingsPage();
     } else if (path === '/archive') {
       loadArchive();
     } else if (path === '/pipeline') {
@@ -4576,9 +4906,6 @@ connectGlobalSSE();
 
 // Version footer + update check
 initVersionFooter();
-
-// Check for category suggestions
-checkSuggestions();
 
 // Notification UI
 updateNotifUI();

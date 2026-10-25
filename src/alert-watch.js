@@ -25,7 +25,9 @@ function alertPrompt(candidate) {
   const item = candidate.item;
   const readerContext = candidate.kind === 'emergency'
     ? 'The reader lives near West Tamar and Launceston in northern Tasmania.'
-    : 'The reader runs the named product or service at home.';
+    : candidate.kind === 'security'
+      ? 'The reader runs the named product or service at home.'
+      : 'The reader marked this interest as important enough to interrupt him.';
   const sourceText = String(item.article_content || item.description || '').slice(0, 5000);
   return `Decide whether this reader should be interrupted by an urgent notification now.
 
@@ -158,7 +160,7 @@ async function runAlertWatch(db, ollama, settings, log, options = {}) {
     let sentCount = sentAlerts.length;
 
     for (const candidate of candidates) {
-      const policy = alertDecision({ hour: local.hour, sentCount, kind: candidate.kind });
+      const policy = alertDecision({ hour: local.hour, time: local.time, sentCount, kind: candidate.kind }, settings);
       if (!policy.allowed) {
         db.addAlert(storedAlert(candidate, checkId, local.date, now, {
           not_sent_reason: policy.reason,

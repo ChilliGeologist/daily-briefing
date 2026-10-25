@@ -63,6 +63,18 @@ const SCHEMA = `
     error_summary TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS source_run_results (
+    run_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, source_id),
+    FOREIGN KEY (run_id) REFERENCES run_log(run_id),
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS log_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT,
@@ -161,6 +173,7 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_log_entries_run_id ON log_entries(run_id);
   CREATE INDEX IF NOT EXISTS idx_log_entries_timestamp ON log_entries(timestamp);
   CREATE INDEX IF NOT EXISTS idx_sources_enabled ON sources(enabled);
+  CREATE INDEX IF NOT EXISTS idx_source_run_results_source ON source_run_results(source_id, fetched_at DESC);
   CREATE INDEX IF NOT EXISTS idx_alert_checks_local_date ON alert_checks(local_date, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_alerts_check_id ON alerts(check_id);
   CREATE INDEX IF NOT EXISTS idx_alerts_local_sent ON alerts(local_date, sent);
@@ -351,6 +364,38 @@ function initDB(dbPath) {
       sqlite.prepare(
         `UPDATE sources SET last_fetch_status = ?, last_fetch_at = datetime('now'), last_fetch_error = ? WHERE id = ?`
       ).run(status, error || null, id);
+    },
+
+    addSourceRunResult(fields) {
+      sqlite.prepare(`
+        INSERT INTO source_run_results (run_id, source_id, status, item_count, error, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id, source_id) DO UPDATE SET
+          status = excluded.status,
+          item_count = excluded.item_count,
+          error = excluded.error,
+          fetched_at = excluded.fetched_at
+      `).run(
+        fields.run_id, fields.source_id, fields.status, Number(fields.item_count) || 0,
+        fields.error || null, fields.fetched_at
+      );
+    },
+
+    getLatestSourceRunResults() {
+      const rows = sqlite.prepare(`
+        SELECT result.*, run.started_at AS run_started_at
+        FROM source_run_results result
+        JOIN run_log run ON run.run_id = result.run_id
+        WHERE result.rowid = (
+          SELECT latest.rowid FROM source_run_results latest
+          JOIN run_log latest_run ON latest_run.run_id = latest.run_id
+          WHERE latest.source_id = result.source_id
+          ORDER BY latest_run.started_at DESC, latest.fetched_at DESC, latest.rowid DESC
+          LIMIT 1
+        )
+        ORDER BY result.source_id
+      `).all();
+      return Object.fromEntries(rows.map(row => [row.source_id, row]));
     },
 
     // --- Categories ---
