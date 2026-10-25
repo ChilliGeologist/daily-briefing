@@ -60,6 +60,31 @@ function formatDateShort(dateStr) {
   });
 }
 
+function formatDisplayTime(value) {
+  var date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-AU', {
+    hour: 'numeric', minute: '2-digit', hour12: true
+  }).toLowerCase();
+}
+
+function formatClockTime(value) {
+  return formatDisplayTime(value).replace(/\s+(am|pm)$/, '$1');
+}
+
+function formatPaperMoment(value) {
+  var date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  }) + ', ' + formatClockTime(date);
+}
+
+function formatLastPaper(value) {
+  var moment = formatPaperMoment(value);
+  return moment ? 'Last paper: ' + moment : '';
+}
+
 function el(tag, attrs, children) {
   var e = document.createElement(tag);
   if (attrs) {
@@ -84,6 +109,27 @@ function el(tag, attrs, children) {
     }
   }
   return e;
+}
+
+function confirmPaper(message) {
+  return new Promise(function(resolve) {
+    var dialog = el('dialog', { className: 'paper-confirm' });
+    var form = el('form', { method: 'dialog' }, [
+      el('p', { textContent: message }),
+      el('div', { className: 'paper-confirm-actions' }, [
+        el('button', { className: 'btn btn-secondary', value: 'cancel', textContent: 'Cancel' }),
+        el('button', { className: 'btn btn-danger', value: 'confirm', textContent: 'Continue' })
+      ])
+    ]);
+    dialog.appendChild(form);
+    dialog.addEventListener('close', function() {
+      var confirmed = dialog.returnValue === 'confirm';
+      dialog.remove();
+      resolve(confirmed);
+    }, { once: true });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  });
 }
 
 function $(sel) { return document.querySelector(sel); }
@@ -159,9 +205,7 @@ function resolvedTheme(mode, now) {
 function updateThemeColour() {
   var meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) return;
-  var view = $('#app') && $('#app').dataset.view;
-  var property = view === 'reading' || view === 'archive' ? '--paper-page' : '--bg';
-  var colour = getComputedStyle(document.documentElement).getPropertyValue(property).trim();
+  var colour = getComputedStyle(document.documentElement).getPropertyValue('--paper-page').trim();
   if (colour) meta.setAttribute('content', colour);
 }
 
@@ -893,9 +937,7 @@ function readingTimeText(value) {
 }
 
 function formatAlertedTime(value) {
-  var date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  return formatDisplayTime(value);
 }
 
 function sourceNames(item) {
@@ -2635,8 +2677,8 @@ function renderInterestEditor(settings) {
     setDirty();
     openRow(row);
   }});
-  var reset = el('button', { className: 'btn btn-secondary', textContent: 'Reset to the starting list', onclick: function() {
-    if (confirm('Reset every interest to the starting list?')) {
+  var reset = el('button', { className: 'btn btn-secondary', textContent: 'Reset to the starting list', onclick: async function() {
+    if (await confirmPaper('Reset every interest to the starting list?')) {
       renderRows(starting);
       setDirty();
     }
@@ -3052,7 +3094,7 @@ function renderSourceEditForm(source, refs) {
     className: 'btn btn-danger btn-sm',
     textContent: 'Remove',
     onclick: async function() {
-      if (!confirm('Remove source "' + source.name + '"?')) return;
+      if (!await confirmPaper('Remove source "' + source.name + '"?')) return;
       var response = await fetch('/api/sources/' + source.id, { method: 'DELETE' });
       if (response.ok) refs.item.remove();
       else {
@@ -3125,7 +3167,7 @@ function renderAddSourceForm() {
   var pasteInput = el('input', { className: 'form-input', placeholder: 'Paste RSS feed, Reddit link, or site URL' });
   var statusEl = el('div', { className: 'status-msg hidden' });
 
-  var advancedWrap = el('div', { className: 'hidden', style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--border)' } });
+  var advancedWrap = el('div', { className: 'hidden', style: { marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--paper-rule)' } });
   var nameInput = el('input', { className: 'form-input', placeholder: 'Source name' });
   var typeSelect = el('select', { className: 'form-select' });
   ['rss', 'reddit', 'api'].forEach(function(t) { typeSelect.appendChild(el('option', { value: t, textContent: t.toUpperCase() })); });
@@ -3290,7 +3332,7 @@ function renderCategoryItem(cat) {
       title: 'Delete category',
       onclick: async function(e) {
         e.stopPropagation();
-        if (!confirm('Delete category "' + cat.name + '"?')) return;
+        if (!await confirmPaper('Delete category "' + cat.name + '"?')) return;
         await fetch('/api/categories/' + cat.id, { method: 'DELETE' });
         item.remove();
       }
@@ -3418,7 +3460,7 @@ function setupCategoryDragDrop(list) {
 }
 
 function renderAddCategoryForm() {
-  var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } });
+  var form = el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--paper-rule)' } });
   var nameInput = el('input', { className: 'form-input', placeholder: 'Name' });
   var descInput = el('input', { className: 'form-input', placeholder: 'Description (optional)' });
 
@@ -3549,7 +3591,7 @@ async function loadPreferencesTab(container) {
       ]),
       saveBtn,
       statusEl,
-      el('div', { style: { marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)' } }, [
+      el('div', { style: { marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--paper-rule)' } }, [
         el('div', { className: 'form-label', textContent: 'Preview LLM Output' }),
         el('div', { className: 'form-group' }, [previewTitle]),
         el('div', { className: 'form-group' }, [previewDesc]),
@@ -3654,11 +3696,11 @@ async function loadScheduleTab(container) {
 
     var saveTzBtn = el('button', { className: 'btn btn-secondary', textContent: 'Save Timezone', onclick: saveSchedule });
 
-    var statusText = status.running ? 'Currently running' : status.lastRun ? 'Last run: ' + (status.lastRun.status || 'unknown') + ' at ' + (status.lastRun.started_at || '') : 'No runs yet';
+    var statusText = status.running ? 'Currently running' : status.lastRun ? formatLastPaper(status.lastRun.started_at) : 'No papers yet';
 
     var runNowBtn = el('button', {
       className: 'btn btn-primary',
-      textContent: 'Run Now',
+      textContent: 'Write a paper now',
       disabled: status.running,
       onclick: async function() {
         runNowBtn.disabled = true;
@@ -3668,7 +3710,7 @@ async function loadScheduleTab(container) {
           runNowBtn.textContent = 'Running...';
           updatePipelineStatus();
         } catch (e) {
-          runNowBtn.textContent = 'Run Now';
+          runNowBtn.textContent = 'Write a paper now';
           runNowBtn.disabled = false;
         }
       }
@@ -3686,9 +3728,9 @@ async function loadScheduleTab(container) {
         tzInput,
         el('div', { style: { marginTop: '6px' } }, [saveTzBtn])
       ]),
-      el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' } }, [
+      el('div', { style: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--paper-rule)' } }, [
         el('div', { className: 'form-label', textContent: 'Collection' }),
-        el('div', { textContent: statusText, style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' } }),
+        el('div', { textContent: statusText, style: { fontSize: '13px', color: 'var(--paper-summary)', marginBottom: '10px' } }),
         runNowBtn
       ])
     );
@@ -3807,7 +3849,7 @@ function loadBackupTab(container) {
 
   fileInput.addEventListener('change', async function() {
     if (!fileInput.files.length) return;
-    if (!confirm('This will replace all data. Are you sure?')) { fileInput.value = ''; return; }
+    if (!await confirmPaper('This will replace all data. Are you sure?')) { fileInput.value = ''; return; }
     importBtn.disabled = true;
     importBtn.textContent = 'Importing...';
     try {
@@ -3836,7 +3878,7 @@ function loadBackupTab(container) {
   container.append(
     el('div', { className: 'form-group' }, [
       el('div', { className: 'form-label', textContent: 'Database Backup' }),
-      el('div', { textContent: 'Export or import a compressed backup of the entire database.', style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' } })
+      el('div', { textContent: 'Export or import a compressed backup of the entire database.', style: { fontSize: '13px', color: 'var(--paper-summary)', marginBottom: '12px' } })
     ]),
     el('div', { style: { display: 'flex', gap: '8px' } }, [exportBtn, importBtn, fileInput]),
     statusEl
@@ -3854,7 +3896,7 @@ async function loadLogTab(container) {
     container.replaceChildren();
 
     if (!runs || runs.length === 0) {
-      container.appendChild(el('div', { textContent: 'No pipeline runs yet.', style: { fontSize: '13px', color: 'var(--text-dim)', padding: '20px 0' } }));
+      container.appendChild(el('div', { textContent: 'No pipeline runs yet.', style: { fontSize: '13px', color: 'var(--paper-quiet)', padding: '20px 0' } }));
       return;
     }
 
@@ -3927,7 +3969,7 @@ function renderLogEntries(viewer, entries, minLevel) {
   var minOrd = LEVEL_ORDER[minLevel] || 0;
   var filtered = entries.filter(function(e) { return (LEVEL_ORDER[e.level] || 0) >= minOrd; });
   if (filtered.length === 0) {
-    viewer.appendChild(el('div', { textContent: 'No entries at this level', style: { color: 'var(--text-dim)' } }));
+    viewer.appendChild(el('div', { textContent: 'No entries at this level', style: { color: 'var(--paper-quiet)' } }));
     return;
   }
   filtered.forEach(function(entry) {
@@ -3960,74 +4002,28 @@ var pipelineActiveStage = null;
 var pipelineStageProgress = {};
 var pipelineStatusInterval = null;
 
-// Circular progress ring
-var RING_RADIUS = 16;
-var RING_STROKE = 3;
-var RING_SIZE = (RING_RADIUS + RING_STROKE) * 2;
-var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
 function createStageRing(id) {
-  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', RING_SIZE);
-  svg.setAttribute('height', RING_SIZE);
-  svg.setAttribute('viewBox', '0 0 ' + RING_SIZE + ' ' + RING_SIZE);
-  svg.setAttribute('class', 'stage-ring');
-  svg.id = id;
-
-  var cx = RING_SIZE / 2;
-  var cy = RING_SIZE / 2;
-
-  // Background track
-  var bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  bg.setAttribute('cx', cx);
-  bg.setAttribute('cy', cy);
-  bg.setAttribute('r', RING_RADIUS);
-  bg.setAttribute('class', 'stage-ring-bg');
-  svg.appendChild(bg);
-
-  // Progress arc
-  var arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  arc.setAttribute('cx', cx);
-  arc.setAttribute('cy', cy);
-  arc.setAttribute('r', RING_RADIUS);
-  arc.setAttribute('class', 'stage-ring-progress');
-  arc.setAttribute('stroke-dasharray', RING_CIRCUMFERENCE);
-  arc.setAttribute('stroke-dashoffset', RING_CIRCUMFERENCE);
-  arc.setAttribute('transform', 'rotate(-90 ' + cx + ' ' + cy + ')');
-  svg.appendChild(arc);
-
-  // Centre icon container
-  var fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-  fo.setAttribute('x', cx - 8);
-  fo.setAttribute('y', cy - 8);
-  fo.setAttribute('width', 16);
-  fo.setAttribute('height', 16);
-  var iconDiv = document.createElement('div');
-  iconDiv.className = 'stage-ring-icon';
-  iconDiv.id = id + '-icon';
-  fo.appendChild(iconDiv);
-  svg.appendChild(fo);
-
-  return svg;
+  return el('span', { className: 'stage-mark', id: id, 'aria-hidden': 'true', textContent: '·' });
 }
 
 function setRingProgress(stageKey, fraction) {
   var ring = $('#stage-' + stageKey);
   if (!ring) return;
-  var arc = ring.querySelector('.stage-ring-progress');
-  if (!arc) return;
-  var offset = RING_CIRCUMFERENCE * (1 - Math.min(1, Math.max(0, fraction)));
-  arc.setAttribute('stroke-dashoffset', offset);
+  ring.dataset.progress = Math.min(1, Math.max(0, fraction)).toFixed(3);
+  if (fraction > 0 && fraction < 1 && ring.dataset.state !== 'complete') setRingState(stageKey, 'running');
 }
 
 function resetAllRings() {
   PIPELINE_STAGES.forEach(function(name) {
     var key = name.toLowerCase();
     var ring = $('#stage-' + key);
-    if (ring) ring.removeAttribute('data-state');
+    if (ring) {
+      ring.removeAttribute('data-state');
+      ring.removeAttribute('data-progress');
+      ring.textContent = '·';
+      ring.parentElement.removeAttribute('data-state');
+    }
     setRingProgress(key, 0);
-    var iconDiv = $('#stage-' + key + '-icon');
-    if (iconDiv) iconDiv.replaceChildren();
     var statEl = $('#stage-stat-' + key);
     if (statEl) statEl.textContent = '';
   });
@@ -4041,14 +4037,14 @@ function setRingState(stageKey, state) {
   var ring = $('#stage-' + stageKey);
   if (!ring) return;
   ring.setAttribute('data-state', state);
-  var iconDiv = $('#stage-' + stageKey + '-icon');
-  if (!iconDiv) return;
-  iconDiv.replaceChildren();
+  ring.parentElement.setAttribute('data-state', state);
   if (state === 'complete') {
-    setTrustedSVG(iconDiv, ICONS.check);
+    ring.textContent = '✓';
     setRingProgress(stageKey, 1);
   } else if (state === 'error') {
-    setTrustedSVG(iconDiv, ICONS.x);
+    ring.textContent = '×';
+  } else if (state === 'running') {
+    ring.textContent = '•';
   }
 }
 
@@ -4124,7 +4120,7 @@ async function restorePipelineState() {
         setRingState(PIPELINE_STAGES[i].toLowerCase(), 'complete');
       }
       var ring = $('#stage-' + currentStage);
-      if (ring) ring.setAttribute('data-state', 'running');
+      if (ring) setRingState(currentStage, 'running');
       // Restore progress for current and completed stages from tracked data
       for (var si = 0; si <= stageIdx; si++) {
         var sk = PIPELINE_STAGES[si].toLowerCase();
@@ -4201,18 +4197,9 @@ function renderPipelineContent() {
   });
   container.appendChild(stages);
 
-  // Progress bar
-  container.appendChild(el('div', { className: 'pipeline-bar' }, [
-    el('div', { className: 'pipeline-bar-fill', id: 'pipeline-bar-fill', style: { width: '0%' } })
-  ]));
-
-  // Log area
-  container.appendChild(el('div', { className: 'pipeline-log', id: 'pipeline-log' }));
-
-  // Idle area
+  // Last paper
   container.appendChild(el('div', { className: 'pipeline-idle', id: 'pipeline-idle' }, [
-    el('div', { textContent: 'Idle' }),
-    el('div', { className: 'pipeline-last-run', id: 'pipeline-last-run' }),
+    el('div', { className: 'pipeline-last-run', id: 'pipeline-last-run', textContent: 'No papers yet.' }),
   ]));
 
   // Action buttons (outside idle so they stay visible during runs)
@@ -4220,7 +4207,7 @@ function renderPipelineContent() {
     el('button', {
       className: 'btn btn-primary',
       id: 'pipeline-run-btn',
-      textContent: 'Run Now',
+      textContent: 'Write a paper now',
       onclick: async function() {
         var btn = $('#pipeline-run-btn');
         btn.disabled = true;
@@ -4229,7 +4216,7 @@ function renderPipelineContent() {
           await fetch('/api/pipeline/run', { method: 'POST' });
         } catch (e) {
           btn.disabled = false;
-          btn.textContent = 'Run Now';
+          btn.textContent = 'Write a paper now';
         }
       }
     }),
@@ -4249,6 +4236,11 @@ function renderPipelineContent() {
         }
       }
     })
+  ]));
+
+  container.appendChild(el('details', { className: 'pipeline-log-details', id: 'pipeline-log-details' }, [
+    el('summary', { textContent: 'Show the log' }),
+    el('div', { className: 'pipeline-log', id: 'pipeline-log' })
   ]));
 
   container.appendChild(el('div', { className: 'status-paper-panels' }, [
@@ -4280,8 +4272,23 @@ async function loadAlertChecks() {
       container.appendChild(el('p', { className: 'alert-checks-empty', textContent: 'No checks today.' }));
       return;
     }
-    result.checks.forEach(function(check) {
-      var time = new Date(check.started_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+    // Only checks that found something (or went wrong) get a card; the quiet
+    // ones are counted in one line so the panel stays short by evening.
+    var shown = result.checks.filter(function(check) {
+      return (check.candidates && check.candidates.length) || check.candidates_count > 0 || check.error;
+    });
+    var quiet = result.checks.length - shown.length;
+    if (quiet > 0) {
+      var latest = formatDisplayTime(result.checks[0].started_at);
+      container.appendChild(el('p', {
+        className: 'alert-checks-empty',
+        textContent: shown.length
+          ? quiet + ' other ' + (quiet === 1 ? 'check' : 'checks') + ' today found nothing.'
+          : 'Nothing found today. ' + quiet + ' ' + (quiet === 1 ? 'check' : 'checks') + ', the latest at ' + latest + '.'
+      }));
+    }
+    shown.forEach(function(check) {
+      var time = formatDisplayTime(check.started_at);
       var sources = check.sources_read || [];
       var card = el('article', { className: 'alert-check' });
       card.appendChild(el('div', { className: 'alert-check-heading' }, [
@@ -4388,7 +4395,7 @@ async function loadLearningPanel() {
         className: 'btn btn-danger',
         textContent: 'Forget all this',
         onclick: async function(event) {
-          if (!confirm('Forget what the paper has learned?')) return;
+          if (!await confirmPaper('Forget what the paper has learned?')) return;
           var button = event.currentTarget;
           button.disabled = true;
           try {
@@ -4422,15 +4429,20 @@ async function pollPipelineStatus() {
       if (idleEl) idleEl.classList.add('hidden');
       if (logEl) logEl.classList.remove('hidden');
       showCancelButton(true);
+      var runningStatus = $('#pipeline-last-run');
+      if (runningStatus) runningStatus.textContent = 'Writing a paper now…';
     } else {
       var idleEl2 = $('#pipeline-idle');
       if (idleEl2) idleEl2.classList.remove('hidden');
       showCancelButton(false);
       if (status.lastRun) {
         var lr = status.lastRun;
-        var text = 'Last run: ' + (lr.status || '?') + ' at ' + (lr.started_at || '').replace('T', ' ').slice(0, 19);
+        var text = formatLastPaper(lr.started_at);
         var lastRunEl = $('#pipeline-last-run');
         if (lastRunEl) lastRunEl.textContent = text;
+      } else {
+        var noRunEl = $('#pipeline-last-run');
+        if (noRunEl) noRunEl.textContent = 'No papers yet.';
       }
     }
 
@@ -4469,17 +4481,17 @@ async function pollPipelineStatus() {
               if (logData.entries && logData.entries.length) {
                 renderLogEntries(logPanel, logData.entries, 'info');
               } else {
-                logPanel.appendChild(el('div', { textContent: 'No log entries', style: { color: 'var(--text-dim)', fontSize: '12px' } }));
+                logPanel.appendChild(el('div', { textContent: 'No log entries', style: { color: 'var(--paper-quiet)', fontSize: '12px' } }));
               }
             } catch (e) {
-              logPanel.replaceChildren(el('div', { textContent: 'Failed to load log', style: { color: 'var(--red)', fontSize: '12px' } }));
+              logPanel.replaceChildren(el('div', { textContent: 'Failed to load log', style: { color: 'var(--paper-against)', fontSize: '12px' } }));
               loaded = false;
             }
           }
         }}, [
           el('div', { className: 'run-status-dot ' + statusClass }),
           el('div', { className: 'run-info' }, [
-            el('div', { className: 'run-date', textContent: (run.started_at || '').replace('T', ' ').slice(0, 19) }),
+            el('div', { className: 'run-date', textContent: formatPaperMoment(run.started_at) }),
             el('div', { className: 'run-stats', textContent: (run.trigger || '') + (run.items_curated ? ' | ' + run.items_curated + ' curated' : '') })
           ])
         ]);
@@ -4539,7 +4551,7 @@ function handlePipelineEvent(data) {
         setRingState(stageKey, 'error');
       } else if (data.status === 'running') {
         var ring = $('#stage-' + stageKey);
-        if (ring) ring.setAttribute('data-state', 'running');
+        if (ring) setRingState(stageKey, 'running');
       }
       // Update progress bar
       var progress = ((stageIdx + (data.status === 'complete' || data.status === 'done' ? 1 : 0.5)) / PIPELINE_STAGES.length) * 100;
@@ -4620,7 +4632,7 @@ function showCancelButton(running) {
     if (runBtn) {
       runBtn.classList.remove('hidden');
       runBtn.disabled = false;
-      runBtn.textContent = 'Run Now';
+      runBtn.textContent = 'Write a paper now';
     }
     if (cancelBtn) cancelBtn.classList.add('hidden');
   }
