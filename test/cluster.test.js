@@ -124,3 +124,21 @@ it('auto-merges only substantial event overlap with a shared fact and proper ent
     similar_merges: 1, judged: 0, judged_yes: 0,
   });
 });
+
+it('keeps a press release apart when it only shares a byline date and union name', async () => {
+  // Real items from 24 Oct 2026: Tasmanian Times filed a Huntington's walk
+  // release under the AEU byline "Media Release – Australian Education Union
+  // (AEU), 23 October 2026", and the walk joined the schools story.
+  const items = require('./fixtures/cluster-press-release-byline.json');
+  const { clusters } = await clusterItems(items, { judge: never, log });
+  const titles = clusters.map(cluster => cluster.items.map(item => item.title).sort());
+  assert.deepStrictEqual(titles.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0])), [
+    [
+      'AEU Calls for Politicians to Stay Out of Public Schools Until Premier Apologises',
+      'Education union tells politicians to stay out of schools until premier apologises over Christmas comments',
+      'Union calls on MPs to stay out of schools unless premier apologises',
+    ],
+    ['Suspended: Union bans politicians from public schools'],
+    ['Walk 4 Hope to Shine a Light on Huntington’s Disease'],
+  ]);
+});

@@ -34,8 +34,13 @@ function sharesUrl(a, b) {
   return [...urlsOf(a)].some(url => right.has(url));
 }
 
+const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+const DATE_PATTERN = new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH}\\b|\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, 'gi');
+
+// Day-of-month numbers are not facts: two press releases dated "23 October"
+// share the 23 without sharing a story.
 function nonYearNumbers(text) {
-  return new Set((String(text || '').match(/\b\d[\d,.]*\b/g) || [])
+  return new Set((String(text || '').replace(DATE_PATTERN, ' ').match(/\b\d[\d,.]*\b/g) || [])
     .map(number => number.replace(/[,.]/g, ''))
     .filter(number => !/^(?:19|20)\d{2}$/.test(number)));
 }
@@ -50,6 +55,14 @@ function capitalisedEntities(text) {
 }
 
 function substantialContentOverlap(a, b) {
+  // One outlet's own pieces share bylines and boilerplate ("Media Release –
+  // Australian Education Union (AEU), 23 October"), so for a same-outlet pair
+  // the shared name must be in both headlines ("Helen Haines: Who is…" and
+  // "Helen Haines: Police reveal…" from 7NEWS on 20 Oct).
+  if (a.outlet && a.outlet === b.outlet) {
+    const rightTitleEntities = capitalisedEntities(b.title);
+    if (![...capitalisedEntities(a.title)].some(entity => rightTitleEntities.has(entity))) return false;
+  }
   const left = `${a.title || ''}\n${a.description || ''}`;
   const right = `${b.title || ''}\n${b.description || ''}`;
   const rightNumbers = nonYearNumbers(right);
