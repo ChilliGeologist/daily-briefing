@@ -82,14 +82,12 @@ it('matches interests across cluster items and adds the interest score', () => {
   ]);
 });
 
-it('keeps keyword boosts and penalties alongside interest scoring', () => {
+it('uses interests without the retired keyword boost and penalty settings', () => {
   const story = cluster('Plex outage rumour', { coverage: 1, hoursAgo: 1 });
   story.lead.description = 'clickbait warning';
   const result = rankClusters([story], {
     now,
     limit: 10,
-    boostKeywords: ['outage'],
-    penaltyKeywords: ['clickbait'],
     interests: [{ label: 'Plex', kind: 'product', terms: ['Plex'], weight: 2, urgent: true }],
   });
   assert.strictEqual(result.selected[0].rank_score, 40 + (2 * 13));

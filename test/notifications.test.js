@@ -27,12 +27,28 @@ test('selects only urgent product security and near-home emergency candidates', 
   ]);
 });
 
+test('lets an urgent custom interest reach the strict alert check', () => {
+  const item = { title: 'Aurora forecast changes rooftop solar payments', description: '' };
+  assert.deepStrictEqual(notifications.selectAlertCandidates([item], [{
+    label: 'Solar changes', kind: 'topic', terms: ['solar'], weight: 2, urgent: true,
+  }]), [{
+    item,
+    kind: 'interest',
+    kicker: 'Solar changes',
+    matches: [{ label: 'Solar changes', kind: 'topic', weight: 2, urgent: true, term: 'solar' }],
+  }]);
+});
+
 test('applies quiet hours and the local-day cap as whole decisions', () => {
+  const settings = {
+    getAlertDailyCap: () => 2,
+    getQuietHours: () => ['21:00', '07:00'],
+  };
   assert.deepStrictEqual([
-    notifications.alertDecision({ hour: 21, sentCount: 2, kind: 'security' }),
-    notifications.alertDecision({ hour: 22, sentCount: 0, kind: 'security' }),
-    notifications.alertDecision({ hour: 2, sentCount: 0, kind: 'emergency' }),
-    notifications.alertDecision({ hour: 6, sentCount: 3, kind: 'emergency' }),
+    notifications.alertDecision({ time: '20:59', sentCount: 1, kind: 'security' }, settings),
+    notifications.alertDecision({ time: '21:00', sentCount: 0, kind: 'security' }, settings),
+    notifications.alertDecision({ time: '06:59', sentCount: 0, kind: 'emergency' }, settings),
+    notifications.alertDecision({ time: '07:00', sentCount: 2, kind: 'emergency' }, settings),
   ], [
     { allowed: true, reason: null },
     { allowed: false, reason: 'quiet hours' },

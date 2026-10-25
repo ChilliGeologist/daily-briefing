@@ -70,7 +70,7 @@ async function detectSource(rawUrl) {
   if (isRedditHost(parsed.host)) {
     const sub = extractSubreddit(parsed.pathname);
     if (!sub) throw new Error('Reddit URL must point to a subreddit (e.g. reddit.com/r/news)');
-    return { type: 'reddit', url: sub, name: `r/${sub}` };
+    return { type: 'reddit', url: `https://www.reddit.com/r/${sub}`, name: `r/${sub}` };
   }
 
   const res = await fetchWithTimeout(parsed.toString());

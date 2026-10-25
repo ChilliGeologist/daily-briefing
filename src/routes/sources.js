@@ -2,15 +2,58 @@
 
 const router = require('express').Router();
 const { detectSource } = require('../sourceDetect');
+const { fetchRSS } = require('../pipeline/sources/rss');
+const { fetchReddit } = require('../pipeline/sources/reddit');
+const { fetchAPI } = require('../pipeline/sources/api');
 
 const VALID_TYPES = ['rss', 'reddit', 'api'];
+const FETCHERS = { rss: fetchRSS, reddit: fetchReddit, api: fetchAPI };
+const quietLog = { debug() {}, info() {}, warn() {}, error() {} };
+
+function requireHttpUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error('Only http: and https: URLs are allowed');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http: and https: URLs are allowed');
+  }
+  // Private addresses are deliberately allowed so a local-network feed can be previewed.
+  return parsed.toString();
+}
 
 module.exports = function (db) {
   router.get('/sources', (req, res) => {
     try {
-      res.json({ sources: db.getSources() });
+      const results = typeof db.getLatestSourceRunResults === 'function' ? db.getLatestSourceRunResults() : {};
+      res.json({ sources: db.getSources().map(source => ({
+        ...source,
+        last_run: results[source.id] || null,
+      })) });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/sources/preview', async (req, res) => {
+    try {
+      const { name, type, url } = req.body || {};
+      if (!name || !VALID_TYPES.includes(type) || !url) {
+        return res.status(400).json({ error: 'A detected source is required' });
+      }
+      const safeUrl = requireHttpUrl(url);
+      // Detection currently returns only name, type and URL. Do not let preview
+      // configuration redirect a fetch to another client-supplied address.
+      const result = await FETCHERS[type]({ name, type, url: safeUrl, config: {} }, quietLog);
+      if (result.error) return res.status(400).json({ error: result.error });
+      res.json({
+        count: result.items.length,
+        headlines: result.items.slice(0, 3).map(item => String(item.title || '')).filter(Boolean),
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
     }
   });
 
@@ -18,7 +61,7 @@ module.exports = function (db) {
     try {
       const { url } = req.body;
       if (!url) return res.status(400).json({ error: 'url is required' });
-      const detected = await detectSource(url);
+      const detected = await detectSource(requireHttpUrl(url));
       res.json(detected);
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -68,3 +111,5 @@ module.exports = function (db) {
 
   return router;
 };
+
+module.exports.requireHttpUrl = requireHttpUrl;

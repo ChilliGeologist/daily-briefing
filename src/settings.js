@@ -1,6 +1,7 @@
 'use strict';
 
 const { DEFAULT_INTERESTS } = require('./pipeline/writer/interests');
+const { SECTIONS } = require('./pipeline/writer/sections');
 
 // Only this batch is appended to existing settings. Older defaults may have
 // been deliberately deleted, so never union the entire default list on reads.
@@ -51,6 +52,73 @@ const DEFAULT_PAYWALLED_HOSTS = [
   'themercury.com.au', 'examiner.com.au', 'theadvocate.com.au', 'theaustralian.com.au',
 ];
 
+const DEFAULT_QUIET_HOURS = Object.freeze(['22:00', '06:00']);
+const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function settingError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+function normaliseInterests(value) {
+  if (!Array.isArray(value)) throw settingError('Interests must be a list');
+  return value.map((entry, index) => {
+    const number = index + 1;
+    const label = String(entry && entry.label || '').trim();
+    if (!label) throw settingError(`Interest ${number} needs a name`);
+    const terms = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(entry.terms) ? entry.terms : []) {
+      const term = String(raw || '').trim();
+      const key = term.toLocaleLowerCase('en-AU');
+      if (term && !seen.has(key)) {
+        seen.add(key);
+        terms.push(term);
+      }
+    }
+    if (terms.length === 0) {
+      throw settingError(`Interest ${number} needs at least one matching word or phrase`);
+    }
+    const kind = ['place', 'topic', 'product'].includes(entry.kind) ? entry.kind : 'topic';
+    const weight = Number(entry.weight);
+    if (![1, 2, 3].includes(weight)) throw settingError(`Interest ${number} has an invalid importance`);
+    return {
+      label,
+      kind,
+      terms,
+      weight,
+      urgent: Boolean(entry.urgent),
+      requires_place: Boolean(entry.requires_place),
+    };
+  });
+}
+
+function normaliseQuietHours(value) {
+  if (!Array.isArray(value) || value.length !== 2 || !value.every(time => TIME_PATTERN.test(String(time)))) {
+    throw settingError('Quiet hours need a start and finish time');
+  }
+  return value.map(String);
+}
+
+function normaliseSections(value) {
+  const known = new Set(SECTIONS.map(section => section.id));
+  const result = [];
+  const seen = new Set();
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const id = String(entry && entry.id || '');
+      if (!known.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      result.push({ id, hidden: Boolean(entry.hidden) });
+    }
+  }
+  for (const section of SECTIONS) {
+    if (!seen.has(section.id)) result.push({ id: section.id, hidden: false });
+  }
+  return result;
+}
+
 function createSettings(db) {
   // Run once at app startup so the settings UI and pipeline see the same list.
   // Write the revision last: if startup is interrupted, appending is idempotent.
@@ -93,15 +161,6 @@ function createSettings(db) {
       return db.getSetting('schedule') || ['06:00'];
     },
 
-    getPreferences() {
-      return {
-        tone: db.getSetting('preferences_tone') || 'Concise, no fluff',
-        language: db.getSetting('preferences_language') || 'English',
-        boost_keywords: db.getSetting('preferences_boost_keywords') || [],
-        penalty_keywords: db.getSetting('preferences_penalty_keywords') || [],
-      };
-    },
-
     getScoreThreshold() {
       const val = db.getSetting('score_threshold');
       return val !== null ? Number(val) : 20;
@@ -140,6 +199,25 @@ function createSettings(db) {
     getInterests() {
       const val = db.getSetting('interests');
       return val !== null ? val : DEFAULT_INTERESTS;
+    },
+
+    getAlertDailyCap() {
+      const val = db.getSetting('alert_daily_cap');
+      return val !== null ? Number(val) : 3;
+    },
+
+    getQuietHours() {
+      const val = db.getSetting('quiet_hours');
+      return val !== null ? normaliseQuietHours(val) : [...DEFAULT_QUIET_HOURS];
+    },
+
+    getLearningEnabled() {
+      const val = db.getSetting('learning_enabled');
+      return val !== null ? Boolean(val) : true;
+    },
+
+    getSections() {
+      return normaliseSections(db.getSetting('sections'));
     },
 
     getWriterOllamaModel() {
@@ -194,6 +272,19 @@ function createSettings(db) {
     },
 
     set(key, value) {
+      if (String(key).startsWith('preferences_')) {
+        throw settingError('Preferences are no longer used; edit Your interests instead');
+      }
+      if (key === 'interests') value = normaliseInterests(value);
+      if (key === 'quiet_hours') value = normaliseQuietHours(value);
+      if (key === 'sections') value = normaliseSections(value);
+      if (key === 'alert_daily_cap') {
+        value = Number(value);
+        if (!Number.isInteger(value) || value < 0 || value > 100) {
+          throw settingError('The daily alert limit must be a whole number from 0 to 100');
+        }
+      }
+      if (key === 'learning_enabled') value = Boolean(value);
       db.setSetting(key, value);
     },
 
@@ -203,4 +294,10 @@ function createSettings(db) {
   };
 }
 
-module.exports = { createSettings };
+module.exports = {
+  DEFAULT_QUIET_HOURS,
+  createSettings,
+  normaliseInterests,
+  normaliseQuietHours,
+  normaliseSections,
+};

@@ -42,18 +42,31 @@ function selectAlertCandidates(items, interests) {
       candidates.push({ item, kind: 'emergency', kicker: 'Emergency near home', matches });
       continue;
     }
+    if (emergency) continue;
 
     const product = urgent.some(match => match.kind === 'product');
     if (product && (SECURITY_OR_OUTAGE.test(text) || isWarningOrAcsc(item))) {
       candidates.push({ item, kind: 'security', kicker: 'Security', matches });
+      continue;
     }
+    if (product) continue;
+
+    const chosen = urgent[0];
+    candidates.push({ item, kind: 'interest', kicker: chosen.label, matches });
   }
   return candidates;
 }
 
-function alertDecision({ hour, sentCount, kind }) {
-  if (Number(sentCount) >= URGENT_CAP) return { allowed: false, reason: 'daily cap reached' };
-  const quiet = Number(hour) >= 22 || Number(hour) < 6;
+function alertDecision({ hour, time, sentCount, kind }, settings) {
+  const cap = settings && typeof settings.getAlertDailyCap === 'function'
+    ? settings.getAlertDailyCap() : URGENT_CAP;
+  if (Number(sentCount) >= cap) return { allowed: false, reason: 'daily cap reached' };
+  const [quietStart, quietEnd] = settings && typeof settings.getQuietHours === 'function'
+    ? settings.getQuietHours() : ['22:00', '06:00'];
+  const current = time || `${String(Number(hour) || 0).padStart(2, '0')}:00`;
+  const quiet = quietStart <= quietEnd
+    ? current >= quietStart && current < quietEnd
+    : current >= quietStart || current < quietEnd;
   if (quiet && kind !== 'emergency') return { allowed: false, reason: 'quiet hours' };
   return { allowed: true, reason: null };
 }
@@ -127,7 +140,7 @@ function watchIdentity(item) {
 function localDateAndHour(date, timezone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(date).reduce((result, part) => {
     result[part.type] = part.value;
@@ -136,6 +149,7 @@ function localDateAndHour(date, timezone) {
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     hour: Number(parts.hour),
+    time: `${parts.hour}:${parts.minute}`,
   };
 }
 

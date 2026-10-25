@@ -96,7 +96,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stage = 'collect';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'collect', status: 'running' });
-    const { items: collected, stats: collectStats } = await collect(db, runLog, emitProgress);
+    const { items: collected, stats: collectStats } = await collect(db, runLog, emitProgress, { runId });
     const prioritised = collected.map(item => ({
       ...item,
       source_priority: priorities.get(item.source_name) ?? 1,
@@ -142,15 +142,14 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stage = 'rank';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'rank', status: 'running' });
-    const preferences = settings.getPreferences();
-    const learnedNudges = db.getLearnedNudges ? db.getLearnedNudges() : [];
+    const learningEnabled = typeof settings.getLearningEnabled !== 'function' || settings.getLearningEnabled();
+    const learnedNudges = learningEnabled && db.getLearnedNudges ? db.getLearnedNudges() : [];
     const { selected, stats: rankStats } = rankClusters(clusters, {
       now: Date.now(),
-      boostKeywords: preferences.boost_keywords,
-      penaltyKeywords: preferences.penalty_keywords,
       interests: settings.getInterests(),
       limit: settings.getMaxCandidates(),
       learnedNudges,
+      learningEnabled,
     });
     runLog.info('pipeline:rank',
       `Ranked ${rankStats.clusters} stories: ${rankStats.selected} selected (${rankStats.floor_added} by source floor)`);
@@ -236,6 +235,8 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
       stats: { write: writeStats, edit: edited.stats },
       log: runLog,
       learnedNudges,
+      learningEnabled,
+      sections: typeof settings.getSections === 'function' ? settings.getSections() : undefined,
     });
     if (db.getRecentSentAlerts) {
       const recentAlerts = db.getRecentSentAlerts(new Date(Date.now() - (3 * 24 * 60 * 60 * 1000)).toISOString());

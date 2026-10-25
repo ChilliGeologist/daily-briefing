@@ -76,6 +76,17 @@ async function collect(db, log, emitProgress, options = {}) {
       db.updateSourceFetchStatus(source.id, 'ok', null);
     }
 
+    if (options.runId && typeof db.addSourceRunResult === 'function') {
+      db.addSourceRunResult({
+        run_id: options.runId,
+        source_id: source.id,
+        status: result.error ? 'error' : 'ok',
+        item_count: result.items.length,
+        error: result.error || null,
+        fetched_at: new Date().toISOString(),
+      });
+    }
+
     stats.items_by_source[source.name] = result.items.length;
     allItems.push(...assignListPositions(result.items));
   }

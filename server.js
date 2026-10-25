@@ -93,7 +93,6 @@ app.get('/api/health', (req, res) => {
 // Mount API routes
 app.use('/api', require('./src/routes/briefings')(db));
 app.use('/api', require('./src/routes/sources')(db));
-app.use('/api', require('./src/routes/categories')(db));
 app.use('/api', require('./src/routes/settings')(db, settings, scheduler));
 app.use('/api', require('./src/routes/pipeline')(db, pipeline, ollama, settings, log, sseManager, sendNotification));
 app.use('/api', require('./src/routes/logs')(db));

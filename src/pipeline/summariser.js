@@ -9,7 +9,7 @@ function truncate(str, n) {
   return str.length > n ? str.slice(0, n).trimEnd() + '...' : str;
 }
 
-function buildPrompt(item, preferences) {
+function buildPrompt(item) {
   const sourcesStr = item.sources
     ? item.sources.map(s => s.name).join(', ')
     : item.source_name || 'Unknown';
@@ -48,7 +48,7 @@ function buildPrompt(item, preferences) {
 
   return `You are a news editor. Rewrite and summarise this article for a daily briefing.
 
-Style: ${preferences.tone}. Language: ${preferences.language}.
+Style: concise, no fluff. Language: English.
 
 Original headline: ${item.title}
 Sources: ${sourcesStr}
@@ -91,7 +91,6 @@ function parseJSON(text) {
 }
 
 async function summarise(items, ollama, settings, log, emitProgress, checkCancelled) {
-  const preferences = settings.getPreferences();
   const results = [];
   let totalTokens = 0;
   let totalDuration = 0;
@@ -102,7 +101,7 @@ async function summarise(items, ollama, settings, log, emitProgress, checkCancel
 
   for (const item of items) {
     if (checkCancelled) checkCancelled();
-    const prompt = buildPrompt(item, preferences);
+    const prompt = buildPrompt(item);
 
     if (typeof item.article_content === 'string' && item.article_content.trim().length > 0) {
       enrichedWithArticle++;

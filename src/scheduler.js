@@ -82,6 +82,10 @@ function scheduleLogPruning() {
 function scheduleLearning() {
   const timezone = _settings.getTimezone();
   const job = cron.schedule(LEARNING_CRON, () => {
+    if (typeof _settings.getLearningEnabled === 'function' && !_settings.getLearningEnabled()) {
+      _log.info('learning', 'Skipped weekly learning because it is switched off');
+      return;
+    }
     try {
       const result = recomputeLearning(_db);
       _log.info('learning', `Worked out ${result.nudges.length} learned nudges from ${result.seen_count} seen stories`);

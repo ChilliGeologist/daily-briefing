@@ -33,6 +33,19 @@ it('returns defaults when unset', () => {
   assert.strictEqual(settings.getWriterArticleChars(), 6000);
   assert.strictEqual(settings.getSectionSize(), 5);
   assert.deepStrictEqual(settings.getTopSize(), { min: 5, max: 7 });
+  assert.strictEqual(settings.getAlertDailyCap(), 3);
+  assert.deepStrictEqual(settings.getQuietHours(), ['22:00', '06:00']);
+  assert.strictEqual(settings.getLearningEnabled(), true);
+  assert.deepStrictEqual(settings.getSections(), [
+    { id: 'tasmania', hidden: false },
+    { id: 'australia', hidden: false },
+    { id: 'world', hidden: false },
+    { id: 'tech', hidden: false },
+    { id: 'homelab', hidden: false },
+    { id: 'gaming', hidden: false },
+    { id: 'sport', hidden: false },
+    { id: 'internet', hidden: false },
+  ]);
 });
 
 it('returns stored values when set', () => {
@@ -52,6 +65,13 @@ it('returns stored values when set', () => {
     writer_article_chars: 9000,
     section_size: 4,
     top_size: { min: 6, max: 6 },
+    alert_daily_cap: 5,
+    quiet_hours: ['21:30', '07:15'],
+    learning_enabled: false,
+    sections: [
+      { id: 'world', hidden: false },
+      { id: 'gaming', hidden: true },
+    ],
   }));
   assert.deepStrictEqual([
     settings.getFilterMaxAgeHours(),
@@ -70,9 +90,48 @@ it('returns stored values when set', () => {
     settings.getWriterArticleChars(),
     settings.getSectionSize(),
     settings.getTopSize(),
+    settings.getAlertDailyCap(),
+    settings.getQuietHours(),
+    settings.getLearningEnabled(),
+    settings.getSections(),
   ], [
     [{ label: 'Mine' }], 'writer-model', 5, 'told-model', 6, 16384, 9000, 4, { min: 6, max: 6 },
+    5, ['21:30', '07:15'], false, [
+      { id: 'world', hidden: false },
+      { id: 'gaming', hidden: true },
+      { id: 'tasmania', hidden: false },
+      { id: 'australia', hidden: false },
+      { id: 'tech', hidden: false },
+      { id: 'homelab', hidden: false },
+      { id: 'sport', hidden: false },
+      { id: 'internet', hidden: false },
+    ],
   ]);
+});
+
+it('validates and stores a complete interests list as one value', () => {
+  const vals = {};
+  const settings = createSettings(fakeDb(vals));
+  settings.set('interests', [{
+    label: '  Plex servers  ',
+    kind: 'product',
+    terms: [' Plex ', 'plex', 'Plex Media Server', ''],
+    weight: 2,
+    urgent: true,
+    requires_place: false,
+  }]);
+  assert.deepStrictEqual(vals.interests, [{
+    label: 'Plex servers',
+    kind: 'product',
+    terms: ['Plex', 'Plex Media Server'],
+    weight: 2,
+    urgent: true,
+    requires_place: false,
+  }]);
+  assert.deepStrictEqual(settings.getInterests(), vals.interests);
+  assert.throws(() => settings.set('interests', [{ label: 'No words', terms: [] }]), {
+    message: 'Interest 1 needs at least one matching word or phrase',
+  });
 });
 
 it('falls the told model back through the writer model to the general model', () => {
