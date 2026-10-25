@@ -85,3 +85,11 @@ After this stage, Settings is one page in the newspaper look, in five parts:
 - Tests: interests validation and round-trip; try endpoint on a real fixture;
   cap/quiet-hours read from settings; hidden section skipped; learning switch
   off leaves order unchanged. New tests fail on the old code.
+
+---
+
+## Decisions (2026-10-25)
+
+Jesse: "I'm happy to go with your suggestions." So: one page with a contents
+list; Categories and Preferences tabs removed (table kept); sections can be
+reordered and hidden, not renamed or added.
