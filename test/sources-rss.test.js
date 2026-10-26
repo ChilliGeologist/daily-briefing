@@ -15,6 +15,43 @@ const log = {
 };
 
 describe('RSS source', () => {
+  it('retries an https feed over IPv4 when the ordinary fetch transport fails', async () => {
+    const xml = '<?xml version="1.0"?><rss version="2.0"><channel><title>Kottke</title><item><title>Readable item</title><link>https://kottke.org/item</link></item></channel></rss>';
+    const calls = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('fetch failed'); };
+    try {
+      const result = await fetchRSS({ name: 'Kottke', url: 'https://feeds.kottke.org/main' }, log, {
+        fetchImpl: async url => { calls.push(['ordinary', url]); throw new Error('fetch failed'); },
+        ipv4FetchImpl: async (url, options) => {
+          calls.push(['ipv4', url, options.headers['User-Agent']]);
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            headers: { get: name => name.toLowerCase() === 'content-type' ? 'text/xml' : null },
+            text: async () => xml,
+          };
+        },
+      });
+
+      assert.deepStrictEqual({
+        calls,
+        error: result.error,
+        items: result.items.map(item => ({ title: item.title, url: item.url, source_name: item.source_name })),
+      }, {
+        calls: [
+          ['ordinary', 'https://feeds.kottke.org/main'],
+          ['ipv4', 'https://feeds.kottke.org/main', 'DailyBriefing/2.0'],
+        ],
+        error: null,
+        items: [{ title: 'Readable item', url: 'https://kottke.org/item', source_name: 'Kottke' }],
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('reports a plain error for an HTML content-type', async () => {
     const server = http.createServer((_request, response) => {
       response.setHeader('content-type', 'text/html; charset=utf-8');

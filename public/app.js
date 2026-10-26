@@ -1743,14 +1743,45 @@ function renderToldPanel(told) {
 
 function renderReadingStory(item, lead, showPicture) {
   var key = storyKey(item);
-  var picture = showPicture ? renderFrontPagePicture(item, lead) : null;
-  var toldPanel = item.told ? window.EditionLayout.prepareToldPanel(item.told) : null;
+  var brief = Boolean(item.brief);
+  var picture = !brief && showPicture ? renderFrontPagePicture(item, lead) : null;
+  var toldPanel = !brief && item.told ? window.EditionLayout.prepareToldPanel(item.told) : null;
   var story = el('article', {
     className: 'reading-story' + (lead ? ' reading-story--lead' : '') +
       (picture ? ' reading-story--pictured' : '') +
-      (lead && !picture ? ' reading-story--lead-type' : ''),
+      (lead && !picture ? ' reading-story--lead-type' : '') +
+      (brief ? ' reading-story--brief' : ''),
     'data-story-id': key
   });
+  if (brief) {
+    var briefLine = el('div', { className: 'reading-story-open reading-story-brief-line' });
+    var briefUrl = firstSafeSourceUrl(item);
+    briefLine.appendChild(briefUrl ? el('a', {
+      className: 'reading-story-title',
+      href: briefUrl,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      textContent: item.title || 'Untitled story'
+    }) : el('span', { className: 'reading-story-title', textContent: item.title || 'Untitled story' }));
+    var briefSources = window.ReadingLogic.parseSources(item.sources);
+    briefSources.forEach(function(source, index) {
+      var name = typeof source === 'string' ? source : source && source.name;
+      // Feed names carry how we reach the outlet ("AP (Google News)"); show the outlet.
+      if (name) name = String(name).replace(/\s*\(Google News\)$/i, '');
+      if (!name) return;
+      briefLine.appendChild(document.createTextNode(index === 0 ? ' — ' : ' · '));
+      var sourceUrl = safeUrl(source && typeof source === 'object' ? source.url : '');
+      briefLine.appendChild(sourceUrl ? el('a', {
+        className: 'reading-story-brief-source',
+        href: sourceUrl,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        textContent: name
+      }) : el('span', { className: 'reading-story-brief-source', textContent: name }));
+    });
+    story.appendChild(briefLine);
+    return story;
+  }
   var summaryChildren = [];
   if (picture) summaryChildren.push(picture);
   if (item.kicker) summaryChildren.push(el('span', { className: 'reading-story-kicker', textContent: item.kicker }));

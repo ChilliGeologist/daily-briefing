@@ -1,7 +1,55 @@
 'use strict';
 
+const https = require('node:https');
 const RSSParser = require('rss-parser');
 const WARNING_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+
+function fetchHttpsIPv4(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, {
+      method: 'GET',
+      headers: options.headers,
+      signal: options.signal,
+      family: 4,
+    }, response => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      response.on('error', reject);
+      response.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok: response.statusCode >= 200 && response.statusCode < 300,
+          status: response.statusCode,
+          statusText: response.statusMessage || '',
+          headers: {
+            get(name) {
+              const value = response.headers[String(name).toLowerCase()];
+              return Array.isArray(value) ? value.join(', ') : (value || null);
+            },
+          },
+          text: async () => body,
+        });
+      });
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+async function fetchFeedResponse(source, options, { fetchImpl, ipv4FetchImpl }) {
+  try {
+    return await fetchImpl(source.url, options);
+  } catch (error) {
+    // fetch throws only on transport failure (HTTP errors resolve normally).
+    // The container has no working IPv6 route, and some feed hosts (seen with
+    // feeds.kottke.org) advertise AAAA records that fetch's address selection
+    // picks and never recovers from. One retry pinned to IPv4 covers that for
+    // any https feed; an abort is a timeout and is not retried.
+    if (error && error.name === 'AbortError') throw error;
+    if (!/^https:/i.test(String(source.url))) throw error;
+    return ipv4FetchImpl(source.url, options);
+  }
+}
 
 function stripHTML(html) {
   if (!html) return '';
@@ -138,7 +186,10 @@ async function parseReleaseFeed(body, source) {
   }).map(item => normaliseFeedItem(item, source, { default_category: 'homelab' }));
 }
 
-async function fetchRSS(source, log) {
+async function fetchRSS(source, log, {
+  fetchImpl = globalThis.fetch,
+  ipv4FetchImpl = fetchHttpsIPv4,
+} = {}) {
   const start = Date.now();
   const parser = new RSSParser();
 
@@ -147,14 +198,15 @@ async function fetchRSS(source, log) {
     const timeout = setTimeout(() => controller.abort(), 15000);
     let response;
     try {
-      response = await fetch(source.url, {
+      const requestOptions = {
         headers: {
           'User-Agent': source.config && source.config.kind === 'warning'
             ? WARNING_USER_AGENT
             : 'DailyBriefing/2.0',
         },
         signal: controller.signal,
-      });
+      };
+      response = await fetchFeedResponse(source, requestOptions, { fetchImpl, ipv4FetchImpl });
     } finally {
       clearTimeout(timeout);
     }
@@ -214,4 +266,5 @@ module.exports = {
   parseReleaseFeed,
   versionOf,
   WARNING_USER_AGENT,
+  fetchHttpsIPv4,
 };

@@ -651,7 +651,8 @@ function isSingleOutletWithoutInterest(story) {
 }
 
 function eligibleTopCandidate(story, techCount) {
-  return !hasOnlyCommunitySources(story)
+  return !story.brief
+    && !hasOnlyCommunitySources(story)
     && !isSingleOutletWithoutInterest(story)
     && !(story.no_solo_top && sourceOutletCount(story) <= 1)
     && (!TOP_TECH_SECTIONS.has(story.section) || techCount < 2);
@@ -665,7 +666,8 @@ function repairTopSelection(initialTop, stories, target) {
   for (const id of initialTop) {
     const story = byId.get(id);
     let reason = null;
-    if (hasOnlyCommunitySources(story)) reason = 'community-only source';
+    if (story.brief) reason = 'brief';
+    else if (hasOnlyCommunitySources(story)) reason = 'community-only source';
     else if (story.no_solo_top && sourceOutletCount(story) <= 1) reason = 'source is not eligible for solo top';
     else if (isSingleOutletWithoutInterest(story)) {
       reason = 'single-outlet story without an interest match';
@@ -728,7 +730,7 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
     // Stories three or more outlets carried lead their section: the editor
     // put a small "Show HN" app above a story seven outlets ran.
     const wide = deterministicOrder(stories)
-      .filter(story => story.section === sectionId && (Number(story.coverage) || 0) >= 3)
+      .filter(story => !story.brief && story.section === sectionId && (Number(story.coverage) || 0) >= 3)
       .map(story => story.id);
     // Then stories about something the reader runs or uses (Plex, Unraid, the
     // arr apps): the editor left "Plex 1.6" and an arr-suite replacement in "more".
@@ -736,18 +738,26 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
     // Coles and Woolworths bag fees rose to third in Australia.
     const product = stories
       .filter(story => story.section === sectionId
+        && !story.brief
         && (story.interest_matches || []).some(match => match.kind === 'product')
         && !(TOP_NEWS_SECTIONS.has(sectionId) && hasOnlyCommunitySources(story)))
       .sort((a, b) => interestScore(b.interest_matches) - interestScore(a.interest_matches))
       .map(story => story.id);
     for (const id of [...wide, ...product, ...(preferred[sectionId] || [])]) {
       const story = byId.get(id);
-      if (!story || story.section !== sectionId || placed.has(id) || sections[sectionId].length >= sectionSize) continue;
+      if (!story || story.brief || story.section !== sectionId || placed.has(id) || sections[sectionId].length >= sectionSize) continue;
       sections[sectionId].push(id);
       placed.add(id);
     }
     for (const story of storiesByRank(stories)) {
-      if (story.section !== sectionId || topSet.has(story.id) || placed.has(story.id)) continue;
+      if (story.brief || story.section !== sectionId || topSet.has(story.id) || placed.has(story.id)) continue;
+      if (sections[sectionId].length < sectionSize) {
+        sections[sectionId].push(story.id);
+        placed.add(story.id);
+      }
+    }
+    for (const story of storiesByRank(stories)) {
+      if (!story.brief || story.section !== sectionId || topSet.has(story.id) || placed.has(story.id)) continue;
       if (sections[sectionId].length < sectionSize) {
         sections[sectionId].push(story.id);
         placed.add(story.id);
@@ -755,7 +765,11 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
     }
   }
 
-  for (const story of storiesByRank(stories)) {
+  const remaining = [
+    ...storiesByRank(stories).filter(story => !story.brief),
+    ...storiesByRank(stories).filter(story => story.brief),
+  ];
+  for (const story of remaining) {
     if (!placed.has(story.id) && isSectionId(story.section)) more[story.section].push(story.id);
   }
   return { sections, more };

@@ -95,6 +95,17 @@ function tokenize(text) {
     .filter(token => token.length >= 3 || /^\d+$/.test(token));
 }
 
+function titleSimilarity(left, right) {
+  const leftTokens = new Set(tokenize(left));
+  const rightTokens = new Set(tokenize(right));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return { score: 0, shared: 0 };
+  const shared = [...leftTokens].filter(token => rightTokens.has(token)).length;
+  return {
+    score: shared / Math.sqrt(leftTokens.size * rightTokens.size),
+    shared,
+  };
+}
+
 function makeUnionFind(size) {
   const parent = Array.from({ length: size }, (_, index) => index);
   const ranks = new Array(size).fill(0);
@@ -326,4 +337,4 @@ async function clusterItems(items, {
   };
 }
 
-module.exports = { tokenize, substantialContentOverlap, deterministicSameStory, clusterItems };
+module.exports = { tokenize, titleSimilarity, substantialContentOverlap, deterministicSameStory, clusterItems };

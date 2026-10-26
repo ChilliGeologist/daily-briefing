@@ -40,6 +40,7 @@ function readerStory(story, significance) {
     interest_labels: (story.interest_matches || []).map(match => match.label).filter(Boolean),
     written_by: story.written_by,
     reading_time: readingTime(story.summary),
+    ...(story.brief ? { brief: true } : {}),
   };
   if (isCommunityItem(story)) {
     output.description = String(story.description || '').trim().slice(0, COMMUNITY_POST_CHARS);

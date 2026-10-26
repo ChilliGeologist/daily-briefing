@@ -4,13 +4,145 @@ const { Readability } = require('@mozilla/readability');
 const { parseHTML } = require('linkedom');
 const RSSParser = require('rss-parser');
 const { redditRequestQueue } = require('../reddit-request-queue');
+const { titleSimilarity } = require('./cluster');
 const { isGoogleNewsUrl, resolveGoogleNewsUrl } = require('./gnews');
+const { stripPublisherSuffix } = require('./normalise');
 const { sanitiseHtml } = require('./sanitise');
 
 const FETCH_TIMEOUT_MS = 10000;
 const CONCURRENCY = 5;
 const TOP_COMMENTS = 8;
 const USER_AGENT = 'DailyBriefing/2.0';
+const READABLE_COPY_OUTLETS = Object.freeze([
+  'bbc.com',
+  'theguardian.com',
+  'abc.net.au',
+  'aljazeera.com',
+  'sbs.com.au',
+]);
+const READABLE_COPY_LOOKUP_LIMIT = 15;
+const READABLE_COPY_TIMEOUT_MS = 12000;
+const READABLE_COPY_TITLE_SIMILARITY = 0.55;
+const READABLE_COPY_MIN_SHARED_WORDS = 3;
+const READABLE_COPY_CONCURRENCY = 3;
+
+function countWords(text) {
+  return (String(text || '').trim().match(/\S+/g) || []).length;
+}
+
+function cleanGoogleNewsTitle(title) {
+  return stripPublisherSuffix(String(title || '').trim()).title;
+}
+
+function distinctClusterOutlets(cluster) {
+  const names = (cluster.items || []).map(item => item.outlet || item.source_name)
+    .map(name => String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLocaleLowerCase('en-AU'))
+    .filter(Boolean);
+  return new Set(names).size;
+}
+
+function isReadableCopyUrl(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+    return READABLE_COPY_OUTLETS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch (_) {
+    return false;
+  }
+}
+
+function readableCopySearchUrl(headline) {
+  const sites = READABLE_COPY_OUTLETS.map(domain => `site:${domain}`).join(' OR ');
+  const query = `${cleanGoogleNewsTitle(headline)} (${sites}) when:1d`;
+  const url = new URL('https://news.google.com/rss/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('hl', 'en-AU');
+  url.searchParams.set('gl', 'AU');
+  url.searchParams.set('ceid', 'AU:en');
+  return url.toString();
+}
+
+function combinedSignal(left, right) {
+  const signals = [left, right].filter(Boolean);
+  if (signals.length < 2) return signals[0];
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) controller.abort(signal.reason);
+    else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
+}
+
+async function withinTimeout(timeoutMs, task) {
+  const controller = new AbortController();
+  let rejectTimeout;
+  const timeoutPromise = new Promise((_resolve, reject) => { rejectTimeout = reject; });
+  const timeout = setTimeout(() => {
+    controller.abort();
+    rejectTimeout(new Error(`Readable-copy lookup timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+  try {
+    return await Promise.race([task(controller.signal), timeoutPromise]);
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+  }
+}
+
+async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore }) {
+  return withinTimeout(timeoutMs, async lookupSignal => {
+    const scopedFetch = (url, options = {}) => fetchImpl(url, {
+      ...options,
+      signal: combinedSignal(options.signal, lookupSignal),
+    });
+    const headline = cleanGoogleNewsTitle(cluster.lead && cluster.lead.title);
+    const searchUrl = readableCopySearchUrl(headline);
+    const searchResponse = await scopedFetch(searchUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'follow',
+    });
+    if (!searchResponse.ok) throw new Error(`Google News search HTTP ${searchResponse.status}`);
+
+    const parser = new RSSParser();
+    const feed = await parser.parseString(await searchResponse.text());
+    const matches = (feed.items || []).map(item => {
+      const parts = stripPublisherSuffix(String(item.title || '').trim());
+      return { item, parts, similarity: titleSimilarity(headline, parts.title) };
+    }).filter(candidate => candidate.item.link
+      && candidate.similarity.score >= READABLE_COPY_TITLE_SIMILARITY
+      && candidate.similarity.shared >= READABLE_COPY_MIN_SHARED_WORDS)
+      .sort((left, right) => (right.similarity.score - left.similarity.score)
+        || (right.similarity.shared - left.similarity.shared));
+    if (matches.length === 0) return null;
+
+    const best = matches[0];
+    const resolved = await googleSemaphore.run(() => resolveGoogleNewsUrl(best.item.link, { fetchImpl: scopedFetch }));
+    if (!resolved || !isReadableCopyUrl(resolved)) return null;
+    const article = await extractArticle(resolved, null, scopedFetch);
+    if (countWords(article.article_content) < 40) return null;
+
+    const parsedUrl = new URL(article.canonical_url);
+    const sourceName = best.parts.publisher || parsedUrl.hostname.replace(/^www\./i, '');
+    return {
+      article,
+      item: {
+        title: best.parts.title,
+        description: String(best.item.contentSnippet || best.item.content || '').trim(),
+        source_name: sourceName,
+        source_type: 'rss',
+        source_priority: 1,
+        outlet: parsedUrl.hostname.replace(/^www\./i, '').toLowerCase(),
+        url: article.canonical_url,
+        canonical_url: article.canonical_url,
+        published: best.item.isoDate || best.item.pubDate || null,
+        article_content: article.article_content,
+        article_html: article.article_html,
+        article_url: article.canonical_url,
+        readable_copy: true,
+      },
+    };
+  });
+}
 
 function isRedditUrl(url) {
   if (!url) return false;
@@ -258,7 +390,10 @@ function orderedCandidates(cluster, paywalledHosts) {
     .map(candidate => candidate.item);
 }
 
-async function extractClusters(clusters, settings, log, emitProgress, { fetchImpl = globalThis.fetch } = {}) {
+async function extractClusters(clusters, settings, log, emitProgress, {
+  fetchImpl = globalThis.fetch,
+  readableCopyTimeoutMs = READABLE_COPY_TIMEOUT_MS,
+} = {}) {
   const total = clusters.length;
   const stats = {
     attempted: 0,
@@ -269,6 +404,8 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
     gnews_resolved: 0,
     gnews_failed: 0,
     boilerplate_discarded: 0,
+    readable_copy_lookups: 0,
+    readable_copies_found: 0,
   };
   const googleSemaphore = makeSemaphore(2);
   const paywalledHosts = new Set(settings.getPaywalledHosts()
@@ -320,8 +457,9 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
 
       try {
         const article = await extractArticle(url, log, fetchImpl);
-        if (article.article_content.length < 400) {
-          throw new Error(`Article text too short (${article.article_content.length} characters)`);
+        const articleWords = countWords(article.article_content);
+        if (articleWords < 40) {
+          throw new Error(`Article text too short (${articleWords} words)`);
         }
         cluster.article_text = article.article_content;
         cluster.article_html = article.article_html;
@@ -341,8 +479,9 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
         const { item, url } = deferred;
         try {
           const article = await extractArticle(url, log, fetchImpl);
-          if (article.article_content.length < 400) {
-            throw new Error(`Article text too short (${article.article_content.length} characters)`);
+          const articleWords = countWords(article.article_content);
+          if (articleWords < 40) {
+            throw new Error(`Article text too short (${articleWords} words)`);
           }
           cluster.article_text = article.article_content;
           cluster.article_html = article.article_html;
@@ -430,8 +569,47 @@ async function extractClusters(clusters, settings, log, emitProgress, { fetchImp
       `Discarded shared page text from ${host} for ${matches.length} stories`);
   }
 
+  const readableCopyCandidates = clusters
+    .filter(cluster => distinctClusterOutlets(cluster) >= 2 && countWords(cluster.article_text) < 40)
+    .slice(0, READABLE_COPY_LOOKUP_LIMIT);
+  let readableCursor = 0;
+  async function readableCopyWorker() {
+    while (true) {
+      const index = readableCursor++;
+      if (index >= readableCopyCandidates.length) return;
+      const cluster = readableCopyCandidates[index];
+      stats.readable_copy_lookups++;
+      try {
+        const recovered = await findReadableCopy(cluster, {
+          fetchImpl,
+          timeoutMs: readableCopyTimeoutMs,
+          googleSemaphore,
+        });
+        if (!recovered) continue;
+        const previouslyFailed = !cluster.article_text;
+        cluster.article_text = recovered.article.article_content;
+        cluster.article_html = recovered.article.article_html;
+        cluster.article_url = recovered.article.canonical_url;
+        cluster.items.push(recovered.item);
+        cluster.outlets = [...new Set([...(cluster.outlets || []), recovered.item.outlet])];
+        cluster.coverage = Math.max(Number(cluster.coverage) || 0, distinctClusterOutlets(cluster));
+        stats.readable_copies_found++;
+        if (previouslyFailed) stats.articles++;
+        if (previouslyFailed && stats.failures > 0) stats.failures--;
+      } catch (error) {
+        log.warn('pipeline:extract', `Readable-copy lookup failed for "${cluster.lead && cluster.lead.title}": ${error.message}`);
+      }
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(READABLE_COPY_CONCURRENCY, readableCopyCandidates.length) },
+    () => readableCopyWorker()
+  ));
+
   log.info('pipeline:extract',
     `Extracted ${total} stories: ${stats.articles} articles, ${stats.discussions} discussion posts, ${stats.comments} comment sets, ${stats.failures} failures, Google News ${stats.gnews_resolved} resolved / ${stats.gnews_failed} failed, ${stats.boilerplate_discarded} boilerplate discarded`);
+  log.info('pipeline:extract',
+    `Readable-copy lookup: ${stats.readable_copy_lookups} tried, ${stats.readable_copies_found} found`);
   return { clusters, stats };
 }
 
@@ -443,4 +621,8 @@ module.exports = {
   redditPermalinkUrl,
   parseRedditComments,
   extractRedditComments,
+  READABLE_COPY_OUTLETS,
+  READABLE_COPY_LOOKUP_LIMIT,
+  READABLE_COPY_TIMEOUT_MS,
+  readableCopySearchUrl,
 };
