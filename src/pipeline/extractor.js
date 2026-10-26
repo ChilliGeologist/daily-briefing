@@ -107,7 +107,7 @@ function distinctiveWordOverlap(original, candidate, outletNames) {
   return [...originalWords].filter(word => candidateWords.has(word)).length;
 }
 
-async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore, judge }) {
+async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore, judge, trace = () => {} }) {
   return withinTimeout(timeoutMs, async lookupSignal => {
     const scopedFetch = (url, options = {}) => fetchImpl(url, {
       ...options,
@@ -141,6 +141,7 @@ async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore
       && candidate.overlap >= READABLE_COPY_MIN_DISTINCTIVE_WORDS)
       .sort((left, right) => (right.overlap - left.overlap) || (left.index - right.index))
       .slice(0, READABLE_COPY_MAX_CANDIDATES);
+    trace('search', { results: (feed.items || []).length, candidates: matches.length });
     if (matches.length === 0) return null;
 
     let best = null;
@@ -154,10 +155,13 @@ async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore
         break;
       }
     }
+    trace('judge', { confirmed: Boolean(best) });
     if (!best) return null;
     const resolved = await googleSemaphore.run(() => resolveGoogleNewsUrl(best.item.link, { fetchImpl: scopedFetch }));
+    trace('resolve', { url: resolved || null, readable: Boolean(resolved && isReadableCopyUrl(resolved)) });
     if (!resolved || !isReadableCopyUrl(resolved)) return null;
     const article = await extractArticle(resolved, null, scopedFetch);
+    trace('extract', { words: countWords(article.article_content) });
     if (countWords(article.article_content) < 40) return null;
 
     const parsedUrl = new URL(article.canonical_url);
@@ -625,6 +629,8 @@ async function extractClusters(clusters, settings, log, emitProgress, {
           timeoutMs: readableCopyTimeoutMs,
           googleSemaphore,
           judge,
+          // One debug line per stage so a lookup that finds nothing says where it stopped.
+          trace: (stage, detail) => log.debug('pipeline:extract', `Readable-copy ${stage}: "${cluster.lead && cluster.lead.title}"`, detail),
         });
         if (!recovered) continue;
         const previouslyFailed = !cluster.article_text;
