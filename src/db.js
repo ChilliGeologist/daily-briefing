@@ -277,6 +277,9 @@ function initDB(dbPath) {
           if (Array.isArray(section.more)) {
             itemCount += section.more.length;
           }
+          if (Array.isArray(section.briefs)) {
+            itemCount += section.briefs.length;
+          }
         }
       }
       const headline = briefingData.headline || null;

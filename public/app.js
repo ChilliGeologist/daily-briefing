@@ -1417,7 +1417,7 @@ async function loadBriefing(id) {
     syncEditionLayout();
     var thumbSections = [];
     var prepared = window.ReadingLogic.prepareSections(briefing.sections || []).filter(function(group) {
-      return group.shown.length > 0 || group.hidden.length > 0;
+      return group.shown.length > 0 || (group.briefs || []).length > 0 || group.hidden.length > 0;
     });
     window.EditionLayout.planSectionBands(prepared).forEach(function(band) {
       var renderedBand = renderReadingBand(band);
@@ -1581,6 +1581,16 @@ function renderReadingSection(group) {
     group.shown.forEach(function(item, index) {
       storyKey(item);
       shownList.appendChild(renderReadingStory(item, false, pictureIndex === index));
+    });
+  }
+  if (group.briefs && group.briefs.length) {
+    shownList.appendChild(el('div', {
+      className: 'reading-briefs-label',
+      textContent: 'Also reported'
+    }));
+    group.briefs.forEach(function(item) {
+      storyKey(item);
+      shownList.appendChild(renderReadingStory(item, false, false));
     });
   }
   sectionEl.appendChild(shownList);

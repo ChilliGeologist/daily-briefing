@@ -128,8 +128,9 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stage = 'cluster';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'cluster', status: 'running' });
+    const sameStoryJudge = makeJudge(ollama, settings, runLog);
     const { clusters, stats: clusterStats } = await clusterItems(kept, {
-      judge: makeJudge(ollama, settings, runLog),
+      judge: sameStoryJudge,
       maxChecks: settings.getMaxSameStoryChecks(),
       log: runLog,
     });
@@ -165,7 +166,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'extract', status: 'running' });
     const { clusters: extractedClusters, stats: extractStats } = await extractClusters(
-      selected, settings, runLog, emitProgress
+      selected, settings, runLog, emitProgress, { judge: sameStoryJudge }
     );
     const extracted = extractedClusters.map(toItem);
     await saveCandidates(extracted, {

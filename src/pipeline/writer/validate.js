@@ -29,6 +29,7 @@ const {
 } = require('./sections');
 
 const SECTION_IDS = SECTIONS.map(section => section.id);
+const BRIEFS_PER_SECTION = 3;
 const TOP_TECH_SECTIONS = new Set(['tech', 'homelab', 'gaming', 'internet']);
 const TOP_NEWS_SECTIONS = new Set(['tasmania', 'australia', 'world']);
 // Only phrasing about the supplied text itself. Ordinary reporting such as
@@ -722,6 +723,7 @@ function enforceLead(top, stories) {
 function placeRemaining(stories, top, sectionSize, preferred = emptySections()) {
   const sections = emptySections();
   const more = emptySections();
+  const briefs = emptySections();
   const topSet = new Set(top);
   const byId = new Map(stories.map(story => [story.id, story]));
   const placed = new Set(top);
@@ -758,29 +760,27 @@ function placeRemaining(stories, top, sectionSize, preferred = emptySections()) 
     }
     for (const story of storiesByRank(stories)) {
       if (!story.brief || story.section !== sectionId || topSet.has(story.id) || placed.has(story.id)) continue;
-      if (sections[sectionId].length < sectionSize) {
-        sections[sectionId].push(story.id);
-        placed.add(story.id);
-      }
+      if (briefs[sectionId].length >= BRIEFS_PER_SECTION) continue;
+      briefs[sectionId].push(story.id);
+      placed.add(story.id);
     }
   }
 
-  const remaining = [
-    ...storiesByRank(stories).filter(story => !story.brief),
-    ...storiesByRank(stories).filter(story => story.brief),
-  ];
+  const remaining = storiesByRank(stories).filter(story => !story.brief);
   for (const story of remaining) {
     if (!placed.has(story.id) && isSectionId(story.section)) more[story.section].push(story.id);
   }
-  return { sections, more };
+  const hasBriefs = SECTION_IDS.some(sectionId => briefs[sectionId].length > 0);
+  return { sections, more, ...(hasBriefs ? { briefs } : {}) };
 }
 
 function deterministicEdit(stories, { sectionSize, topSize }) {
-  const ordered = deterministicOrder(stories);
+  const ordered = deterministicOrder(stories).filter(story => !story.brief);
   const qualified = ordered.filter(story => (Number(story.coverage) || 0) >= 3 || (story.interest_matches || []).length > 0);
   const rest = ordered.filter(story => !qualified.includes(story));
-  const initialTop = [...qualified, ...rest].slice(0, Math.min(topSize.min, stories.length)).map(story => story.id);
-  const repaired = repairTopSelection(initialTop, stories, Math.min(topSize.min, stories.length));
+  const topTarget = Math.min(topSize.min, ordered.length);
+  const initialTop = [...qualified, ...rest].slice(0, topTarget).map(story => story.id);
+  const repaired = repairTopSelection(initialTop, stories, topTarget);
   const top = enforceLead(repaired.top, stories);
   const placed = placeRemaining(stories, top, sectionSize);
   return {
@@ -820,7 +820,8 @@ function validateEdit(raw, stories, { sectionSize, topSize }) {
     problems.push(`Top list had more than ${topSize.max} valid stories and was clamped`);
     top.length = topSize.max;
   }
-  const minimumTop = Math.min(topSize.min, stories.length);
+  const regularStoryCount = stories.filter(story => !story.brief).length;
+  const minimumTop = Math.min(topSize.min, regularStoryCount);
   if (top.length < minimumTop) {
     problems.push(`Top list had fewer than ${topSize.min} valid stories and was filled`);
   }
@@ -858,6 +859,7 @@ function validateEdit(raw, stories, { sectionSize, topSize }) {
         problems.push(`Story ${id} was placed in the wrong section`);
         continue;
       }
+      if (story.brief) continue;
       if (assigned.has(id)) {
         problems.push(`Duplicate section story id: ${id}`);
         continue;

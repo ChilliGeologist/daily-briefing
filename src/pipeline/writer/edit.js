@@ -8,6 +8,7 @@ async function editStories(stories, writer, settings, log) {
     sectionSize: settings.getSectionSize(),
     topSize: settings.getTopSize(),
   };
+  const editableStories = stories.filter(story => !story.brief);
   let edited;
   let stats = {
     input_tokens: 0,
@@ -20,8 +21,8 @@ async function editStories(stories, writer, settings, log) {
   try {
     const response = await writer.edit(
       editSystemPrompt(),
-      editUserPrompt(stories, { sectionSize: options.sectionSize }),
-      editSchema(stories.map(story => story.id))
+      editUserPrompt(editableStories, { sectionSize: options.sectionSize }),
+      editSchema(editableStories.map(story => story.id))
     );
     edited = validateEdit(response.json, stories, options);
     const usage = response.usage || {};
@@ -52,6 +53,7 @@ async function editStories(stories, writer, settings, log) {
     top: edited.top,
     sections: edited.sections,
     more: edited.more,
+    ...(edited.briefs ? { briefs: edited.briefs } : {}),
     problems: edited.problems || [],
     stats,
   };

@@ -4,7 +4,7 @@ const { Readability } = require('@mozilla/readability');
 const { parseHTML } = require('linkedom');
 const RSSParser = require('rss-parser');
 const { redditRequestQueue } = require('../reddit-request-queue');
-const { titleSimilarity } = require('./cluster');
+const { tokenize, capitalisedEntities } = require('./cluster');
 const { isGoogleNewsUrl, resolveGoogleNewsUrl } = require('./gnews');
 const { stripPublisherSuffix } = require('./normalise');
 const { sanitiseHtml } = require('./sanitise');
@@ -22,8 +22,8 @@ const READABLE_COPY_OUTLETS = Object.freeze([
 ]);
 const READABLE_COPY_LOOKUP_LIMIT = 15;
 const READABLE_COPY_TIMEOUT_MS = 12000;
-const READABLE_COPY_TITLE_SIMILARITY = 0.55;
-const READABLE_COPY_MIN_SHARED_WORDS = 3;
+const READABLE_COPY_MIN_DISTINCTIVE_WORDS = 2;
+const READABLE_COPY_MAX_CANDIDATES = 3;
 const READABLE_COPY_CONCURRENCY = 3;
 
 function countWords(text) {
@@ -89,7 +89,25 @@ async function withinTimeout(timeoutMs, task) {
   }
 }
 
-async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore }) {
+function distinctiveWords(title, outletNames = []) {
+  const outletWords = new Set(outletNames.flatMap(name => tokenize(name)));
+  // tokenize supplies stopword removal and keeps numbers. Tokenising the
+  // capitalised entities as well makes the intended proper-name signal
+  // explicit while retaining the same word-level overlap measure.
+  const words = [
+    ...tokenize(title),
+    ...[...capitalisedEntities(title)].flatMap(entity => tokenize(entity)),
+  ];
+  return new Set(words.filter(word => !outletWords.has(word)));
+}
+
+function distinctiveWordOverlap(original, candidate, outletNames) {
+  const originalWords = distinctiveWords(original, outletNames);
+  const candidateWords = distinctiveWords(candidate, outletNames);
+  return [...originalWords].filter(word => candidateWords.has(word)).length;
+}
+
+async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore, judge }) {
   return withinTimeout(timeoutMs, async lookupSignal => {
     const scopedFetch = (url, options = {}) => fetchImpl(url, {
       ...options,
@@ -105,17 +123,38 @@ async function findReadableCopy(cluster, { fetchImpl, timeoutMs, googleSemaphore
 
     const parser = new RSSParser();
     const feed = await parser.parseString(await searchResponse.text());
-    const matches = (feed.items || []).map(item => {
+    const clusterOutletNames = (cluster.items || []).flatMap(item => [
+      item.outlet,
+      item.publisher,
+      item.source_name,
+    ]).filter(Boolean);
+    const matches = (feed.items || []).map((item, index) => {
       const parts = stripPublisherSuffix(String(item.title || '').trim());
-      return { item, parts, similarity: titleSimilarity(headline, parts.title) };
+      const outletNames = [...clusterOutletNames, parts.publisher].filter(Boolean);
+      return {
+        item,
+        parts,
+        index,
+        overlap: distinctiveWordOverlap(headline, parts.title, outletNames),
+      };
     }).filter(candidate => candidate.item.link
-      && candidate.similarity.score >= READABLE_COPY_TITLE_SIMILARITY
-      && candidate.similarity.shared >= READABLE_COPY_MIN_SHARED_WORDS)
-      .sort((left, right) => (right.similarity.score - left.similarity.score)
-        || (right.similarity.shared - left.similarity.shared));
+      && candidate.overlap >= READABLE_COPY_MIN_DISTINCTIVE_WORDS)
+      .sort((left, right) => (right.overlap - left.overlap) || (left.index - right.index))
+      .slice(0, READABLE_COPY_MAX_CANDIDATES);
     if (matches.length === 0) return null;
 
-    const best = matches[0];
+    let best = null;
+    for (const candidate of matches) {
+      const sameStory = await judge(cluster.lead, {
+        title: candidate.parts.title,
+        description: String(candidate.item.contentSnippet || candidate.item.content || '').trim(),
+      });
+      if (sameStory) {
+        best = candidate;
+        break;
+      }
+    }
+    if (!best) return null;
     const resolved = await googleSemaphore.run(() => resolveGoogleNewsUrl(best.item.link, { fetchImpl: scopedFetch }));
     if (!resolved || !isReadableCopyUrl(resolved)) return null;
     const article = await extractArticle(resolved, null, scopedFetch);
@@ -393,6 +432,7 @@ function orderedCandidates(cluster, paywalledHosts) {
 async function extractClusters(clusters, settings, log, emitProgress, {
   fetchImpl = globalThis.fetch,
   readableCopyTimeoutMs = READABLE_COPY_TIMEOUT_MS,
+  judge = async () => false,
 } = {}) {
   const total = clusters.length;
   const stats = {
@@ -584,6 +624,7 @@ async function extractClusters(clusters, settings, log, emitProgress, {
           fetchImpl,
           timeoutMs: readableCopyTimeoutMs,
           googleSemaphore,
+          judge,
         });
         if (!recovered) continue;
         const previouslyFailed = !cluster.article_text;

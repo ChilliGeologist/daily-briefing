@@ -28,6 +28,16 @@ const HEADLINE_ECHO_SIMILARITY = 0.8;
 const HEADLINE_ECHO_MIN_SHARED_WORDS = 4;
 const HEADLINE_ECHO_PADDING = new Set(['report', 'reportedly']);
 const MAJOR_OUTLET_PATTERN = /^(?:AP|Associated Press|Reuters|Australian Associated Press|AAP|AFP|The Australian|Daily Telegraph|ABC(?: News)?|BBC(?: News)?|SBS(?: News)?|The Guardian(?: AU)?|Al Jazeera|CNN|NBC News|CBS News|The New York Times|The Washington Post|news\.com\.au|Sky News|7NEWS|9News)$/i;
+const NEWS_CORP_OUTLETS = Object.freeze(new Set([
+  'the australian',
+  'daily telegraph',
+  'news.com.au',
+  'the mercury',
+  'herald sun',
+  'courier mail',
+  'adelaide advertiser',
+  'sky news',
+]));
 const BRIEF_SECTION_BY_CATEGORY = Object.freeze({
   local: 'tasmania',
   tasmania: 'tasmania',
@@ -113,25 +123,55 @@ function isAdvertorial(item) {
   const copy = `${title}\n${item.description || ''}`;
   if (/^Cooking with\s+\S+/i.test(title)) return true;
   if (/\b(?:sponsored|in partnership with|brought to you by|paid partnership|advertorial)\b/i.test(copy)) return true;
-  const urls = [item.url, item.canonical_url, item.external_url, item.article_url];
+  const urls = [
+    item.url,
+    item.canonical_url,
+    item.external_url,
+    item.article_url,
+    ...(item.sources || []).map(source => source && source.url),
+    ...(item.outlet_versions || []).map(version => version && version.url),
+  ];
   return urls.some(raw => {
     const parsed = validUrl(raw);
     return Boolean(parsed && /\/(?:sponsored|branded|partner-content|advertorial)(?:\/|$)/i.test(parsed.pathname));
   });
 }
 
+function sourceNames(item) {
+  const names = (item.sources || []).map(source => source && source.name).filter(Boolean);
+  if (names.length === 0 && item.source_name) names.push(item.source_name);
+  return names.map(name => String(name).replace(/\s*\([^)]*\)\s*$/, '').trim()).filter(Boolean);
+}
+
 function distinctOutletCount(item) {
-  const normalise = name => String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLocaleLowerCase('en-AU');
-  const names = (item.sources || []).map(source => normalise(source && source.name)).filter(Boolean);
-  if (names.length === 0 && item.source_name) names.push(normalise(item.source_name));
-  return new Set(names).size;
+  return new Set(sourceNames(item).map(name => name.toLocaleLowerCase('en-AU'))).size;
+}
+
+function outletOwner(name) {
+  const normalised = String(name || '').toLocaleLowerCase('en-AU');
+  return NEWS_CORP_OUTLETS.has(normalised) ? 'News Corp' : normalised;
+}
+
+function isOpinionColumn(item) {
+  const urls = [
+    item.url,
+    item.canonical_url,
+    item.external_url,
+    item.article_url,
+    ...(item.sources || []).map(source => source && source.url),
+    ...(item.outlet_versions || []).map(version => version && version.url),
+  ];
+  return urls.some(raw => {
+    const parsed = validUrl(raw);
+    return Boolean(parsed && /\/(?:opinion|commentary)(?:\/|$)/i.test(parsed.pathname));
+  });
 }
 
 function isBriefEligible(item) {
-  if (distinctOutletCount(item) < 2) return false;
-  return [item.source_name, ...(item.sources || []).map(source => source && source.name)]
-    .map(name => String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim())
-    .some(name => MAJOR_OUTLET_PATTERN.test(name));
+  if (isAdvertorial(item) || isOpinionColumn(item)) return false;
+  const names = sourceNames(item);
+  const owners = new Set(names.map(outletOwner));
+  return owners.size >= 2 && names.some(name => MAJOR_OUTLET_PATTERN.test(name));
 }
 
 function briefSection(item, interests) {

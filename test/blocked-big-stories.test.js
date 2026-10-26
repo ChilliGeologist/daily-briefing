@@ -9,6 +9,7 @@ const { toItem } = require('../src/pipeline/toItem');
 const { writeStories, isBriefEligible } = require('../src/pipeline/writer/write');
 const { deterministicEdit, eligibleTopCandidate } = require('../src/pipeline/writer/validate');
 const { assemble } = require('../src/pipeline/assembler');
+const { prepareSections } = require('../public/reading-logic');
 
 const settings = {
   getPaywalledHosts: () => [],
@@ -60,6 +61,17 @@ function googleFeed(title, id = 'READABLE') {
     `<source url="https://www.bbc.com">BBC</source></item></channel></rss>`;
 }
 
+function googleFeedItems(items) {
+  const body = items.map(({ title, publisher, id }) =>
+    `<item><title>${title} - ${publisher}</title>` +
+    `<link>https://news.google.com/rss/articles/${id}?oc=5</link>` +
+    `<description>${title} - ${publisher}</description>` +
+    `<pubDate>Mon, 26 Oct 2026 00:00:00 GMT</pubDate>` +
+    `<source url="https://example.com">${publisher}</source></item>`
+  ).join('');
+  return `<?xml version="1.0"?><rss version="2.0"><channel><title>Google News</title>${body}</channel></rss>`;
+}
+
 const ARTICLE_TEXT = 'Brazilian voters will return to the polls for a run-off election after neither leading candidate secured an outright majority. Officials published the complete first-round count on Sunday, and both campaigns began seeking support from eliminated rivals. The second vote is scheduled for next month under the country\'s electoral rules.';
 const ARTICLE_HTML = `<!doctype html><html><head><title>Brazil election</title></head><body><article><h1>Brazil election</h1><p>${ARTICLE_TEXT}</p></article></body></html>`;
 
@@ -67,6 +79,7 @@ it('finds a readable copy for a blocked multi-outlet story and writes it with th
   const input = blockedCluster();
   const urls = [];
   const extracted = await extractClusters([input], settings, log, null, {
+    judge: async () => true,
     fetchImpl: async (url) => {
       urls.push(url);
       if (/^(?:https:\/\/ap\.test|https:\/\/reuters\.test)/.test(url)) throw new Error('blocked');
@@ -123,6 +136,111 @@ it('finds a readable copy for a blocked multi-outlet story and writes it with th
     }],
   });
   assert.strictEqual(urls.filter(url => url.startsWith('https://news.google.com/rss/search?')).length, 1);
+});
+
+it('accepts the Guardian Audi result only when the shared same-story judge says YES', async () => {
+  const makeInput = () => {
+    const input = blockedCluster();
+    input.lead.title = 'Trump announces at a Georgia campaign rally that Audi will build a new auto factory in the state - AP';
+    input.items[0].title = input.lead.title;
+    input.items[1].title = input.lead.title.replace(' - AP', ' - Reuters');
+    return input;
+  };
+  const candidate = 'Volkswagen to build $4bn Audi SUV factory in US despite job cuts at home';
+
+  async function run(verdict) {
+    const judgeCalls = [];
+    const urls = [];
+    const result = await extractClusters([makeInput()], settings, log, null, {
+      judge: async (original, found) => {
+        judgeCalls.push([original.title, original.description, found.title, found.description]);
+        return verdict;
+      },
+      fetchImpl: async url => {
+        urls.push(url);
+        if (/^(?:https:\/\/ap\.test|https:\/\/reuters\.test)/.test(url)) throw new Error('blocked');
+        if (url.startsWith('https://news.google.com/rss/search?')) {
+          return response(googleFeedItems([{ title: candidate, publisher: 'The Guardian', id: 'AUDI' }]), url, 'application/rss+xml');
+        }
+        if (url === 'https://news.google.com/rss/articles/AUDI') {
+          return response('<main data-n-a-sg="SIG" data-n-a-ts="123"></main>', url);
+        }
+        if (url.includes('/batchexecute')) {
+          return response(`[["x","[\\"garturlres\\",\\"https://www.theguardian.com/business/audi-factory\\"]"]]`, url);
+        }
+        if (url === 'https://www.theguardian.com/business/audi-factory') {
+          return response(ARTICLE_HTML, url);
+        }
+        throw new Error(`unexpected URL: ${url}`);
+      },
+    });
+    return {
+      judgeCalls,
+      stats: [result.stats.readable_copy_lookups, result.stats.readable_copies_found],
+      articleUrl: result.clusters[0].article_url,
+      resolvedCandidate: urls.includes('https://news.google.com/rss/articles/AUDI'),
+    };
+  }
+
+  assert.deepStrictEqual({
+    yes: await run(true),
+    no: await run(false),
+  }, {
+    yes: {
+      judgeCalls: [[
+        'Trump announces at a Georgia campaign rally that Audi will build a new auto factory in the state - AP',
+        'Brazil election heads to run-off 1 AP',
+        candidate,
+        `${candidate} - The Guardian`,
+      ]],
+      stats: [1, 1],
+      articleUrl: 'https://www.theguardian.com/business/audi-factory',
+      resolvedCandidate: true,
+    },
+    no: {
+      judgeCalls: [[
+        'Trump announces at a Georgia campaign rally that Audi will build a new auto factory in the state - AP',
+        'Brazil election heads to run-off 1 AP',
+        candidate,
+        `${candidate} - The Guardian`,
+      ]],
+      stats: [1, 0],
+      articleUrl: null,
+      resolvedCandidate: false,
+    },
+  });
+});
+
+it('never sends a one-distinctive-word search result to the judge', async () => {
+  const input = blockedCluster();
+  input.lead.title = 'Brazil votes in a tense Lula vs Bolsonaro runoff - AP';
+  input.items[0].title = input.lead.title;
+  input.items[1].title = input.lead.title.replace(' - AP', ' - Reuters');
+  const judgeCalls = [];
+  const result = await extractClusters([input], settings, log, null, {
+    judge: async (_original, candidate) => {
+      judgeCalls.push(candidate.title);
+      return false;
+    },
+    fetchImpl: async url => {
+      if (/^(?:https:\/\/ap\.test|https:\/\/reuters\.test)/.test(url)) throw new Error('blocked');
+      if (url.startsWith('https://news.google.com/rss/search?')) {
+        return response(googleFeedItems([
+          { title: 'Brazil economy grows after exports rise', publisher: 'SBS', id: 'ONE' },
+          { title: 'Lula defeats Bolsonaro in Brazil runoff vote', publisher: 'Al Jazeera', id: 'TWO' },
+        ]), url, 'application/rss+xml');
+      }
+      throw new Error(`candidate should not resolve after a NO verdict: ${url}`);
+    },
+  });
+
+  assert.deepStrictEqual({
+    judgeCalls,
+    stats: [result.stats.readable_copy_lookups, result.stats.readable_copies_found],
+  }, {
+    judgeCalls: ['Lula defeats Bolsonaro in Brazil runoff vote'],
+    stats: [1, 0],
+  });
 });
 
 it('keeps an unreadable major multi-outlet story as a section-ending brief outside You should know', async () => {
@@ -192,7 +310,7 @@ it('keeps an unreadable major multi-outlet story as a section-ending brief outsi
     stats: output.stats,
     eligibleTop: eligibleTopCandidate(brief, 0),
     edit,
-    paperWorld: world && world.items.concat(world.more).map(story => ({ id: story.id, brief: story.brief })),
+    paperWorld: world && world.items.concat(world.more, world.briefs || []).map(story => ({ id: story.id, brief: story.brief })),
     frontEnd: {
       markedBrief: renderer.includes("(brief ? ' reading-story--brief' : '')"),
       titleUsesDirectLink: briefBranch.includes("className: 'reading-story-title'") && briefBranch.includes("target: '_blank'"),
@@ -219,9 +337,9 @@ it('keeps an unreadable major multi-outlet story as a section-ending brief outsi
     eligibleTop: false,
     edit: {
       top: ['normal'],
-      sections: { tasmania: [], australia: [], world: ['normal-later', 's1'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+      sections: { tasmania: [], australia: [], world: ['normal-later'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
       more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
-      topReplacements: [{ removed: 's1', added: 'normal', reason: 'brief' }],
+      briefs: { tasmania: [], australia: [], world: ['s1'], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
     },
     paperWorld: [{ id: 'normal-later', brief: undefined }, { id: 's1', brief: true }],
     frontEnd: {
@@ -231,6 +349,72 @@ it('keeps an unreadable major multi-outlet story as a section-ending brief outsi
       returnsBeforeReaderButton: true,
       hasReaderAction: false,
     },
+  });
+});
+
+it('renders five normal section stories followed by an Also reported group of up to three briefs', () => {
+  const normal = Array.from({ length: 5 }, (_, index) => ({
+    id: `normal-${index + 1}`,
+    rank: index + 1,
+    coverage: 2,
+    section: 'world',
+    headline: `Normal story ${index + 1}`,
+    summary: `Normal summary ${index + 1}.`,
+    kicker: 'World news',
+    interest_matches: [],
+    sources: [{ name: 'Reuters' }],
+  }));
+  const briefs = [1, 2].map((number, index) => ({
+    id: `brief-${number}`,
+    rank: 6 + index,
+    coverage: 2,
+    section: 'world',
+    headline: `Brief story ${number}`,
+    summary: '',
+    kicker: '',
+    brief: true,
+    interest_matches: [],
+    sources: [{ name: 'AP' }, { name: 'Reuters' }],
+  }));
+  const stories = [...normal, ...briefs];
+  const edit = deterministicEdit(stories, { sectionSize: 5, topSize: { min: 0, max: 0 } });
+  const paper = assemble(edit, new Map(stories.map(story => [story.id, story])));
+  const world = paper.sections.find(section => section.id === 'world');
+  const prepared = prepareSections(paper.sections).find(group => group.section.id === 'world');
+  const appSource = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+
+  assert.deepStrictEqual({
+    edit,
+    world: {
+      items: world.items.map(item => item.id),
+      more: world.more.map(item => item.id),
+      briefs: world.briefs.map(item => item.id),
+    },
+    prepared: {
+      shown: prepared.shown.map(item => item.id),
+      briefs: prepared.briefs.map(item => item.id),
+    },
+    frontEnd: {
+      label: appSource.includes("textContent: 'Also reported'"),
+      rendersBriefGroup: appSource.includes('group.briefs.forEach'),
+    },
+  }, {
+    edit: {
+      top: [],
+      sections: { tasmania: [], australia: [], world: normal.map(story => story.id), tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+      more: { tasmania: [], australia: [], world: [], tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+      briefs: { tasmania: [], australia: [], world: briefs.map(story => story.id), tech: [], homelab: [], gaming: [], sport: [], internet: [] },
+    },
+    world: {
+      items: normal.map(story => story.id),
+      more: [],
+      briefs: briefs.map(story => story.id),
+    },
+    prepared: {
+      shown: normal.map(story => story.id),
+      briefs: briefs.map(story => story.id),
+    },
+    frontEnd: { label: true, rendersBriefGroup: true },
   });
 });
 
@@ -257,6 +441,38 @@ it('still drops a blocked single-outlet story as nothing behind the headline', a
     stories: [],
     dropped: [{ headline: 'Single blocked report', summary: '', write_problems: ['not news: nothing behind headline'] }],
     briefEligible: false,
+  });
+});
+
+it('requires two independent owners including a major outlet for a brief', () => {
+  const item = (sources, extra = {}) => ({
+    title: 'A blocked report',
+    source_name: sources[0].name,
+    sources,
+    ...extra,
+  });
+  assert.deepStrictEqual({
+    newsCorpOnly: isBriefEligible(item([
+      { name: 'Daily Telegraph', url: 'https://dailytelegraph.com.au/news/report' },
+      { name: 'The Australian', url: 'https://theaustralian.com.au/news/report' },
+    ])),
+    independentMajors: isBriefEligible(item([
+      { name: 'AP', url: 'https://apnews.com/report' },
+      { name: 'Reuters', url: 'https://reuters.com/report' },
+    ])),
+    sponsored: isBriefEligible(item([
+      { name: 'AP', url: 'https://apnews.com/report' },
+      { name: 'Reuters', url: 'https://reuters.com/report' },
+    ], { description: 'Sponsored content' })),
+    opinion: isBriefEligible(item([
+      { name: 'AP', url: 'https://apnews.com/opinion/report' },
+      { name: 'Reuters', url: 'https://reuters.com/report' },
+    ], { canonical_url: 'https://apnews.com/opinion/report' })),
+  }, {
+    newsCorpOnly: false,
+    independentMajors: true,
+    sponsored: false,
+    opinion: false,
   });
 });
 

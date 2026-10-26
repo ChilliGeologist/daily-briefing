@@ -337,4 +337,11 @@ async function clusterItems(items, {
   };
 }
 
-module.exports = { tokenize, titleSimilarity, substantialContentOverlap, deterministicSameStory, clusterItems };
+module.exports = {
+  tokenize,
+  capitalisedEntities,
+  titleSimilarity,
+  substantialContentOverlap,
+  deterministicSameStory,
+  clusterItems,
+};
