@@ -40,6 +40,7 @@ function readerStory(story, significance) {
     interest_labels: (story.interest_matches || []).map(match => match.label).filter(Boolean),
     written_by: story.written_by,
     reading_time: readingTime(story.summary),
+    ...(story.brief ? { brief: true } : {}),
   };
   if (isCommunityItem(story)) {
     output.description = String(story.description || '').trim().slice(0, COMMUNITY_POST_CHARS);
@@ -110,6 +111,7 @@ function assemble(edit, storiesById, meta = {}) {
     if (section.hidden) continue;
     const sectionItemIds = (edit.sections || {})[section.id] || [];
     const moreIds = (edit.more || {})[section.id] || [];
+    const briefIds = (edit.briefs || {})[section.id] || [];
     const ordered = orderSectionIds(
       [...sectionItemIds, ...moreIds].filter(id => !topSet.has(id)),
       storiesById,
@@ -127,8 +129,20 @@ function assemble(edit, storiesById, meta = {}) {
       'medium',
       new Set([...topSet, ...itemIds])
     );
-    if (items.length === 0 && more.length === 0) continue;
-    sections.push({ ...section, icon: 'globe', items, more });
+    const briefs = storiesForIds(
+      briefIds,
+      storiesById,
+      'medium',
+      new Set([...topSet, ...itemIds, ...more.map(item => item.id)])
+    ).slice(0, 3);
+    if (items.length === 0 && more.length === 0 && briefs.length === 0) continue;
+    sections.push({
+      ...section,
+      icon: 'globe',
+      items,
+      more,
+      ...(briefs.length > 0 ? { briefs } : {}),
+    });
   }
 
   const allStories = valuesOf(storiesById);
@@ -136,7 +150,8 @@ function assemble(edit, storiesById, meta = {}) {
   const headline = (firstTop && firstTop.headline)
     || (allStories[0] && allStories[0].headline)
     || 'The Daily Gump';
-  const totalItems = sections.reduce((total, section) => total + section.items.length + section.more.length, 0);
+  const totalItems = sections.reduce((total, section) =>
+    total + section.items.length + section.more.length + (section.briefs || []).length, 0);
   if (meta.log && meta.log.info) {
     meta.log.info('assembler', `Assembled briefing: ${sections.length} sections, ${totalItems} items total`);
     if (appliedNudges.length > 0) {

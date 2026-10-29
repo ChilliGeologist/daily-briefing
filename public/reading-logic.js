@@ -30,12 +30,15 @@
 
       var items = unique(section.items);
       var more = unique(section.more);
+      var briefs = unique(section.briefs);
 
-      return {
+      var prepared = {
         section: section,
         shown: items.concat(more),
         hidden: []
       };
+      if (Array.isArray(section.briefs)) prepared.briefs = briefs;
+      return prepared;
     });
   }
 
@@ -137,7 +140,7 @@
     var fallbackId = 0;
     var result = [];
     prepareSections(sections).forEach(function(group) {
-      group.shown.forEach(function(item) {
+      group.shown.concat(group.briefs || []).forEach(function(item) {
         if (!item || typeof item !== 'object') return;
         var hasStableId = item.id !== undefined && item.id !== null && item.id !== '';
         result.push({

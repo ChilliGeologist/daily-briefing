@@ -44,7 +44,9 @@
   }
 
   function storyCount(group) {
-    return Array.isArray(group && group.shown) ? group.shown.length : 0;
+    var shown = Array.isArray(group && group.shown) ? group.shown.length : 0;
+    var briefs = Array.isArray(group && group.briefs) ? group.briefs.length : 0;
+    return shown + briefs;
   }
 
   function shortOrdinarySection(group) {

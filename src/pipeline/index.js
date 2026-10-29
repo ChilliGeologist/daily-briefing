@@ -128,8 +128,9 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stage = 'cluster';
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'cluster', status: 'running' });
+    const sameStoryJudge = makeJudge(ollama, settings, runLog);
     const { clusters, stats: clusterStats } = await clusterItems(kept, {
-      judge: makeJudge(ollama, settings, runLog),
+      judge: sameStoryJudge,
       maxChecks: settings.getMaxSameStoryChecks(),
       log: runLog,
     });
@@ -165,7 +166,7 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     currentRun.stageStartedAt = new Date().toISOString();
     emit({ type: 'stage', stage: 'extract', status: 'running' });
     const { clusters: extractedClusters, stats: extractStats } = await extractClusters(
-      selected, settings, runLog, emitProgress
+      selected, settings, runLog, emitProgress, { judge: sameStoryJudge }
     );
     const extracted = extractedClusters.map(toItem);
     await saveCandidates(extracted, {
@@ -190,11 +191,11 @@ async function runPipeline(db, ollama, settings, log, emitSSE, trigger, options 
     let toldWriter;
     try {
       toldWriter = options.toldWriter || createToldWriter(settings, runLog, options.toldWriterDeps);
-      await addToldToStories(stories, toldWriter, writer, runLog);
+      await addToldToStories(stories.filter(story => !story.brief), toldWriter, writer, runLog);
     } catch (error) {
       // Model failures are handled per story above. This outer guard keeps an
       // unexpected told-step error from failing an otherwise valid briefing.
-      for (const story of stories) {
+      for (const story of stories.filter(story => !story.brief)) {
         if (!story.told) story.told = buildTold(distinctNonRedditVersions(story), null);
       }
       runLog.warn('pipeline:writer', `How-it-was-told step failed, using outlets only: ${error.message}`);

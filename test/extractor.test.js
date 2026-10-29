@@ -382,7 +382,7 @@ describe('Extractor', () => {
       assert.strictEqual(result.stats.failures, 1);
     });
 
-    it('tries the next item when extracted text is under 400 characters', async () => {
+    it('tries the next item when extracted text is under 40 words', async () => {
       const shortUrl = 'https://a.test/short';
       const longUrl = 'https://b.test/long';
       const urls = [];

@@ -19,7 +19,7 @@ function storyUrl(story) {
 function editionStories(briefing) {
   const result = [];
   for (const section of (briefing && briefing.data && briefing.data.sections) || []) {
-    result.push(...(section.items || []), ...(section.more || []));
+    result.push(...(section.items || []), ...(section.more || []), ...(section.briefs || []));
   }
   return result;
 }

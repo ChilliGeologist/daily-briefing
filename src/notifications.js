@@ -78,7 +78,7 @@ function topHeadline(briefing) {
   ));
   if (top && Array.isArray(top.items) && top.items[0] && top.items[0].title) return top.items[0].title;
   for (const section of sections) {
-    const lead = [...(section.items || []), ...(section.more || [])][0];
+    const lead = [...(section.items || []), ...(section.more || []), ...(section.briefs || [])][0];
     if (lead && lead.title) return lead.title;
   }
   return (briefing && briefing.headline) || 'Your morning paper is ready.';
@@ -159,7 +159,7 @@ function sameAlertStory(a, b) {
 
 function markAlertedStories(briefing, alerts) {
   for (const section of (briefing && briefing.sections) || []) {
-    for (const story of [...(section.items || []), ...(section.more || [])]) {
+    for (const story of [...(section.items || []), ...(section.more || []), ...(section.briefs || [])]) {
       const alert = (alerts || []).find(candidate => sameAlertStory({
         ...story,
         description: story.summary,

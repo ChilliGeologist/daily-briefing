@@ -2643,6 +2643,47 @@ main {
   display: block;
 }
 
+.reading-story--brief .reading-story-open {
+  display: block;
+  min-height: 0;
+  color: var(--paper-ink);
+  text-decoration: none;
+}
+
+.reading-briefs-label {
+  margin-top: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--paper-rule);
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.reading-briefs-label + .reading-story--brief {
+  border-top: 0;
+}
+
+.reading-story--brief .reading-story-title,
+.reading-story-brief-source {
+  display: inline;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.reading-story--brief .reading-story-title {
+  color: var(--paper-ink);
+  text-decoration: none;
+}
+
+.reading-story-brief-source {
+  color: var(--paper-quiet);
+  font-family: var(--font);
+  font-size: 11px;
+  text-decoration-color: color-mix(in srgb, var(--paper-quiet) 45%, transparent);
+}
+
 .reading-story-alerted,
 .reader-alerted {
   display: block;

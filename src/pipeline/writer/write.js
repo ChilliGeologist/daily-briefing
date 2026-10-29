@@ -1,6 +1,9 @@
 'use strict';
 
 const { tokenize } = require('../cluster');
+const { stripPublisherSuffix } = require('../normalise');
+const { FOREIGN_CITIES, FOREIGN_COUNTRIES } = require('./foreign-places');
+const { hasAnyAustralianEvidence } = require('./australian-places');
 const { WRITE_SCHEMA, communityReplies, isCommunityItem, photoUserPrompt, writeSystemPrompt, writeUserPrompt } = require('./prompts');
 const {
   isVagueHeadline,
@@ -15,6 +18,7 @@ const {
   sportDropReason,
   writingRetryReasons,
   validateWrite,
+  defaultSection,
 } = require('./validate');
 
 const MISSING_TEXT_RETRY_NOTE = 'Rewrite any affected summary or kicker as plain news from the headline and teasers. Never mention missing, absent, unavailable or unprovided text, content, information or details. Write complete sentences that make sense alone.';
@@ -23,6 +27,37 @@ const SAME_EVENT_MIN_SHARED_WORDS = 5;
 const HEADLINE_ECHO_SIMILARITY = 0.8;
 const HEADLINE_ECHO_MIN_SHARED_WORDS = 4;
 const HEADLINE_ECHO_PADDING = new Set(['report', 'reportedly']);
+const MAJOR_OUTLET_PATTERN = /^(?:AP|Associated Press|Reuters|Australian Associated Press|AAP|AFP|The Australian|Daily Telegraph|ABC(?: News)?|BBC(?: News)?|SBS(?: News)?|The Guardian(?: AU)?|Al Jazeera|CNN|NBC News|CBS News|The New York Times|The Washington Post|news\.com\.au|Sky News|7NEWS|9News)$/i;
+const NEWS_CORP_OUTLETS = Object.freeze(new Set([
+  'the australian',
+  'daily telegraph',
+  'news.com.au',
+  'the mercury',
+  'herald sun',
+  'courier mail',
+  'adelaide advertiser',
+  'sky news',
+]));
+const BRIEF_SECTION_BY_CATEGORY = Object.freeze({
+  local: 'tasmania',
+  tasmania: 'tasmania',
+  australia: 'australia',
+  world: 'world',
+  tech: 'tech',
+  technology: 'tech',
+  homelab: 'homelab',
+  gaming: 'gaming',
+  sport: 'sport',
+  internet: 'internet',
+  trending: 'internet',
+});
+const FOREIGN_PLACE_PATTERN = new RegExp(
+  `(?<![\\p{L}\\p{N}_])(?:${[...FOREIGN_COUNTRIES.flatMap(entry => entry.split('|')), ...FOREIGN_CITIES]
+    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .sort((left, right) => right.length - left.length)
+    .join('|')})(?![\\p{L}\\p{N}_])`,
+  'iu'
+);
 
 function countWords(text) {
   return (String(text || '').trim().match(/\S+/g) || []).length;
@@ -88,17 +123,66 @@ function isAdvertorial(item) {
   const copy = `${title}\n${item.description || ''}`;
   if (/^Cooking with\s+\S+/i.test(title)) return true;
   if (/\b(?:sponsored|in partnership with|brought to you by|paid partnership|advertorial)\b/i.test(copy)) return true;
-  const urls = [item.url, item.canonical_url, item.external_url, item.article_url];
+  const urls = [
+    item.url,
+    item.canonical_url,
+    item.external_url,
+    item.article_url,
+    ...(item.sources || []).map(source => source && source.url),
+    ...(item.outlet_versions || []).map(version => version && version.url),
+  ];
   return urls.some(raw => {
     const parsed = validUrl(raw);
     return Boolean(parsed && /\/(?:sponsored|branded|partner-content|advertorial)(?:\/|$)/i.test(parsed.pathname));
   });
 }
 
+function sourceNames(item) {
+  const names = (item.sources || []).map(source => source && source.name).filter(Boolean);
+  if (names.length === 0 && item.source_name) names.push(item.source_name);
+  return names.map(name => String(name).replace(/\s*\([^)]*\)\s*$/, '').trim()).filter(Boolean);
+}
+
 function distinctOutletCount(item) {
-  const names = (item.sources || []).map(source => String(source && source.name || '').trim().toLowerCase()).filter(Boolean);
-  if (names.length === 0 && item.source_name) names.push(String(item.source_name).trim().toLowerCase());
-  return new Set(names).size;
+  return new Set(sourceNames(item).map(name => name.toLocaleLowerCase('en-AU'))).size;
+}
+
+function outletOwner(name) {
+  const normalised = String(name || '').toLocaleLowerCase('en-AU');
+  return NEWS_CORP_OUTLETS.has(normalised) ? 'News Corp' : normalised;
+}
+
+function isOpinionColumn(item) {
+  const urls = [
+    item.url,
+    item.canonical_url,
+    item.external_url,
+    item.article_url,
+    ...(item.sources || []).map(source => source && source.url),
+    ...(item.outlet_versions || []).map(version => version && version.url),
+  ];
+  return urls.some(raw => {
+    const parsed = validUrl(raw);
+    return Boolean(parsed && /\/(?:opinion|commentary)(?:\/|$)/i.test(parsed.pathname));
+  });
+}
+
+function isBriefEligible(item) {
+  if (isAdvertorial(item) || isOpinionColumn(item)) return false;
+  const names = sourceNames(item);
+  const owners = new Set(names.map(outletOwner));
+  return owners.size >= 2 && names.some(name => MAJOR_OUTLET_PATTERN.test(name));
+}
+
+function briefSection(item, interests) {
+  const fallback = validateWrite(null, item, interests).value.section || defaultSection(item);
+  const category = BRIEF_SECTION_BY_CATEGORY[String(item.default_category || '').toLowerCase()];
+  if (category) return category;
+  const headline = stripPublisherSuffix(String(item.title || '').trim()).title;
+  if (fallback === 'australia' && !hasAnyAustralianEvidence(headline) && FOREIGN_PLACE_PATTERN.test(headline)) {
+    return 'world';
+  }
+  return fallback;
 }
 
 function preWriteDropReason(item, { ignorePhoto = false } = {}) {
@@ -142,7 +226,7 @@ function isPageDescription(value) {
 // comment threads, so only news outlets qualify.
 function isHeadlineOnly(item) {
   if (isCommunityItem(item)) return false;
-  if (String(item.article_content || '').trim().length >= 200) return false;
+  if (countWords(item.article_content) >= 40) return false;
   const names = [item.source_name, item.outlet, item.publisher]
     .filter(value => typeof value === 'string')
     // "The Mercury (Google News)" signs its teasers "The Mercury".
@@ -365,9 +449,31 @@ async function writeStories(items, writer, settings, log, emitProgress, checkCan
       if (log && log.info) log.info('pipeline:writer', `Not news: "${item.title}" (${reason})`);
     }
 
+    function keepAsBrief() {
+      storiesByIndex[index] = {
+        ...item,
+        rank,
+        id,
+        is_news: true,
+        headline: stripPublisherSuffix(String(item.title || '').trim()).title,
+        summary: '',
+        kicker: '',
+        section: briefSection(item, interests),
+        brief: true,
+        written_by: 'source headlines',
+        write_ok: true,
+        write_problems: ['kept as brief: nothing behind headline'],
+      };
+      if (log && log.info) log.info('pipeline:writer', `Kept brief: "${item.title}"`);
+    }
+
     if (Array.isArray(item.outlet_versions)) {
       const earlyReason = preWriteDropReason(item) || projectDropReason(item);
       if (earlyReason) {
+        if (earlyReason === 'nothing behind headline' && isBriefEligible(item)) {
+          keepAsBrief();
+          return;
+        }
         dropWithoutWriting(earlyReason);
         return;
       }
@@ -625,4 +731,5 @@ module.exports = {
   isPhotoSubstance,
   isRedditPhotoPost,
   isMultiStoryRoundup,
+  isBriefEligible,
 };
